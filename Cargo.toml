@@ -1,0 +1,10 @@
+[package]
+name = "plant"
+version = "0.1.0"
+authors = ["MashPlant <740678788@qq.com>"]
+edition = "2018"
+
+[dependencies]
+ptr = { git = "https://github.com/MashPlant/ptr" }
+isl = { path = "./isl-rs" }
+log = "0.4"
