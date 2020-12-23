@@ -8,3 +8,5 @@ edition = "2018"
 ptr = { git = "https://github.com/MashPlant/ptr" }
 isl = { path = "./isl-rs" }
 log = "0.4"
+env_logger = "0.8"
+ahash = { version = "*", default-features = false }
