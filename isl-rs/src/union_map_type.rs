@@ -15,7 +15,7 @@ impl UnionMap {
   #[inline(always)]
   pub fn read(&self) -> UnionMap { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionMap) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionMap) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionMapRef> for UnionMap {
@@ -46,7 +46,7 @@ impl UnionMapList {
   #[inline(always)]
   pub fn read(&self) -> UnionMapList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionMapList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionMapList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionMapListRef> for UnionMapList {
@@ -77,7 +77,7 @@ impl UnionSet {
   #[inline(always)]
   pub fn read(&self) -> UnionSet { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionSet) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionSet) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionSetRef> for UnionSet {
@@ -108,7 +108,7 @@ impl UnionSetList {
   #[inline(always)]
   pub fn read(&self) -> UnionSetList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionSetList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionSetList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionSetListRef> for UnionSetList {

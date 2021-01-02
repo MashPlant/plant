@@ -44,7 +44,7 @@ impl Vec {
   #[inline(always)]
   pub fn read(&self) -> Vec { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Vec) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Vec) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<VecRef> for Vec {

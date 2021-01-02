@@ -15,7 +15,7 @@ impl ScheduleNode {
   #[inline(always)]
   pub fn read(&self) -> ScheduleNode { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: ScheduleNode) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: ScheduleNode) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ScheduleNodeRef> for ScheduleNode {
@@ -46,7 +46,7 @@ impl Schedule {
   #[inline(always)]
   pub fn read(&self) -> Schedule { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Schedule) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Schedule) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ScheduleRef> for Schedule {

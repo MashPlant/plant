@@ -15,7 +15,7 @@ impl Qpolynomial {
   #[inline(always)]
   pub fn read(&self) -> Qpolynomial { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Qpolynomial) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Qpolynomial) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<QpolynomialRef> for Qpolynomial {
@@ -46,7 +46,7 @@ impl Term {
   #[inline(always)]
   pub fn read(&self) -> Term { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Term) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Term) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<TermRef> for Term {
@@ -77,7 +77,7 @@ impl PwQpolynomial {
   #[inline(always)]
   pub fn read(&self) -> PwQpolynomial { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: PwQpolynomial) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: PwQpolynomial) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<PwQpolynomialRef> for PwQpolynomial {
@@ -108,7 +108,7 @@ impl QpolynomialFold {
   #[inline(always)]
   pub fn read(&self) -> QpolynomialFold { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: QpolynomialFold) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: QpolynomialFold) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<QpolynomialFoldRef> for QpolynomialFold {
@@ -139,7 +139,7 @@ impl PwQpolynomialFold {
   #[inline(always)]
   pub fn read(&self) -> PwQpolynomialFold { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: PwQpolynomialFold) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: PwQpolynomialFold) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<PwQpolynomialFoldRef> for PwQpolynomialFold {
@@ -170,7 +170,7 @@ impl UnionPwQpolynomial {
   #[inline(always)]
   pub fn read(&self) -> UnionPwQpolynomial { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionPwQpolynomial) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionPwQpolynomial) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionPwQpolynomialRef> for UnionPwQpolynomial {
@@ -201,7 +201,7 @@ impl UnionPwQpolynomialFold {
   #[inline(always)]
   pub fn read(&self) -> UnionPwQpolynomialFold { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionPwQpolynomialFold) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionPwQpolynomialFold) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionPwQpolynomialFoldRef> for UnionPwQpolynomialFold {

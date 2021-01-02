@@ -15,7 +15,7 @@ impl ObjType {
   #[inline(always)]
   pub fn read(&self) -> ObjType { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: ObjType) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: ObjType) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ObjTypeRef> for ObjType {
@@ -46,7 +46,7 @@ impl Obj {
   #[inline(always)]
   pub fn read(&self) -> Obj { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Obj) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Obj) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ObjRef> for Obj {

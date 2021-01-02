@@ -49,7 +49,7 @@ impl Token {
   #[inline(always)]
   pub fn read(&self) -> Token { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Token) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Token) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<TokenRef> for Token {
@@ -80,7 +80,7 @@ impl Stream {
   #[inline(always)]
   pub fn read(&self) -> Stream { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Stream) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Stream) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<StreamRef> for Stream {

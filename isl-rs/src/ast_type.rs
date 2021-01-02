@@ -51,7 +51,7 @@ impl AstExpr {
   #[inline(always)]
   pub fn read(&self) -> AstExpr { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AstExpr) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AstExpr) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AstExprRef> for AstExpr {
@@ -82,7 +82,7 @@ impl AstNode {
   #[inline(always)]
   pub fn read(&self) -> AstNode { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AstNode) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AstNode) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AstNodeRef> for AstNode {
@@ -113,7 +113,7 @@ impl AstPrintOptions {
   #[inline(always)]
   pub fn read(&self) -> AstPrintOptions { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AstPrintOptions) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AstPrintOptions) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AstPrintOptionsRef> for AstPrintOptions {
@@ -144,7 +144,7 @@ impl AstExprList {
   #[inline(always)]
   pub fn read(&self) -> AstExprList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AstExprList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AstExprList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AstExprListRef> for AstExprList {
@@ -175,7 +175,7 @@ impl AstNodeList {
   #[inline(always)]
   pub fn read(&self) -> AstNodeList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AstNodeList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AstNodeList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AstNodeListRef> for AstNodeList {

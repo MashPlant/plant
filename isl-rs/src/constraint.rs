@@ -82,7 +82,7 @@ impl Constraint {
   #[inline(always)]
   pub fn read(&self) -> Constraint { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Constraint) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Constraint) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ConstraintRef> for Constraint {
@@ -113,7 +113,7 @@ impl ConstraintList {
   #[inline(always)]
   pub fn read(&self) -> ConstraintList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: ConstraintList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: ConstraintList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ConstraintListRef> for ConstraintList {

@@ -29,7 +29,7 @@ impl Point {
   #[inline(always)]
   pub fn read(&self) -> Point { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Point) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Point) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<PointRef> for Point {

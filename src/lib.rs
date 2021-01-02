@@ -1,20 +1,23 @@
-#![feature(box_syntax)]
-#![feature(box_patterns)]
+#![feature(box_syntax, box_patterns)]
 
 #[macro_use]
 extern crate log;
 
 pub mod expr;
 pub mod comp;
+pub mod buf;
 pub mod func;
 pub mod fmt;
 
 pub use expr::*;
 pub use comp::*;
+pub use buf::*;
 pub use func::*;
 pub use fmt::*;
 
+use ptr::*;
 pub use expr::{Type::*, ExprKind::*};
+pub use buf::BufKind::*;
 
 use std::hash::BuildHasherDefault;
 use ahash::AHasher;

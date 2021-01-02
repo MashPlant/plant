@@ -51,7 +51,7 @@ impl BasicMap {
   #[inline(always)]
   pub fn read(&self) -> BasicMap { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: BasicMap) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: BasicMap) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<BasicMapRef> for BasicMap {
@@ -82,7 +82,7 @@ impl BasicMapList {
   #[inline(always)]
   pub fn read(&self) -> BasicMapList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: BasicMapList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: BasicMapList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<BasicMapListRef> for BasicMapList {
@@ -113,7 +113,7 @@ impl Map {
   #[inline(always)]
   pub fn read(&self) -> Map { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Map) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Map) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MapRef> for Map {
@@ -144,7 +144,7 @@ impl MapList {
   #[inline(always)]
   pub fn read(&self) -> MapList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MapList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MapList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MapListRef> for MapList {
@@ -175,7 +175,7 @@ impl BasicSet {
   #[inline(always)]
   pub fn read(&self) -> BasicSet { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: BasicSet) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: BasicSet) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<BasicSetRef> for BasicSet {
@@ -206,7 +206,7 @@ impl BasicSetList {
   #[inline(always)]
   pub fn read(&self) -> BasicSetList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: BasicSetList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: BasicSetList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<BasicSetListRef> for BasicSetList {
@@ -237,7 +237,7 @@ impl Set {
   #[inline(always)]
   pub fn read(&self) -> Set { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Set) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Set) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<SetRef> for Set {
@@ -268,7 +268,7 @@ impl SetList {
   #[inline(always)]
   pub fn read(&self) -> SetList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: SetList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: SetList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<SetListRef> for SetList {

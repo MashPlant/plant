@@ -47,7 +47,7 @@ impl LocalSpace {
   #[inline(always)]
   pub fn read(&self) -> LocalSpace { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: LocalSpace) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: LocalSpace) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<LocalSpaceRef> for LocalSpace {

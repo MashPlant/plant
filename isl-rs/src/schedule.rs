@@ -88,7 +88,7 @@ impl ScheduleConstraints {
   #[inline(always)]
   pub fn read(&self) -> ScheduleConstraints { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: ScheduleConstraints) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: ScheduleConstraints) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ScheduleConstraintsRef> for ScheduleConstraints {

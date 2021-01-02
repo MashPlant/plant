@@ -97,7 +97,7 @@ impl Space {
   #[inline(always)]
   pub fn read(&self) -> Space { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Space) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Space) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<SpaceRef> for Space {

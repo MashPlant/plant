@@ -1,60 +1,105 @@
-use ptr::*;
-use isl::{Ctx, Set, Map, DimType};
+use isl::{Ctx, BasicSet, BasicMap, DimType, AstNode, UnionMap};
 use std::io;
 use crate::*;
 
 #[derive(Debug)]
 pub struct Func {
   // 限制符号常量/参数取值范围
-  pub func_ctx: Option<Set>,
+  pub func_ctx: Option<BasicSet>,
   pub name: Box<str>,
   pub comps: Vec<Box<Comp>>,
-  pub v_cnt: u32,
-  pub c_cnt: u32,
+  pub bufs: Vec<Box<Buf>>,
   pub iter_ty: Type,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
 }
 
 impl Func {
-  pub fn new(name: Box<str>) -> Option<Box<Func>> {
-    Some(box Func { func_ctx: None, name, comps: Vec::new(), v_cnt: 0, c_cnt: 0, iter_ty: I32, ctx: Ctx::new()? })
+  pub fn new(name: &str) -> Option<Box<Func>> {
+    Some(box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, ctx: Ctx::new()? })
   }
 
   pub fn find_comp(&self, name: &str) -> Option<P<Comp>> {
     self.comps.iter().find(|c| c.name() == name).map(|c| P::new(&**c))
   }
 
-  pub fn add_ctx_constraint(&mut self, ctx: Set) {
-    if let Some(x) = &mut self.func_ctx {
-      x.write(x.read().intersect(ctx).unwrap());
-    } else { self.func_ctx = Some(ctx); }
+  pub fn find_buf(&self, name: &str) -> Option<P<Buf>> {
+    self.bufs.iter().find(|c| &*c.name == name).map(|c| P::new(&**c))
   }
 
-  pub fn align_schedule(&mut self) {
+  pub fn iter(&self, level: u32) -> Expr { Expr(self.iter_ty, Iter(level)) }
+
+  pub fn add_ctx_constraint(&self, ctx: BasicSet) {
+    if let Some(x) = &self.func_ctx {
+      x.write(x.read().intersect(ctx).unwrap());
+    } else { P::new(self).func_ctx = Some(ctx); }
+  }
+
+  pub fn align_schedule(&self) {
     let max_dim = self.comps.iter().map(|c| c.sch_dim() as u32).max().unwrap_or(0);
-    for c in &mut self.comps {
+    for c in &self.comps {
       c.schedule.write(align_dim(c.schedule.read(), max_dim).unwrap());
       debug!("aligned schedule: {}", c.schedule);
     }
   }
 
-  pub fn codegen(&mut self) -> io::Result<()> {
+  pub fn codegen(&self, args: &[&Buf], path: &str) -> io::Result<()> {
+    for b in args { assert_ne!(b.kind, BufKind::Temp); }
+    self.align_schedule();
+    let mut vis = HashSet::default();
+    for c in self.sch_comps() {
+      if c.pred.is_none() { self.sch_graph_dfs(P::new(c), &mut vis); }
+    }
+    let ast = self.build_isl_ast().unwrap();
+    debug!("codegen: ast = {}", ast);
     Ok(())
   }
 }
 
-fn align_dim(mut map: Map, max_dim: u32) -> Option<Map> {
-  let orig_dim = map.dim(DimType::Out);
-  assert!(max_dim >= orig_dim);
-  map = map.add_dims(DimType::Out, max_dim - orig_dim)?;
-  for i in orig_dim..max_dim { map = map_out_eq0(map, i)?; }
-  let in_name = map.get_tuple_name(DimType::In)?;
-  map.set_tuple_name(DimType::Out, in_name)
+impl Func {
+  // 返回参与调度的所有Comp。Comp::expr为None表示一个输入，不参与调度
+  fn sch_comps(&self) -> impl IntoIterator<Item=&Comp> {
+    self.comps.iter().map(|c| c.as_ref()).filter(
+      |c| match c.expr { OptionExpr::Expr(_) => true, _ => false })
+  }
+
+  fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) {
+    if !vis.insert(c) { panic!("schedule graph should be acyclic"); }
+    for (&pred, &at) in &c.succ {
+      pred.get().after_raw(c.get(), at);
+      self.sch_graph_dfs(pred, vis);
+    }
+  }
+
+  fn build_isl_ast(&self) -> Option<AstNode> {
+    let mut union_sch = None::<UnionMap>;
+    for c in self.sch_comps() {
+      let sched_domain = c.domain.copy()?.apply(c.schedule.copy()?)?;
+      let mut sched = identity_map(&sched_domain)?;
+      // 经测试，必须清空名字，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环
+      sched = sched.set_tuple_name(DimType::Out, "\0".into())?;
+      let sched = sched.union_map_from_basic_map()?;
+      union_sch = Some(if let Some(x) = union_sch { x.union(sched)? } else { sched });
+    }
+    let union_sch = union_sch?;
+    debug!("build_isl_ast: union_sch = {}", union_sch);
+    let mut build = if let Some(ctx) = self.func_ctx.as_ref() {
+      ctx.copy()?.set_from_basic_set()?.ast_build_from_context()
+    } else { self.ctx.ast_build_alloc() }?;
+    build = build.set_at_each_domain(&mut move |node, _build| {
+      Some(node)
+    })?;
+    self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
+    self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
+    self.ctx.options_set_ast_build_group_coscheduled(1)?;
+    build.ast_from_schedule(union_sch)
+  }
 }
 
-impl Func {
-  pub(crate) fn new_var_name(&mut self) -> String { format!("t{}\0", (self.v_cnt, self.v_cnt += 1).0) }
-
-  pub(crate) fn new_comp_name(&mut self) -> String { format!("C{}\0", (self.c_cnt, self.c_cnt += 1).0) }
+fn align_dim(mut map: BasicMap, max_dim: u32) -> Option<BasicMap> {
+  let orig_dim = map.dim(DimType::Out);
+  map = map.add_dims(DimType::Out, max_dim - orig_dim)?;
+  for i in orig_dim..max_dim { map = map_add_constraint(map, i, 0, 0)?; }
+  let in_name = map.get_tuple_name(DimType::In)?;
+  map.set_tuple_name(DimType::Out, in_name)
 }

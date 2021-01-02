@@ -58,7 +58,7 @@ impl AstBuild {
   #[inline(always)]
   pub fn read(&self) -> AstBuild { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AstBuild) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AstBuild) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AstBuildRef> for AstBuild {

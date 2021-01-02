@@ -30,7 +30,7 @@ impl Vertex {
   #[inline(always)]
   pub fn read(&self) -> Vertex { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Vertex) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Vertex) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<VertexRef> for Vertex {
@@ -61,7 +61,7 @@ impl Cell {
   #[inline(always)]
   pub fn read(&self) -> Cell { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Cell) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Cell) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<CellRef> for Cell {
@@ -92,7 +92,7 @@ impl Vertices {
   #[inline(always)]
   pub fn read(&self) -> Vertices { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Vertices) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Vertices) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<VerticesRef> for Vertices {

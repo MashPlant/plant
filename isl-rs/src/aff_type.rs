@@ -51,7 +51,7 @@ impl Aff {
   #[inline(always)]
   pub fn read(&self) -> Aff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Aff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Aff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AffRef> for Aff {
@@ -82,7 +82,7 @@ impl AffList {
   #[inline(always)]
   pub fn read(&self) -> AffList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AffList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AffList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AffListRef> for AffList {
@@ -113,7 +113,7 @@ impl PwAff {
   #[inline(always)]
   pub fn read(&self) -> PwAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: PwAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: PwAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<PwAffRef> for PwAff {
@@ -144,7 +144,7 @@ impl PwAffList {
   #[inline(always)]
   pub fn read(&self) -> PwAffList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: PwAffList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: PwAffList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<PwAffListRef> for PwAffList {
@@ -175,7 +175,7 @@ impl UnionPwAff {
   #[inline(always)]
   pub fn read(&self) -> UnionPwAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionPwAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionPwAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionPwAffRef> for UnionPwAff {
@@ -206,7 +206,7 @@ impl UnionPwAffList {
   #[inline(always)]
   pub fn read(&self) -> UnionPwAffList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionPwAffList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionPwAffList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionPwAffListRef> for UnionPwAffList {
@@ -237,7 +237,7 @@ impl MultiAff {
   #[inline(always)]
   pub fn read(&self) -> MultiAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MultiAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MultiAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MultiAffRef> for MultiAff {
@@ -268,7 +268,7 @@ impl PwMultiAff {
   #[inline(always)]
   pub fn read(&self) -> PwMultiAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: PwMultiAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: PwMultiAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<PwMultiAffRef> for PwMultiAff {
@@ -299,7 +299,7 @@ impl UnionPwMultiAff {
   #[inline(always)]
   pub fn read(&self) -> UnionPwMultiAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionPwMultiAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionPwMultiAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionPwMultiAffRef> for UnionPwMultiAff {
@@ -330,7 +330,7 @@ impl UnionPwMultiAffList {
   #[inline(always)]
   pub fn read(&self) -> UnionPwMultiAffList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionPwMultiAffList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionPwMultiAffList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionPwMultiAffListRef> for UnionPwMultiAffList {
@@ -361,7 +361,7 @@ impl MultiPwAff {
   #[inline(always)]
   pub fn read(&self) -> MultiPwAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MultiPwAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MultiPwAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MultiPwAffRef> for MultiPwAff {
@@ -392,7 +392,7 @@ impl MultiUnionPwAff {
   #[inline(always)]
   pub fn read(&self) -> MultiUnionPwAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MultiUnionPwAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MultiUnionPwAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MultiUnionPwAffRef> for MultiUnionPwAff {

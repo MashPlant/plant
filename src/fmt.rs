@@ -59,15 +59,17 @@ impl Display for Expr {
         F64 => write!(f, "{}", f64::from_bits(x)),
         Bool => write!(f, "{}", x != 0),
       },
-      Var(x) => f.pad(&x.name),
+      Iter(x) => write!(f, "i{}", x),
+      Param(x) => f.pad(x),
       Unary(op, x) =>
         if *op == Cast { write!(f, "cast({:?}, {})", self.0, x) } else { write!(f, "({}({}))", op.op_str(), x) }
       Binary(op, box [l, r]) => {
         let s = op.op_str();
         if *op >= Max { write!(f, "{}({}, {})", s, l, r) } else { write!(f, "({} {} {})", l, s, r) }
       }
-      Call(x, args) | Access(x, args) =>
-        write!(f, "{}({})", x, comma_sep(args.iter())),
+      Call(x, args)  => write!(f, "{}({})", x, comma_sep(args.iter())),
+      Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
+      Load(x, args) => write!(f, "{}[{}]", x.name, comma_sep(args.iter())),
       Alloc(x) => write!(f, "allocate({})", x),
       Free(x) => write!(f, "free({})", x),
     }

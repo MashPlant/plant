@@ -27,7 +27,7 @@ impl MaybeIslPwAff {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslPwAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MaybeIslPwAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MaybeIslPwAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MaybeIslPwAffRef> for MaybeIslPwAff {
@@ -58,7 +58,7 @@ impl IdToPwAff {
   #[inline(always)]
   pub fn read(&self) -> IdToPwAff { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: IdToPwAff) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: IdToPwAff) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<IdToPwAffRef> for IdToPwAff {

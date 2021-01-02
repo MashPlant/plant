@@ -13,26 +13,16 @@ pub enum UnOp { LNot, Cast, Floor, Ceil, Round, Trunc, Sin, Cos, Tan, Abs, Sqrt,
 pub enum BinOp { Add, Sub, Mul, Div, Rem, LAnd, LOr, Eq, Ne, Le, Lt, Ge, Gt, Max, Min, Memcpy }
 
 #[derive(Debug, Clone)]
-pub struct Var {
-  // 在Expt::Var中，Expr::ty必和Var::ty相等
-  pub ty: Type,
-  pub name: Box<str>,
-  pub range: Box<[Option<Expr>; 2]>
-}
-
-impl Var {
-  pub fn expr(self) -> Expr { Expr(self.ty, Var(self)) }
-}
-
-#[derive(Debug, Clone)]
 pub enum ExprKind {
   // 实际存放的值根据Expr::ty来，可以表示浮点数
   Val(u64),
-  Var(Var),
+  Iter(u32),
+  Param(Box<str>),
   Unary(UnOp, Box<Expr>),
   Binary(BinOp, Box<[Expr; 2]>),
   Call(Box<str>, Box<[Expr]>),
-  Access(Box<str>, Box<[Expr]>),
+  Access(P<Comp>, Box<[Expr]>),
+  Load(P<Buf>, Box<[Expr]>),
   Alloc(Box<str>),
   Free(Box<str>),
 }
@@ -46,8 +36,8 @@ impl Expr {
     match &self.1 {
       Unary(_, x) => std::slice::from_ref(x),
       Binary(_, lr) => lr.as_ref(),
-      Call(_, args) | Access(_, args) => args,
-      Val(..) | Var(..) | Alloc(..) | Free(..) => &[],
+      Call(_, args) | Access(_, args) | Load(_, args) => args,
+      Val(..) | Iter(..) | Param(..) | Alloc(..) | Free(..) => &[],
     }
   }
 
@@ -55,8 +45,8 @@ impl Expr {
     match &mut self.1 {
       Unary(_, x) => std::slice::from_mut(x),
       Binary(_, lr) => lr.as_mut(),
-      Call(_, args) | Access(_, args) => args,
-      Val(..) | Var(..) | Alloc(..) | Free(..) => &mut [],
+      Call(_, args) | Access(_, args) | Load(_, args) => args,
+      Val(..) | Iter(..) | Param(..) | Alloc(..) | Free(..) => &mut [],
     }
   }
 
@@ -71,41 +61,53 @@ impl Expr {
   }
 }
 
+// 用于实现一系列不能用Rust的operator traits实现的operator，把它放在IntoExpr trait里
+// Rust中涉及比较的trait返回值类型都是定死的，不能改成Expr
+macro_rules! impl_other {
+  ($($op: ident $fn: ident),*) => {
+    $(fn $fn(self, rhs: impl IntoExpr) -> Expr {
+      let l = self.expr();
+      Expr(l.0, Binary(BinOp::$op, box [l, rhs.expr()]))
+    })*
+  };
+}
+
+pub trait IntoExpr: Sized + Clone {
+  fn expr(self) -> Expr;
+
+  fn clone_expr(&self) -> Expr { self.clone().expr() }
+
+  impl_other!(LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt);
+}
+
+impl IntoExpr for Expr { fn expr(self) -> Expr { self } }
+
+impl IntoExpr for &Expr { fn expr(self) -> Expr { self.clone() } }
+
 macro_rules! impl_primitive {
   ($($val: ident $ty: ident),*) => {
-    $(impl From<$ty> for Expr {
-      fn from(t: $ty) -> Expr { Expr($val, Val(t as _)) }
-    })*
+    $(impl IntoExpr for $ty { fn expr(self) -> Expr { Expr($val, Val(self as _)) } })*
   };
 }
 
 impl_primitive!(U8 u8, U16 u16, U32 u32, U64 u64, I8 i8, I16 i16, I32 i32, I64 i64, Bool bool);
 
-impl From<f32> for Expr {
-  fn from(t: f32) -> Expr { Expr(F32, Val(t.to_bits() as _)) }
-}
+impl IntoExpr for f32 { fn expr(self) -> Expr { Expr(F32, Val(self.to_bits() as _)) } }
 
-impl From<f64> for Expr {
-  fn from(t: f64) -> Expr { Expr(F64, Val(t.to_bits())) }
-}
+impl IntoExpr for f64 { fn expr(self) -> Expr { Expr(F64, Val(self.to_bits())) } }
 
 macro_rules! impl_op {
   ($($op: ident $fn: ident),*) => {
-    $(impl std::ops::$op for Expr {
+    $(impl<R: IntoExpr> std::ops::$op<R> for Expr {
       type Output = Expr;
-      fn $fn(self, rhs: Expr) -> Expr { Expr(self.0, Binary(BinOp::$op, box [self, rhs])) }
+      fn $fn(self, rhs: R) -> Expr { Expr(self.0, Binary(BinOp::$op, box [self, rhs.expr()])) }
+    }
+
+    impl<R: IntoExpr> std::ops::$op<R> for &Expr {
+      type Output = Expr;
+      fn $fn(self, rhs: R) -> Expr { Expr(self.0, Binary(BinOp::$op, box [self.clone(), rhs.expr()])) }
     })*
   };
 }
 
 impl_op!(Add add, Sub sub, Mul mul, Div div, Rem rem);
-
-macro_rules! impl_other {
-  ($($op: ident $fn: ident),*) => {
-    impl Expr {
-      $(pub fn $fn(self, rhs: Expr) -> Expr { Expr(self.0, Binary(BinOp::$op, box [self, rhs])) })*
-    }
-  };
-}
-
-impl_other!(LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt);

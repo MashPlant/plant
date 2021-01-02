@@ -44,7 +44,7 @@ impl Id {
   #[inline(always)]
   pub fn read(&self) -> Id { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Id) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Id) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<IdRef> for Id {
@@ -75,7 +75,7 @@ impl IdList {
   #[inline(always)]
   pub fn read(&self) -> IdList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: IdList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: IdList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<IdListRef> for IdList {

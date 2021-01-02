@@ -249,7 +249,7 @@ impl StrideInfo {
   #[inline(always)]
   pub fn read(&self) -> StrideInfo { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: StrideInfo) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: StrideInfo) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<StrideInfoRef> for StrideInfo {

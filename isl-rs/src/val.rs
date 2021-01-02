@@ -154,7 +154,7 @@ impl Val {
   #[inline(always)]
   pub fn read(&self) -> Val { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Val) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Val) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ValRef> for Val {
@@ -185,7 +185,7 @@ impl ValList {
   #[inline(always)]
   pub fn read(&self) -> ValList { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: ValList) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: ValList) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<ValListRef> for ValList {
@@ -216,7 +216,7 @@ impl MultiVal {
   #[inline(always)]
   pub fn read(&self) -> MultiVal { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MultiVal) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MultiVal) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MultiValRef> for MultiVal {

@@ -56,7 +56,7 @@ impl AccessLevelBefore {
   #[inline(always)]
   pub fn read(&self) -> AccessLevelBefore { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AccessLevelBefore) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AccessLevelBefore) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AccessLevelBeforeRef> for AccessLevelBefore {
@@ -87,7 +87,7 @@ impl Restriction {
   #[inline(always)]
   pub fn read(&self) -> Restriction { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Restriction) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Restriction) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<RestrictionRef> for Restriction {
@@ -118,7 +118,7 @@ impl AccessRestrict {
   #[inline(always)]
   pub fn read(&self) -> AccessRestrict { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AccessRestrict) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AccessRestrict) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AccessRestrictRef> for AccessRestrict {
@@ -149,7 +149,7 @@ impl AccessInfo {
   #[inline(always)]
   pub fn read(&self) -> AccessInfo { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: AccessInfo) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: AccessInfo) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<AccessInfoRef> for AccessInfo {
@@ -180,7 +180,7 @@ impl Flow {
   #[inline(always)]
   pub fn read(&self) -> Flow { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Flow) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Flow) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<FlowRef> for Flow {
@@ -211,7 +211,7 @@ impl UnionAccessInfo {
   #[inline(always)]
   pub fn read(&self) -> UnionAccessInfo { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionAccessInfo) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionAccessInfo) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionAccessInfoRef> for UnionAccessInfo {
@@ -242,7 +242,7 @@ impl UnionFlow {
   #[inline(always)]
   pub fn read(&self) -> UnionFlow { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: UnionFlow) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: UnionFlow) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<UnionFlowRef> for UnionFlow {

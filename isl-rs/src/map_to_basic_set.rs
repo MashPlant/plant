@@ -27,7 +27,7 @@ impl MaybeIslBasicSet {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslBasicSet { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MaybeIslBasicSet) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MaybeIslBasicSet) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MaybeIslBasicSetRef> for MaybeIslBasicSet {
@@ -58,7 +58,7 @@ impl MapToBasicSet {
   #[inline(always)]
   pub fn read(&self) -> MapToBasicSet { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: MapToBasicSet) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: MapToBasicSet) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<MapToBasicSetRef> for MapToBasicSet {

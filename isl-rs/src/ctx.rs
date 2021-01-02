@@ -33,7 +33,7 @@ impl Ctx {
   #[inline(always)]
   pub fn read(&self) -> Ctx { unsafe { ptr::read(self) } }
   #[inline(always)]
-  pub fn write(&mut self, x: Ctx) { unsafe { ptr::write(self, x) } }
+  pub fn write(&self, x: Ctx) { unsafe { ptr::write(self as *const _ as _, x) } }
 }
 
 impl AsRef<CtxRef> for Ctx {
