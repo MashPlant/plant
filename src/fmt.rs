@@ -67,7 +67,7 @@ impl Display for Expr {
         let s = op.op_str();
         if *op >= Max { write!(f, "{}({}, {})", s, l, r) } else { write!(f, "({} {} {})", l, s, r) }
       }
-      Call(x, args)  => write!(f, "{}({})", x, comma_sep(args.iter())),
+      Call(x, args) => write!(f, "{}({})", x, comma_sep(args.iter())),
       Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
       Load(x, args) => write!(f, "{}[{}]", x.name, comma_sep(args.iter())),
       Alloc(x) => write!(f, "allocate({})", x),

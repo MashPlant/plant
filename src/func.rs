@@ -36,7 +36,7 @@ impl Func {
   }
 
   pub fn align_schedule(&self) {
-    let max_dim = self.comps.iter().map(|c| c.sch_dim() as u32).max().unwrap_or(0);
+    let max_dim = self.comps.iter().map(|c| c.sch_dim()).max().unwrap_or(0);
     for c in &self.comps {
       c.schedule.write(align_dim(c.schedule.read(), max_dim).unwrap());
       debug!("aligned schedule: {}", c.schedule);
@@ -74,12 +74,10 @@ impl Func {
   fn build_isl_ast(&self) -> Option<AstNode> {
     let mut union_sch = None::<UnionMap>;
     for c in self.sch_comps() {
-      let sched_domain = c.domain.copy()?.apply(c.schedule.copy()?)?;
-      let mut sched = identity_map(&sched_domain)?;
-      // 经测试，必须清空名字，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环
-      sched = sched.set_tuple_name(DimType::Out, "\0".into())?;
-      let sched = sched.union_map_from_basic_map()?;
-      union_sch = Some(if let Some(x) = union_sch { x.union(sched)? } else { sched });
+      let sch_domain = c.domain.copy()?.apply(c.schedule.copy()?)?.set_tuple_name(c.name().into())?;
+      // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，`identity_map`保证这一点
+      let sch = identity_map(&sch_domain)?.union_map_from_basic_map()?;
+      union_sch = Some(if let Some(x) = union_sch { x.union(sch)? } else { sch });
     }
     let union_sch = union_sch?;
     debug!("build_isl_ast: union_sch = {}", union_sch);
@@ -100,6 +98,5 @@ fn align_dim(mut map: BasicMap, max_dim: u32) -> Option<BasicMap> {
   let orig_dim = map.dim(DimType::Out);
   map = map.add_dims(DimType::Out, max_dim - orig_dim)?;
   for i in orig_dim..max_dim { map = map_add_constraint(map, i, 0, 0)?; }
-  let in_name = map.get_tuple_name(DimType::In)?;
-  map.set_tuple_name(DimType::Out, in_name)
+  Some(map)
 }
