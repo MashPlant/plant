@@ -1,5 +1,5 @@
 use isl::{CtxRef, BasicSet, BasicMap, DimType};
-use std::fmt::{Write, Display};
+use std::fmt::Display;
 use crate::*;
 
 #[derive(Debug)]
@@ -9,47 +9,35 @@ pub struct Comp {
   // isl_basic_set表示可以用一组仿射约束的交集定义的集合，isl_set表示一组isl_basic_set的并集
   // 这里用不到isl_set，因为多面体就是可以用一组仿射约束的交集定义的，不需要并集
   pub domain: BasicSet,
-  // Expr和Type中都有Type，都表示计算结果的类型，Type表示不参与调度，作为输入
-  pub expr: OptionExpr,
+  pub expr: Expr,
   // in dim名字是Comp的名字，out dim名字是空的
-  // 从循环层次i到它包围的static dim：i * 2；从循环层次i到它的dynamic dim：i * 2 - 1 (要求i >= 1)
+  // 从循环层次i到包围它的static dim：i * 2；从循环层次i到它的dynamic dim：i * 2 + 1
   pub schedule: BasicMap,
   pub store: Option<BasicMap>,
+  // store的目标位置，codegen时赋值(用最终的iter表示)
+  pub store_expr: Option<Expr>,
   pub pred: Option<P<Comp>>,
   pub succ: HashMap<P<Comp>, u32>,
 }
 
-#[derive(Debug)]
-pub enum OptionExpr { Expr(Expr), Type(Type) }
-
-impl<T: IntoExpr> From<T> for OptionExpr { fn from(t: T) -> OptionExpr { OptionExpr::Expr(t.expr()) } }
-
-impl From<Type> for OptionExpr { fn from(t: Type) -> OptionExpr { OptionExpr::Type(t) } }
-
 impl Func {
-  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl Into<OptionExpr>) -> Option<R<Comp>> {
-    let expr = expr.into();
-    let mut d = String::new();
-    if let OptionExpr::Expr(expr) = &expr {
-      let mut params = HashSet::default();
-      expr.visit(&mut |e| if let Param(x) = &e.1 { params.insert(x); });
-      if !params.is_empty() {
-        write!(d, "[{}] -> ", comma_sep(params.iter())).ok()?;
-      }
-    }
-    write!(d, "{{ {}{}: {} }}\0", name, i0_in(ranges.len() as _),
+  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> Option<R<Comp>> {
+    let expr = expr.expr();
+    let mut params = HashSet::default();
+    expr.visit(&mut |e| if let Param(x) = &e.1 { params.insert(x); });
+    let s = format!("[{}] -> {{ {}{}: {} }}\0", comma_sep(params.iter()), name, i0_in(ranges.len() as _),
       sep(ranges.iter().enumerate().map(|(i, (lb, ub))| fn2display(move |f| {
         write!(f, "{} <= i{} < {}", lb.clone_expr(), i, ub.clone_expr())
-      })), " and ")).ok()?;
-    debug!("constructed domain str: {}", d);
-    let domain = self.ctx.basic_set_read_from_str(d.as_str().into())?;
+      })), " and "));
+    debug!("constructed domain str: {}", s);
+    let domain = self.ctx.basic_set_read_from_str(s.as_str().into())?;
     self.comp_raw(domain, expr)
   }
 
-  pub fn comp_raw(&self, domain: BasicSet, expr: OptionExpr) -> Option<R<Comp>> {
+  pub fn comp_raw(&self, domain: BasicSet, expr: Expr) -> Option<R<Comp>> {
     let schedule = identity_schedule(&domain)?;
     debug!("initial identity schedule: {}", schedule);
-    let comp = box Comp { ctx: *self.ctx.as_ref(), func: self.into(), domain, expr, schedule, store: None, pred: None, succ: HashMap::default() };
+    let comp = box Comp { ctx: *self.ctx.as_ref(), func: self.into(), domain, expr, schedule, store: None, store_expr: None, pred: None, succ: HashMap::default() };
     assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     let ret = R::new(&*comp);
     P::new(self).comps.push(comp);
@@ -58,24 +46,23 @@ impl Func {
 }
 
 impl Comp {
+  // 返回的字符串来源于cstr，[len()]位置是\0
   pub fn name(&self) -> &str { self.domain.get_tuple_name().unwrap().as_str() }
 
   pub fn n_dim(&self) -> u32 { self.domain.n_dim() }
 
   pub fn sch_dim(&self) -> u32 { self.schedule.dim(DimType::Out) }
 
-  pub fn ty(&self) -> Type { match self.expr { OptionExpr::Expr(Expr(t, _)) | OptionExpr::Type(t) => t } }
-
-  pub fn set_expr(&self, expr: Expr) { P::new(self).expr = OptionExpr::Expr(expr); }
+  pub fn set_expr(&self, expr: Expr) { P::new(self).expr = expr; }
 
   pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
     assert_eq!(idx.len() as u32, self.n_dim());
-    Expr(self.ty(), Access(self.into(), idx.iter().map(|e| e.clone_expr()).collect()))
+    Expr(self.expr.0, Access(self.into(), idx.iter().map(|e| e.clone_expr()).collect()))
   }
 
   pub fn at_inline(&self, idx: &[impl IntoExpr]) -> Expr {
     assert_eq!(idx.len() as u32, self.n_dim());
-    let mut expr = match &self.expr { OptionExpr::Expr(e) => e.clone(), _ => panic!("`at_inline` on comp with no expr") };
+    let mut expr = self.expr.clone();
     expr.visit_mut(&mut |e| if let Iter(x) = &mut e.1 { *e = idx[*x as usize].clone_expr(); });
     expr
   }
@@ -88,7 +75,7 @@ impl Comp {
   }
 
   pub fn split(&self, i: u32, factor: u32) -> &Comp {
-    let (n, i) = (self.sch_dim(), i * 2 - 1);
+    let (n, i) = (self.sch_dim(), i * 2 + 1);
     let s = format!("{{ {} -> [{}]: i{i0} = floor(i{i} / {f}) and i{i1} = i{i} % {f} }}\0", i0_in(n),
       comma_sep((0..n + 2).map(|x| fn2display(move |f|
         if x == i + 1 { f.write_str("0") } else {
@@ -100,7 +87,7 @@ impl Comp {
   }
 
   pub fn reorder(&self, i: u32, j: u32) -> &Comp {
-    let (n, i, j) = (self.sch_dim(), i * 2 - 1, j * 2 - 1);
+    let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
     let s = format!("{{ {} -> [{}] }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", if x == i { j } else if x == j { i } else { x })))));
@@ -110,7 +97,7 @@ impl Comp {
 
   pub fn skew(&self, i: u32, j: u32, factor: u32) -> &Comp {
     assert!(i < j);
-    let (n, i, j) = (self.sch_dim(), i * 2 - 1, j * 2 - 1);
+    let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
     let s = format!("{{ {} -> [{}]: i{j1} = {f} * i{i} + i{j} }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", if x < j { x } else if x == j { n } else { x - 1 })))),
@@ -137,7 +124,7 @@ impl Comp {
   }
 
   pub fn store_at(&self, buf: &Buf, idx: &[impl IntoExpr]) -> &Comp {
-    let s = format!("{{ {} -> {}[{}] }}\0", i0_in(self.n_dim()),
+    let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.n_dim()),
       buf.name, comma_sep(idx.iter().map(|e| e.clone_expr())));
     debug!("store_at: {}", s);
     P::new(self).store = Some(self.ctx.basic_map_read_from_str(s.as_str().into()).unwrap());
@@ -146,6 +133,7 @@ impl Comp {
 }
 
 impl Comp {
+  // at的意义是在包围at层循环的static dim上，self在after之后
   // A.after(B, i).after(C, j)的链式调用，语义是A在B后，B在C后
   pub fn after<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
     let mut other = P::new(other);
@@ -190,14 +178,12 @@ pub(crate) fn i0_in(n: u32) -> impl Display {
 // 如果已经存在对这个位置约束则不能使用它
 pub(crate) fn map_add_constraint(map: BasicMap, pos: u32, k_in: i32, val: i32) -> Option<BasicMap> {
   let pos = pos as i32;
-  let lsp = map.get_space()?.local_space_from_space()?;
-  let mut cst = lsp.constraint_alloc_equality()?;
+  let mut cst = map.get_space()?.local_space_from_space()?.constraint_alloc_equality()?;
   // 我的应用中out dim总是多于in dim，所以只需要检查pos是否在in dim范围内
   if pos < cst.dim(DimType::In) {
     cst = cst.set_coefficient_si(DimType::In, pos, k_in)?;
   }
-  cst = cst.set_coefficient_si(DimType::Out, pos, 1)?;
-  cst = cst.set_constant_si(-val)?;
+  cst = cst.set_coefficient_si(DimType::Out, pos, 1)?.set_constant_si(-val)?;
   map.add_constraint(cst)
 }
 
@@ -225,7 +211,7 @@ pub(crate) fn identity_map(set: &BasicSet) -> Option<BasicMap> {
 
 pub(crate) fn identity_schedule(domain: &BasicSet) -> Option<BasicMap> {
   let mut sch = identity_map(domain)?;
-  for i in 0..domain.n_dim() + 1 { // 在0，2，4...，2 * n_dim下标处插入0
+  for i in 0..=domain.n_dim() { // 在0，2，4...，2 * n_dim下标处插入0
     let pos = 2 * i;
     sch = sch.insert_dims(DimType::Out, pos, 1)?;
     sch = map_add_constraint(sch, pos, 0, 0)?;

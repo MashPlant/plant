@@ -22,8 +22,18 @@ pub fn sep<T: Display>(it: impl Iterator<Item=T> + Clone, sep: &'static str) -> 
 
 pub fn comma_sep<T: Display>(it: impl Iterator<Item=T> + Clone) -> impl Display { sep(it, ", ") }
 
+impl Type {
+  pub fn as_str(self) -> &'static str {
+    match self {
+      U8 => "u8", U16 => "u16", U32 => "u32", U64 => "u64",
+      I8 => "i8", I16 => "i16", I32 => "i32", I64 => "i64",
+      F32 => "f32", F64 => "f64", Bool => "bool", Ptr => "void *"
+    }
+  }
+}
+
 impl UnOp {
-  pub fn op_str(self) -> &'static str {
+  pub fn as_str(self) -> &'static str {
     match self {
       LNot => "!", Cast => "cast",
       Floor => "floor", Ceil => "ceil", Round => "round", Trunc => "trunc",
@@ -33,13 +43,25 @@ impl UnOp {
 }
 
 impl BinOp {
-  pub fn op_str(self) -> &'static str {
+  pub fn as_str(self) -> &'static str {
     match self {
       Add => "+", Sub => "-", Mul => "*", Div => "/", Rem => "%",
       LAnd => "&&", LOr => "||", Eq => "==", Ne => "!=", Le => "<=", Lt => "<", Ge => ">=", Gt => ">",
       Max => "max", Min => "min", Memcpy => "memcpy", // 以call格式输出
     }
   }
+}
+
+impl Display for Type {
+  fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
+}
+
+impl Display for UnOp {
+  fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
+}
+
+impl Display for BinOp {
+  fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
 }
 
 // 这个实现主要是为了上下界传给ISL，但其中很多写法其实ISL并不支持
@@ -62,11 +84,9 @@ impl Display for Expr {
       Iter(x) => write!(f, "i{}", x),
       Param(x) => f.pad(x),
       Unary(op, x) =>
-        if *op == Cast { write!(f, "cast({:?}, {})", self.0, x) } else { write!(f, "({}({}))", op.op_str(), x) }
-      Binary(op, box [l, r]) => {
-        let s = op.op_str();
-        if *op >= Max { write!(f, "{}({}, {})", s, l, r) } else { write!(f, "({} {} {})", l, s, r) }
-      }
+        if *op == Cast { write!(f, "cast({}, {})", self.0, x) } else { write!(f, "({}({}))", op, x) }
+      Binary(op, box [l, r]) =>
+        if *op >= Max { write!(f, "{}({}, {})", op, l, r) } else { write!(f, "({} {} {})", l, op, r) },
       Call(x, args) => write!(f, "{}({})", x, comma_sep(args.iter())),
       Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
       Load(x, args) => write!(f, "{}[{}]", x.name, comma_sep(args.iter())),
