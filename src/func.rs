@@ -1,4 +1,4 @@
-use isl::{Ctx, BasicSet, DimType, AstNode, UnionMap, AstBuildRef, Map, AstExpr, AstNodeType};
+use isl::{Ctx, BasicSet, DimType, AstNode, UnionMap, AstBuildRef, Map, AstExpr, AstNodeType, AstNodeRef};
 use std::{io::{self, Write, BufWriter}, fs::File, fmt::Display};
 use crate::*;
 
@@ -15,8 +15,8 @@ pub struct Func {
 }
 
 impl Func {
-  pub fn new(name: &str) -> Option<Box<Func>> {
-    Some(box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, ctx: Ctx::new()? })
+  pub fn new(name: &str) -> Box<Func> {
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, ctx: Ctx::new().unwrap() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<P<Comp>> {
@@ -29,10 +29,12 @@ impl Func {
 
   pub fn iter(&self, level: u32) -> Expr { Expr(self.iter_ty, Iter(level)) }
 
-  pub fn add_ctx_constraint(&self, ctx: BasicSet) {
-    if let Some(x) = &self.func_ctx {
-      x.write(x.read().intersect(ctx).unwrap());
-    } else { P::new(self).func_ctx = Some(ctx); }
+  // 设置domain/schedule中的params的取值范围
+  pub fn set_constraint(&self, csts: &[Expr]) {
+    self.align_schedule();
+    let s = format!("{} -> {{: {}}}\0", self.comps.first().unwrap().params(), sep(csts.iter(), " and "));
+    debug!("set_constraint: {}", s);
+    P::new(self).func_ctx = Some(self.ctx.basic_set_read_from_str(s.as_str().into()).unwrap());
   }
 
   // 将所有Comp的schedule的range维度统一成最大的，不足的维度补0
@@ -43,7 +45,7 @@ impl Func {
   // 只是为了避免写太多unwrap()，用一个返回Option的函数包一下，里面可以用?来处理
   fn align_schedule_impl(&self) -> Option<()> {
     let mut max_dim = 0;
-    let mut all_params = self.comps.get(0)?.domain.get_space()?;
+    let mut all_params = self.comps.get(0).expect("no computation").domain.get_space()?;
     for c in &self.comps {
       max_dim = max_dim.max(c.sch_dim());
       all_params = all_params.align_params(c.schedule.get_space()?)?;
@@ -57,6 +59,10 @@ impl Func {
       c.schedule.write(sch);
       c.domain.write(c.domain.read().align_params(all_params.copy()?)?);
       debug!("aligned schedule: {}; domain: {}", c.schedule, c.domain);
+      if let Some(store) = &c.store {
+        store.write(store.read().align_params(all_params.copy()?)?);
+        debug!("aligned store: {}", store);
+      }
     }
     Some(())
   }
@@ -65,13 +71,26 @@ impl Func {
     for b in args { assert_ne!(b.kind, BufKind::Temp); }
     self.align_schedule();
     let mut vis = HashSet::default();
+    let mut prev = None;
     for c in self.sch_comps() {
-      if c.pred.is_none() { self.sch_graph_dfs(P::new(c), &mut vis); }
+      if c.pred.is_none() {
+        // 所有没有前驱的节点按定义顺序排序
+        // after_raw要求按照从前往后顺序调用，例如B after_raw C, A after_raw B，不能是A after_raw B, B after_raw C
+        // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
+        if let Some(x) = prev { c.after_raw(x, 0); }
+        prev = Some(c);
+        self.sch_graph_dfs(P::new(c), &mut vis);
+      }
     }
     let ast = self.build_isl_ast().unwrap(); // todo: 可以从这个ast中提取特征，无需自己维护ast了
+    let mut tags = HashMap::default();
+    extract_tags(*ast, &mut Vec::new(), &mut tags);
     let mut w = BufWriter::new(File::create(path)?);
     debug!("codegen: ast = {}", ast);
-    write!(w, "{}", self.gen(ast))?;
+    w.write_all(include_bytes!("inc.h"))?;
+    write!(w, "void {}({}){{{}}}", self.name,
+      comma_sep(args.iter().map(|&x| fn2display(move |f| write!(f, "{} *restrict {}", x.ty, x.name)))),
+      self.gen(ast, &tags))?;
     Ok(())
   }
 }
@@ -84,9 +103,9 @@ impl Func {
 
   fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) {
     if !vis.insert(c) { panic!("schedule graph should be acyclic"); }
-    for (&pred, &at) in &c.succ {
-      pred.get().after_raw(c.get(), at);
-      self.sch_graph_dfs(pred, vis);
+    for (&s, &at) in &c.succ {
+      s.get().after_raw(c.get(), at);
+      self.sch_graph_dfs(s, vis);
     }
   }
 
@@ -161,7 +180,7 @@ impl Func {
     Some(node)
   }
 
-  fn gen<'a>(&'a self, node: AstNode) -> impl Display + 'a {
+  fn gen<'a>(&'a self, node: AstNode, tags: &'a HashMap<AstNodeRef, DimTag>) -> impl Display + 'a {
     use std::fmt::Error as E;
     fn2display(move |f| {
       match node.get_type() {
@@ -171,29 +190,37 @@ impl Func {
           let cond = node.for_get_cond().ok_or(E)?.to_C_str().ok_or(E)?;
           let inc = node.for_get_inc().ok_or(E)?.to_C_str().ok_or(E)?;
           let body = node.for_get_body().ok_or(E)?;
-          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init, cond, inc, self.gen(body), it = it)?;
+          match tags.get(&*node) {
+            // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
+            Some(Parallel) => f.write_str("\n#pragma omp parallel for\n")?,
+            _ => {}
+          }
+          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init, cond, inc, self.gen(body, tags), it = it)?;
         }
         AstNodeType::If => {
           let cond = node.if_get_cond().ok_or(E)?.to_C_str().ok_or(E)?;
           let t = node.if_get_then().ok_or(E)?;
-          write!(f, "if({}){{{}}}", cond, self.gen(t))?;
+          write!(f, "if({}){{{}}}", cond, self.gen(t, tags))?;
           if let Some(e) = node.if_get_else() {
-            write!(f, "else{{{}}}", self.gen(e))?;
+            write!(f, "else{{{}}}", self.gen(e, tags))?;
           }
         }
         AstNodeType::Block => {
+          // block node不需要{}包裹，因为if，for已经有{}了，而且用{}包裹会让一些局部变量无法访问
           let ch = node.block_get_children().ok_or(E)?;
-          let n = ch.n_ast_node();
-          f.write_str("{")?;
-          for i in 0..n {
+          for i in 0..ch.n_ast_node() {
             let ch = ch.get_ast_node(i).ok_or(E)?;
-            write!(f, "{}", self.gen(ch))?;
+            write!(f, "{}", self.gen(ch, tags))?;
           }
-          f.write_str("}")?;
         }
         AstNodeType::User => {
           let comp = P::new(node.get_annotation().ok_or(E)?.get_user() as *const Comp);
-          write!(f, "{}", comp.expr)?;
+          if let Some(store) = &comp.store_expr {
+            write!(f, "{}={};", store, comp.expr)?;
+          } else {
+            // 没有store的comp表示成一个标量定义
+            write!(f, "{} {}={};", comp.expr.0, comp.name(), comp.expr)?;
+          }
         }
         _ => panic!("invalid ast node type"),
       }
@@ -202,12 +229,43 @@ impl Func {
   }
 }
 
+// 从user node中提取Comp::dim_tags中循环的tag，用HashMap保存for node对应的循环的tag
+fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashMap<AstNodeRef, DimTag>) -> Option<()> {
+  match node.get_type() {
+    AstNodeType::For => {
+      levels.push(node);
+      extract_tags(*node.for_get_body()?, levels, tags)?;
+      levels.pop();
+    }
+    AstNodeType::If => {
+      extract_tags(*node.if_get_then()?, levels, tags)?;
+      if let Some(e) = node.if_get_else() { extract_tags(*e, levels, tags)?; }
+    }
+    AstNodeType::Block => {
+      let ch = node.block_get_children()?;
+      for i in 0..ch.n_ast_node() { extract_tags(*ch.get_ast_node(i)?, levels, tags)?; }
+    }
+    AstNodeType::User => {
+      let comp = P::new(node.get_annotation()?.get_user() as *const Comp);
+      for (i, &tag) in comp.dim_tags.iter().enumerate() {
+        if let Some(tag) = tag {
+          assert!(tags.insert(levels[i], tag).is_none()); // 不允许重复的tag
+        }
+      }
+    }
+    _ => panic!("invalid ast node type"),
+  }
+  Some(())
+}
+
 fn access_to_load(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Option<Expr> {
-  let params = comma_sep((0..comp.domain.dim(DimType::Param)).map(|i| comp.domain.get_dim_name(DimType::Param, i).unwrap()));
-  let s = format!("[{}] -> {{ {}{} -> {}[{}] }}\0", params,
+  let s = format!("{} -> {{ {}{} -> {}[{}] }}\0", comp.params(),
     comp.name(), i0_in(comp.n_dim()), arg.name(), comma_sep(idx.iter()));
   debug!("access_to_load: {}", s);
-  let store = arg.store.as_ref()?.copy()?; // todo: 处理arg没有store的情形
+  // 对于没有store的arg返回Param表达式，这不会影响到domain/schedule的参数，这个表达式之后只会用于输出
+  let store = if let Some(x) = arg.store.as_ref() { x.copy()? } else {
+    return Some(arg.as_param());
+  };
   let access = comp.ctx.basic_map_read_from_str(s.as_str().into())?
     .apply_range(store)?
     .apply_domain(comp.schedule.copy()?)?

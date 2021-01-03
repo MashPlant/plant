@@ -20,7 +20,7 @@ extern "C" {
 pub struct MaybeIslPwAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslPwAffRef(pub NonNull<c_void>);
 
 impl MaybeIslPwAff {
@@ -51,7 +51,7 @@ impl To<Option<MaybeIslPwAff>> for *mut c_void {
 pub struct IdToPwAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdToPwAffRef(pub NonNull<c_void>);
 
 impl IdToPwAff {

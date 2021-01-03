@@ -18,30 +18,41 @@ pub struct Comp {
   pub store_expr: Option<Expr>,
   pub pred: Option<P<Comp>>,
   pub succ: HashMap<P<Comp>, u32>,
+  pub dim_tags: Vec<Option<DimTag>>,
 }
 
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
+pub enum DimTag { Parallel, GPUBlockX, GPUBlockY, GPUBlockZ, GPUThreadX, GPUThreadY, GPUThreadZ }
+
 impl Func {
-  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> Option<R<Comp>> {
+  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> R<Comp> {
+    // 很多时候调用方可以提供&[(Expr, Expr)]，这里的拷贝是多余的，但这点浪费可以忽略
+    let ranges = ranges.iter().map(|(lb, ub)| (lb.clone_expr(), ub.clone_expr())).collect::<Vec<_>>();
     let expr = expr.expr();
-    let mut params = HashSet::default();
-    expr.visit(&mut |e| if let Param(x) = &e.1 { params.insert(x); });
+    let mut params = HashSet::<&str>::default();
+    // 收集ranges，expr中的所有Param
+    let ref mut vis = |e: &Expr| if let Param(x) = &e.1 { params.insert(x.get()); };
+    for (lb, ub) in &ranges {
+      lb.visit(vis);
+      ub.visit(vis);
+    }
+    expr.visit(vis);
     let s = format!("[{}] -> {{ {}{}: {} }}\0", comma_sep(params.iter()), name, i0_in(ranges.len() as _),
-      sep(ranges.iter().enumerate().map(|(i, (lb, ub))| fn2display(move |f| {
-        write!(f, "{} <= i{} < {}", lb.clone_expr(), i, ub.clone_expr())
-      })), " and "));
+      sep(ranges.iter().enumerate().map(|(i, (lb, ub))| fn2display(move |f|
+        write!(f, "{} <= i{} < {}", lb, i, ub))), " and "));
     debug!("constructed domain str: {}", s);
-    let domain = self.ctx.basic_set_read_from_str(s.as_str().into())?;
+    let domain = self.ctx.basic_set_read_from_str(s.as_str().into()).unwrap();
     self.comp_raw(domain, expr)
   }
 
-  pub fn comp_raw(&self, domain: BasicSet, expr: Expr) -> Option<R<Comp>> {
-    let schedule = identity_schedule(&domain)?;
+  pub fn comp_raw(&self, domain: BasicSet, expr: Expr) -> R<Comp> {
+    let schedule = identity_schedule(&domain).unwrap();
     debug!("initial identity schedule: {}", schedule);
-    let comp = box Comp { ctx: *self.ctx.as_ref(), func: self.into(), domain, expr, schedule, store: None, store_expr: None, pred: None, succ: HashMap::default() };
+    let comp = box Comp { ctx: *self.ctx.as_ref(), func: self.into(), domain, expr, schedule, store: None, store_expr: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
     assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     let ret = R::new(&*comp);
     P::new(self).comps.push(comp);
-    Some(ret)
+    ret
   }
 }
 
@@ -53,7 +64,20 @@ impl Comp {
 
   pub fn sch_dim(&self) -> u32 { self.schedule.dim(DimType::Out) }
 
+  // 输出[逗号分隔的params列表]
+  pub fn params<'a>(&'a self) -> impl Display + 'a {
+    fn2display(move |f| write!(f, "[{}]", comma_sep((0..self.domain.dim(DimType::Param))
+      .map(|i| self.domain.get_dim_name(DimType::Param, i).unwrap()))))
+  }
+
   pub fn set_expr(&self, expr: Expr) { P::new(self).expr = expr; }
+
+  // 将自身作为一个Param表达式，一般自身应该没有store
+  // 如果comp的计算结果用于其他comp中的循环范围，Access下标，则必须用as_param
+  // 如果只是用于普通运算，可以用as_param或at，as_param会往domain/schedule中引入一个参数，应该没有什么好处
+  pub fn as_param(&self) -> Expr {
+    Expr(self.expr.0, Param(self.name().into()))
+  }
 
   pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
     assert_eq!(idx.len() as u32, self.n_dim());
@@ -83,7 +107,7 @@ impl Comp {
         }))),
       i0 = n, i1 = n + 1, i = i, f = factor);
     debug!("split: {}", s);
-    self.apply_sch_raw(&s)
+    self.apply_sch_raw(&s).unwrap()
   }
 
   pub fn reorder(&self, i: u32, j: u32) -> &Comp {
@@ -92,7 +116,7 @@ impl Comp {
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", if x == i { j } else if x == j { i } else { x })))));
     debug!("reorder: {}", s);
-    self.apply_sch_raw(&s)
+    self.apply_sch_raw(&s).unwrap()
   }
 
   pub fn skew(&self, i: u32, j: u32, factor: u32) -> &Comp {
@@ -103,18 +127,33 @@ impl Comp {
         write!(f, "i{}", if x < j { x } else if x == j { n } else { x - 1 })))),
       j1 = n, f = factor, i = i, j = j);
     debug!("skew: {}", s);
-    self.apply_sch_raw(&s)
+    self.apply_sch_raw(&s).unwrap()
   }
 
-  pub fn apply_sch_raw(&self, s: &str) -> &Comp {
-    debug_assert!(s.ends_with('\0'));
-    let t = self.ctx.basic_map_read_from_str(s.into()).unwrap();
-    self.schedule.write(self.schedule.read().apply_range(t).unwrap());
+  pub fn shift(&self, i: u32, n: i32) -> &Comp {
+    // 设置i_out = i_in + n
+    self.schedule.write(map_add_constraint(self.schedule.read(), i * 2, -1, n).unwrap());
     self
+  }
+
+  pub fn apply_sch_raw(&self, s: &str) -> Option<&Comp> {
+    debug_assert!(s.ends_with('\0'));
+    let t = self.ctx.basic_map_read_from_str(s.into())?
+      .align_params(self.schedule.get_space()?)?;
+    self.schedule.write(self.schedule.read().apply_range(t)?);
+    Some(self)
   }
 }
 
 impl Comp {
+  pub fn tag_dim(&self, at: u32, tag: DimTag) -> &Comp {
+    let at = at as usize;
+    let dim_tags = &mut P::new(self).dim_tags;
+    if dim_tags.len() <= at { dim_tags.resize(at + 1, None); }
+    dim_tags[at] = Some(tag);
+    self
+  }
+
   pub fn store(&self, buf: &Buf) -> &Comp {
     let mut store = identity_map(&self.domain).unwrap();
     store = store.set_tuple_name(DimType::Out, format!("{}\0", buf.name).as_str().into()).unwrap();

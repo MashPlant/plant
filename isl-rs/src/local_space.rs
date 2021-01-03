@@ -40,7 +40,7 @@ extern "C" {
 pub struct LocalSpace(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct LocalSpaceRef(pub NonNull<c_void>);
 
 impl LocalSpace {

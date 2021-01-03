@@ -81,7 +81,7 @@ extern "C" {
 pub struct ScheduleConstraints(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ScheduleConstraintsRef(pub NonNull<c_void>);
 
 impl ScheduleConstraints {

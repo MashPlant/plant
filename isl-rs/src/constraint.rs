@@ -75,7 +75,7 @@ extern "C" {
 pub struct Constraint(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ConstraintRef(pub NonNull<c_void>);
 
 impl Constraint {
@@ -106,7 +106,7 @@ impl To<Option<Constraint>> for *mut c_void {
 pub struct ConstraintList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ConstraintListRef(pub NonNull<c_void>);
 
 impl ConstraintList {

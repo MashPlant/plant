@@ -42,7 +42,7 @@ extern "C" {
 pub struct Token(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct TokenRef(pub NonNull<c_void>);
 
 impl Token {
@@ -73,7 +73,7 @@ impl To<Option<Token>> for *mut c_void {
 pub struct Stream(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct StreamRef(pub NonNull<c_void>);
 
 impl Stream {

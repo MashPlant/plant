@@ -44,7 +44,7 @@ extern "C" {
 pub struct BasicMap(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicMapRef(pub NonNull<c_void>);
 
 impl BasicMap {
@@ -75,7 +75,7 @@ impl To<Option<BasicMap>> for *mut c_void {
 pub struct BasicMapList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicMapListRef(pub NonNull<c_void>);
 
 impl BasicMapList {
@@ -106,7 +106,7 @@ impl To<Option<BasicMapList>> for *mut c_void {
 pub struct Map(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MapRef(pub NonNull<c_void>);
 
 impl Map {
@@ -137,7 +137,7 @@ impl To<Option<Map>> for *mut c_void {
 pub struct MapList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MapListRef(pub NonNull<c_void>);
 
 impl MapList {
@@ -168,7 +168,7 @@ impl To<Option<MapList>> for *mut c_void {
 pub struct BasicSet(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicSetRef(pub NonNull<c_void>);
 
 impl BasicSet {
@@ -199,7 +199,7 @@ impl To<Option<BasicSet>> for *mut c_void {
 pub struct BasicSetList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicSetListRef(pub NonNull<c_void>);
 
 impl BasicSetList {
@@ -230,7 +230,7 @@ impl To<Option<BasicSetList>> for *mut c_void {
 pub struct Set(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct SetRef(pub NonNull<c_void>);
 
 impl Set {
@@ -261,7 +261,7 @@ impl To<Option<Set>> for *mut c_void {
 pub struct SetList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct SetListRef(pub NonNull<c_void>);
 
 impl SetList {

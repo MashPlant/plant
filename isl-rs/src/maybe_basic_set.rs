@@ -8,7 +8,7 @@ extern "C" {
 pub struct MaybeIslBasicSet(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslBasicSetRef(pub NonNull<c_void>);
 
 impl MaybeIslBasicSet {

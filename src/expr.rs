@@ -20,6 +20,10 @@ impl Type {
 #[derive(Debug, Clone)]
 pub struct Expr(pub Type, pub ExprKind);
 
+// 可用于Func::comp，Comp::at等接受impl Expr的slice的函数，直接传&[]会报错无法推断类型
+pub const EMPTY: &[Expr] = &[];
+pub const EMPTY2: &[(Expr, Expr)] = &[];
+
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum UnOp { LNot, Cast, Floor, Ceil, Round, Trunc, Sin, Cos, Tan, Abs, Sqrt, Exp, Log }
 
@@ -31,7 +35,8 @@ pub enum ExprKind {
   // 实际存放的值根据Expr::ty来，可以表示浮点数
   Val(u64),
   Iter(u32),
-  Param(Box<str>),
+  // R<str>一般引用Comp::name
+  Param(R<str>),
   Unary(UnOp, Box<Expr>),
   Binary(BinOp, Box<[Expr; 2]>),
   Call(Box<str>, Box<[Expr]>),

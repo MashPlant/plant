@@ -147,7 +147,7 @@ extern "C" {
 pub struct Val(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ValRef(pub NonNull<c_void>);
 
 impl Val {
@@ -178,7 +178,7 @@ impl To<Option<Val>> for *mut c_void {
 pub struct ValList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ValListRef(pub NonNull<c_void>);
 
 impl ValList {
@@ -209,7 +209,7 @@ impl To<Option<ValList>> for *mut c_void {
 pub struct MultiVal(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiValRef(pub NonNull<c_void>);
 
 impl MultiVal {

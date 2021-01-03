@@ -49,7 +49,7 @@ extern "C" {
 pub struct AccessLevelBefore(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AccessLevelBeforeRef(pub NonNull<c_void>);
 
 impl AccessLevelBefore {
@@ -80,7 +80,7 @@ impl To<Option<AccessLevelBefore>> for *mut c_void {
 pub struct Restriction(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct RestrictionRef(pub NonNull<c_void>);
 
 impl Restriction {
@@ -111,7 +111,7 @@ impl To<Option<Restriction>> for *mut c_void {
 pub struct AccessRestrict(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AccessRestrictRef(pub NonNull<c_void>);
 
 impl AccessRestrict {
@@ -142,7 +142,7 @@ impl To<Option<AccessRestrict>> for *mut c_void {
 pub struct AccessInfo(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AccessInfoRef(pub NonNull<c_void>);
 
 impl AccessInfo {
@@ -173,7 +173,7 @@ impl To<Option<AccessInfo>> for *mut c_void {
 pub struct Flow(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct FlowRef(pub NonNull<c_void>);
 
 impl Flow {
@@ -204,7 +204,7 @@ impl To<Option<Flow>> for *mut c_void {
 pub struct UnionAccessInfo(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionAccessInfoRef(pub NonNull<c_void>);
 
 impl UnionAccessInfo {
@@ -235,7 +235,7 @@ impl To<Option<UnionAccessInfo>> for *mut c_void {
 pub struct UnionFlow(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionFlowRef(pub NonNull<c_void>);
 
 impl UnionFlow {

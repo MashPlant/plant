@@ -64,7 +64,7 @@ impl Display for BinOp {
   fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
 }
 
-// 这个实现主要是为了上下界传给ISL，但其中很多写法其实ISL并不支持
+// 在Func::comp，Func::set_constraint，access_to_load，Comp::store中将表达式传递给ISL，但其中很多写法ISL并不支持，用户自己负责
 impl Display for Expr {
   fn fmt(&self, f: &mut Formatter) -> Result {
     match &self.1 {
@@ -82,14 +82,20 @@ impl Display for Expr {
         Bool => write!(f, "{}", x != 0),
       },
       Iter(x) => write!(f, "i{}", x),
-      Param(x) => f.pad(x),
+      Param(x) => f.write_str(x),
       Unary(op, x) =>
-        if *op == Cast { write!(f, "cast({}, {})", self.0, x) } else { write!(f, "({}({}))", op, x) }
+        if *op == Cast { write!(f, "({})({})", self.0, x) } else { write!(f, "{}({})", op, x) }
       Binary(op, box [l, r]) =>
         if *op >= Max { write!(f, "{}({}, {})", op, l, r) } else { write!(f, "({} {} {})", l, op, r) },
       Call(x, args) => write!(f, "{}({})", x, comma_sep(args.iter())),
       Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
-      Load(x, args) => write!(f, "{}[{}]", x.name, comma_sep(args.iter())),
+      Load(buf, idx) => {
+        let first = idx.first().expect("empty index");
+        write!(f, "{}[", buf.name)?;
+        for _ in 2..idx.len() { f.write_str("(")?; }
+        write!(f, "{}{}]", first, sep(idx.iter().zip(buf.sizes.iter()).skip(1)
+          .map(|(idx, size)| fn2display(move |f| write!(f, "*{}+{}", size, idx))), ")"))
+      }
       Alloc(x) => write!(f, "allocate({})", x),
       Free(x) => write!(f, "free({})", x),
     }

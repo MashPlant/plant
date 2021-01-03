@@ -8,7 +8,7 @@ extern "C" {
 pub struct UnionMap(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionMapRef(pub NonNull<c_void>);
 
 impl UnionMap {
@@ -39,7 +39,7 @@ impl To<Option<UnionMap>> for *mut c_void {
 pub struct UnionMapList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionMapListRef(pub NonNull<c_void>);
 
 impl UnionMapList {
@@ -70,7 +70,7 @@ impl To<Option<UnionMapList>> for *mut c_void {
 pub struct UnionSet(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionSetRef(pub NonNull<c_void>);
 
 impl UnionSet {
@@ -101,7 +101,7 @@ impl To<Option<UnionSet>> for *mut c_void {
 pub struct UnionSetList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionSetListRef(pub NonNull<c_void>);
 
 impl UnionSetList {

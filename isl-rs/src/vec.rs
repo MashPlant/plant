@@ -37,7 +37,7 @@ extern "C" {
 pub struct Vec(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct VecRef(pub NonNull<c_void>);
 
 impl Vec {

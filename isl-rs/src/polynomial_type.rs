@@ -8,7 +8,7 @@ extern "C" {
 pub struct Qpolynomial(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct QpolynomialRef(pub NonNull<c_void>);
 
 impl Qpolynomial {
@@ -39,7 +39,7 @@ impl To<Option<Qpolynomial>> for *mut c_void {
 pub struct Term(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct TermRef(pub NonNull<c_void>);
 
 impl Term {
@@ -70,7 +70,7 @@ impl To<Option<Term>> for *mut c_void {
 pub struct PwQpolynomial(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwQpolynomialRef(pub NonNull<c_void>);
 
 impl PwQpolynomial {
@@ -101,7 +101,7 @@ impl To<Option<PwQpolynomial>> for *mut c_void {
 pub struct QpolynomialFold(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct QpolynomialFoldRef(pub NonNull<c_void>);
 
 impl QpolynomialFold {
@@ -132,7 +132,7 @@ impl To<Option<QpolynomialFold>> for *mut c_void {
 pub struct PwQpolynomialFold(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwQpolynomialFoldRef(pub NonNull<c_void>);
 
 impl PwQpolynomialFold {
@@ -163,7 +163,7 @@ impl To<Option<PwQpolynomialFold>> for *mut c_void {
 pub struct UnionPwQpolynomial(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwQpolynomialRef(pub NonNull<c_void>);
 
 impl UnionPwQpolynomial {
@@ -194,7 +194,7 @@ impl To<Option<UnionPwQpolynomial>> for *mut c_void {
 pub struct UnionPwQpolynomialFold(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwQpolynomialFoldRef(pub NonNull<c_void>);
 
 impl UnionPwQpolynomialFold {

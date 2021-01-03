@@ -8,7 +8,7 @@ extern "C" {
 pub struct Printer(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PrinterRef(pub NonNull<c_void>);
 
 impl Printer {

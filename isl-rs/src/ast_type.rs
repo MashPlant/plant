@@ -44,7 +44,7 @@ extern "C" {
 pub struct AstExpr(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstExprRef(pub NonNull<c_void>);
 
 impl AstExpr {
@@ -75,7 +75,7 @@ impl To<Option<AstExpr>> for *mut c_void {
 pub struct AstNode(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstNodeRef(pub NonNull<c_void>);
 
 impl AstNode {
@@ -106,7 +106,7 @@ impl To<Option<AstNode>> for *mut c_void {
 pub struct AstPrintOptions(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstPrintOptionsRef(pub NonNull<c_void>);
 
 impl AstPrintOptions {
@@ -137,7 +137,7 @@ impl To<Option<AstPrintOptions>> for *mut c_void {
 pub struct AstExprList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstExprListRef(pub NonNull<c_void>);
 
 impl AstExprList {
@@ -168,7 +168,7 @@ impl To<Option<AstExprList>> for *mut c_void {
 pub struct AstNodeList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstNodeListRef(pub NonNull<c_void>);
 
 impl AstNodeList {

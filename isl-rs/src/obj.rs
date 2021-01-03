@@ -8,7 +8,7 @@ extern "C" {
 pub struct ObjType(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ObjTypeRef(pub NonNull<c_void>);
 
 impl ObjType {
@@ -39,7 +39,7 @@ impl To<Option<ObjType>> for *mut c_void {
 pub struct Obj(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ObjRef(pub NonNull<c_void>);
 
 impl Obj {

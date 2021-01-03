@@ -17,6 +17,7 @@ pub use fmt::*;
 
 use ptr::*;
 pub use expr::{Type::*, ExprKind::*};
+pub use comp::DimTag::*;
 pub use buf::BufKind::*;
 
 use std::hash::BuildHasherDefault;

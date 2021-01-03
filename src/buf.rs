@@ -13,7 +13,7 @@ pub struct Buf {
 
 impl Func {
   pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: &[impl IntoExpr]) -> R<Buf> {
-    assert!(self.find_buf(name).is_none());
+    assert!(self.find_buf(name).is_none() && !sizes.is_empty());
     let buf = box Buf { name: name.into(), ty, kind, sizes: sizes.iter().map(|e| e.clone_expr()).collect() };
     let ret = R::new(&*buf);
     P::new(self).bufs.push(buf);

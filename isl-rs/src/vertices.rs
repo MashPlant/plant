@@ -23,7 +23,7 @@ extern "C" {
 pub struct Vertex(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct VertexRef(pub NonNull<c_void>);
 
 impl Vertex {
@@ -54,7 +54,7 @@ impl To<Option<Vertex>> for *mut c_void {
 pub struct Cell(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct CellRef(pub NonNull<c_void>);
 
 impl Cell {
@@ -85,7 +85,7 @@ impl To<Option<Cell>> for *mut c_void {
 pub struct Vertices(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct VerticesRef(pub NonNull<c_void>);
 
 impl Vertices {

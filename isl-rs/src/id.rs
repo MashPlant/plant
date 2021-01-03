@@ -37,7 +37,7 @@ extern "C" {
 pub struct Id(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdRef(pub NonNull<c_void>);
 
 impl Id {
@@ -68,7 +68,7 @@ impl To<Option<Id>> for *mut c_void {
 pub struct IdList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdListRef(pub NonNull<c_void>);
 
 impl IdList {

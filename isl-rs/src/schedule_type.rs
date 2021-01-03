@@ -8,7 +8,7 @@ extern "C" {
 pub struct ScheduleNode(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ScheduleNodeRef(pub NonNull<c_void>);
 
 impl ScheduleNode {
@@ -39,7 +39,7 @@ impl To<Option<ScheduleNode>> for *mut c_void {
 pub struct Schedule(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ScheduleRef(pub NonNull<c_void>);
 
 impl Schedule {

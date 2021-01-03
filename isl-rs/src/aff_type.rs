@@ -44,7 +44,7 @@ extern "C" {
 pub struct Aff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AffRef(pub NonNull<c_void>);
 
 impl Aff {
@@ -75,7 +75,7 @@ impl To<Option<Aff>> for *mut c_void {
 pub struct AffList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AffListRef(pub NonNull<c_void>);
 
 impl AffList {
@@ -106,7 +106,7 @@ impl To<Option<AffList>> for *mut c_void {
 pub struct PwAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwAffRef(pub NonNull<c_void>);
 
 impl PwAff {
@@ -137,7 +137,7 @@ impl To<Option<PwAff>> for *mut c_void {
 pub struct PwAffList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwAffListRef(pub NonNull<c_void>);
 
 impl PwAffList {
@@ -168,7 +168,7 @@ impl To<Option<PwAffList>> for *mut c_void {
 pub struct UnionPwAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwAffRef(pub NonNull<c_void>);
 
 impl UnionPwAff {
@@ -199,7 +199,7 @@ impl To<Option<UnionPwAff>> for *mut c_void {
 pub struct UnionPwAffList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwAffListRef(pub NonNull<c_void>);
 
 impl UnionPwAffList {
@@ -230,7 +230,7 @@ impl To<Option<UnionPwAffList>> for *mut c_void {
 pub struct MultiAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiAffRef(pub NonNull<c_void>);
 
 impl MultiAff {
@@ -261,7 +261,7 @@ impl To<Option<MultiAff>> for *mut c_void {
 pub struct PwMultiAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwMultiAffRef(pub NonNull<c_void>);
 
 impl PwMultiAff {
@@ -292,7 +292,7 @@ impl To<Option<PwMultiAff>> for *mut c_void {
 pub struct UnionPwMultiAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwMultiAffRef(pub NonNull<c_void>);
 
 impl UnionPwMultiAff {
@@ -323,7 +323,7 @@ impl To<Option<UnionPwMultiAff>> for *mut c_void {
 pub struct UnionPwMultiAffList(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwMultiAffListRef(pub NonNull<c_void>);
 
 impl UnionPwMultiAffList {
@@ -354,7 +354,7 @@ impl To<Option<UnionPwMultiAffList>> for *mut c_void {
 pub struct MultiPwAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiPwAffRef(pub NonNull<c_void>);
 
 impl MultiPwAff {
@@ -385,7 +385,7 @@ impl To<Option<MultiPwAff>> for *mut c_void {
 pub struct MultiUnionPwAff(pub NonNull<c_void>);
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiUnionPwAffRef(pub NonNull<c_void>);
 
 impl MultiUnionPwAff {
