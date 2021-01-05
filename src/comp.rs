@@ -24,8 +24,14 @@ pub struct Comp {
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum DimTag { Parallel, GPUBlockX, GPUBlockY, GPUBlockZ, GPUThreadX, GPUThreadY, GPUThreadZ }
 
+// 将Comp传给接受impl IntoExpr的地方时，是将它作为Param表达式，而非Access表达式
+// 用法区别请看Comp::as_param的注释
+impl IntoExpr for &Comp {
+  fn expr(self) -> Expr { self.as_param() }
+}
+
 impl Func {
-  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> R<Comp> {
+  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> &Comp {
     // 很多时候调用方可以提供&[(Expr, Expr)]，这里的拷贝是多余的，但这点浪费可以忽略
     let ranges = ranges.iter().map(|(lb, ub)| (lb.clone_expr(), ub.clone_expr())).collect::<Vec<_>>();
     let expr = expr.expr();
@@ -45,14 +51,14 @@ impl Func {
     self.comp_raw(domain, expr)
   }
 
-  pub fn comp_raw(&self, domain: BasicSet, expr: Expr) -> R<Comp> {
+  pub fn comp_raw(&self, domain: BasicSet, expr: Expr) -> &Comp {
     let schedule = identity_schedule(&domain).unwrap();
     debug!("initial identity schedule: {}", schedule);
     let comp = box Comp { ctx: *self.ctx.as_ref(), func: self.into(), domain, expr, schedule, store: None, store_expr: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
     assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     let ret = R::new(&*comp);
     P::new(self).comps.push(comp);
-    ret
+    ret.get()
   }
 }
 
@@ -72,8 +78,9 @@ impl Comp {
 
   pub fn set_expr(&self, expr: Expr) { P::new(self).expr = expr; }
 
-  // 将自身作为一个Param表达式，一般自身应该没有store
-  // 如果comp的计算结果用于其他comp中的循环范围，Access下标，则必须用as_param
+  // 将自身作为一个Param表达式，Expr中直接通过它的名字使用它
+  // 当且仅当它没有store的时候，生成的代码会在计算发生的地方定义一个对应名字的局部变量，所以它必须没有store
+  // 如果Comp的计算结果用于其他Comp中的循环范围，Access下标，则必须用as_param
   // 如果只是用于普通运算，可以用as_param或at，as_param会往domain/schedule中引入一个参数，应该没有什么好处
   pub fn as_param(&self) -> Expr {
     Expr(self.expr.0, Param(self.name().into()))
@@ -98,6 +105,13 @@ impl Comp {
     self.split(i, tile_i).split(j + 1, tile_j).reorder(i + 1, j + 1)
   }
 
+  pub fn tile_3(&self, i: u32, j: u32, k: u32, tile_i: u32, tile_j: u32, tile_k: u32) -> &Comp {
+    assert!(i < j && j < k);
+    self.split(i, tile_i).split(j + 1, tile_j).split(k + 2, tile_k)
+      // i0 i1 j0 j1 k0 k1 -> i0 j0 k0 i1 j1 k1
+      .reorder_n(&[(i + 1, j + 1), (j + 1, k + 2), (j + 2, i + 1), (k + 2, j + 2)])
+  }
+
   pub fn split(&self, i: u32, factor: u32) -> &Comp {
     let (n, i) = (self.sch_dim(), i * 2 + 1);
     let s = format!("{{ {} -> [{}]: i{i0} = floor(i{i} / {f}) and i{i1} = i{i} % {f} }}\0", i0_in(n),
@@ -110,12 +124,21 @@ impl Comp {
     self.apply_sch_raw(&s).unwrap()
   }
 
+  // 交换循环层次i和j
   pub fn reorder(&self, i: u32, j: u32) -> &Comp {
-    let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
+    self.reorder_n(&[(i, j), (j, i)])
+  }
+
+  // 对于map中每个元素(old, new)，将循环层次old用new代替
+  // 用户须保证map是一一映射，即old不重复，new不重复，且old构成的集合与new构成的集合相等
+  pub fn reorder_n(&self, map: &[(u32, u32)]) -> &Comp {
+    let n = self.sch_dim();
     let s = format!("{{ {} -> [{}] }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
-        write!(f, "i{}", if x == i { j } else if x == j { i } else { x })))));
-    debug!("reorder: {}", s);
+        write!(f, "i{}", map.iter().find(|&&(old, _)| x == old * 2 + 1)
+          .map(|&(_, new)| new * 2 + 1).unwrap_or(x))
+      ))));
+    debug!("reorder_n: {}", s);
     self.apply_sch_raw(&s).unwrap()
   }
 
