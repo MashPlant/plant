@@ -1,4 +1,4 @@
-use isl::{Ctx, BasicSet, DimType, AstNode, UnionMap, AstBuildRef, Map, AstExpr, AstNodeType, AstNodeRef};
+use isl::{Ctx, BasicSet, DimType, AstNode, AstBuildRef, Map, AstExpr, AstNodeType, AstNodeRef};
 use std::{io::{self, Write, BufWriter}, fs::File, fmt::Display};
 use crate::*;
 
@@ -10,13 +10,15 @@ pub struct Func {
   pub comps: Vec<Box<Comp>>,
   pub bufs: Vec<Box<Buf>>,
   pub iter_ty: Type,
+  // 用于命名自动生成的Comp
+  pub comp_cnt: u32,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
 }
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, ctx: Ctx::new().unwrap() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, ctx: Ctx::new().unwrap() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<P<Comp>> {
@@ -29,12 +31,16 @@ impl Func {
 
   pub fn iter(&self, level: u32) -> Expr { Expr(self.iter_ty, Iter(level)) }
 
+  pub(crate) fn new_comp_name(&self) -> String {
+    format!("_C{}\0", (self.comp_cnt, P::new(self).comp_cnt += 1).0)
+  }
+
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: &[Expr]) {
     self.align_schedule();
     let s = format!("{} -> {{: {}}}\0", self.comps.first().unwrap().params(), sep(csts.iter(), " and "));
     debug!("set_constraint: {}", s);
-    P::new(self).func_ctx = Some(self.ctx.basic_set_read_from_str(s.as_str().into()).unwrap());
+    P::new(self).func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s)).unwrap());
   }
 
   // 将所有Comp的schedule的range维度统一成最大的，不足的维度补0
@@ -95,6 +101,16 @@ impl Func {
   }
 }
 
+// codegen期间生成的Comp信息
+// set_at_each_domain的函数可能多次接受表示同一个Comp的节点，这些节点会在生成的代码中重复多次
+// 同一个Comp在代码的不同位置中可能会有不同的iter_map(见visit_comp)，所以不能直接修改Comp，而是保存到CompInfo中
+struct CompInfo {
+  // store的目标位置，以Load表示
+  store: Option<Expr>,
+  expr: Expr,
+  comp: P<Comp>,
+}
+
 impl Func {
   // 返回参与调度的所有Comp。Comp::expr为None表示一个输入，不参与调度
   fn sch_comps(&self) -> impl IntoIterator<Item=&Comp> {
@@ -110,12 +126,12 @@ impl Func {
   }
 
   fn build_isl_ast(&self) -> Option<AstNode> {
-    let mut union_sch = None::<UnionMap>;
+    let mut union_sch = None;
     for c in self.sch_comps() {
-      let sch_domain = c.domain.copy()?.apply(c.schedule.copy()?)?.set_tuple_name(c.name().into())?;
+      let sch_domain = c.domain.copy()?.apply(c.schedule.copy()?)?.set_tuple_name(cstr(c.name()))?;
       // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，`identity_map`保证这一点
-      let sch = identity_map(&sch_domain)?.union_map_from_basic_map()?;
-      union_sch = Some(if let Some(x) = union_sch { x.union(sch)? } else { sch });
+      let sch = identity_map(&sch_domain)?.union_map_from_map()?;
+      union_sch = Some(if let Some(x) = union_sch { sch.union(x)? } else { sch });
     }
     let union_sch = union_sch?;
     debug!("build_isl_ast: union_sch = {}", union_sch);
@@ -127,12 +143,13 @@ impl Func {
     let mut iters = self.ctx.id_list_alloc(n_dim as _)?;
     for i in 0..n_dim / 2 {
       // static dim名字是_i{i}，生成的代码中不会用到，dynamic dim名字是i{i}
-      iters = iters.add(self.ctx.id_alloc(format!("_i{}\0", i).as_str().into(), 0 as _)?)?
-        .add(self.ctx.id_alloc(format!("i{}\0", i).as_str().into(), 0 as _)?)?;
+      iters = iters.add(self.ctx.id_alloc(cstr(&format!("_i{}\0", i)), 0 as _)?)?
+        .add(self.ctx.id_alloc(cstr(&format!("i{}\0", i)), 0 as _)?)?;
     }
+    let mut info = Vec::new();
     // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
     build = build.set_iterators(iters)?
-      .set_at_each_domain(&mut move |node, build| self.modify_comp(node, build))?;
+      .set_at_each_domain(&mut |node, build| self.visit_comp(node, build, &mut info))?;
     self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
     self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
     self.ctx.options_set_ast_build_group_coscheduled(1)?;
@@ -141,30 +158,28 @@ impl Func {
 
   // 将node表示的comp的expr中的原下标替换成新下标，对comp的access替换成对buf的load
   // 将store的位置也用load保存在store_expr中(虽然实际不是load，但下标表示是一样的)
-  fn modify_comp(&self, mut node: AstNode, build: AstBuildRef) -> Option<AstNode> {
+  fn visit_comp(&self, node: AstNode, build: AstBuildRef, info: &mut Vec<Box<CompInfo>>) -> Option<AstNode> {
     let expr = node.user_get_expr()?;
     let name = expr.get_op_arg(0)?.get_id()?.get_name()?;
-    let mut comp = self.find_comp(&name)?;
-    node = node.set_annotation(self.ctx.id_alloc("\0".into(), comp.0.as_ptr() as _)?)?;
-    if let Some(store) = comp.store.as_ref() {
+    let comp = self.find_comp(&name)?;
+    let store = if let Some(store) = comp.store.as_ref() {
       let access = store.copy()?.apply_domain(comp.schedule.copy()?)?
-        .set_tuple_name(DimType::In, comp.name().into())?.map_from_basic_map()?;
+        .set_tuple_name(DimType::In, comp.name_cstr())?;
       let idx = comp_access(build, access)?;
-      comp.store_expr = Some(Expr::from_isl(self, idx)?);
-    }
+      Some(Expr::from_isl(self, idx)?)
+    } else { None };
     // 创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
-    let access_self = identity_map(&comp.domain)?
+    let access_self = comp_access(build, identity_map(&comp.domain)?
       .apply_domain(comp.schedule.copy()?)?
-      .set_tuple_name(DimType::In, comp.name().into())?.map_from_basic_map()?;
-    let access_self = comp_access(build, access_self)?;
+      .set_tuple_name(DimType::In, comp.name_cstr())?)?;
     let n = access_self.get_op_n_arg();
     let mut iter_map = Vec::with_capacity(n as usize - 1);
     for i in 1..n {
       iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?)?);
     }
-    debug!("modify_comp: iter_map = [{}]", comma_sep(iter_map.iter()));
-    // comp.clone()只是指针拷贝，用于规避借用检查，lambda中也使用comp
-    comp.clone().expr.visit_mut(&mut move |e| match &e.1 {
+    debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
+    let mut expr = comp.expr.clone();
+    expr.visit_mut(&mut move |e| match &e.1 {
       // access_to_load已经将原下标替换成了新下标，不能再访问它的孩子再替换一次了
       Access(arg, idx) => {
         *e = access_to_load(build, &comp, arg, idx).unwrap();
@@ -177,7 +192,10 @@ impl Func {
       }
       _ => true
     });
-    Some(node)
+    let ci = box CompInfo { store, expr, comp };
+    let node = node.set_annotation(self.ctx.id_alloc(None, ci.as_ref() as *const _ as _)?);
+    info.push(ci);
+    node
   }
 
   fn gen<'a>(&'a self, node: AstNode, tags: &'a HashMap<AstNodeRef, DimTag>) -> impl Display + 'a {
@@ -214,12 +232,12 @@ impl Func {
           }
         }
         AstNodeType::User => {
-          let comp = P::new(node.get_annotation().ok_or(E)?.get_user() as *const Comp);
-          if let Some(store) = &comp.store_expr {
+          let comp = P::new(node.get_annotation().ok_or(E)?.get_user() as *const CompInfo);
+          if let Some(store) = &comp.store {
             write!(f, "{}={};", store, comp.expr)?;
           } else {
             // 没有store的comp表示成一个标量定义
-            write!(f, "{} {}={};", comp.expr.0, comp.name(), comp.expr)?;
+            write!(f, "{} {}={};", comp.expr.0, comp.comp.name(), comp.expr)?;
           }
         }
         _ => panic!("invalid ast node type"),
@@ -246,8 +264,8 @@ fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashM
       for i in 0..ch.n_ast_node() { extract_tags(*ch.get_ast_node(i)?, levels, tags)?; }
     }
     AstNodeType::User => {
-      let comp = P::new(node.get_annotation()?.get_user() as *const Comp);
-      for (i, &tag) in comp.dim_tags.iter().enumerate() {
+      let comp = P::new(node.get_annotation()?.get_user() as *const CompInfo);
+      for (i, &tag) in comp.comp.dim_tags.iter().enumerate() {
         if let Some(tag) = tag {
           assert!(tags.insert(levels[i], tag).is_none()); // 不允许重复的tag
         }
@@ -266,10 +284,9 @@ fn access_to_load(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> 
   let store = if let Some(x) = arg.store.as_ref() { x.copy()? } else {
     return Some(arg.as_param());
   };
-  let access = comp.ctx.basic_map_read_from_str(s.as_str().into())?
-    .apply_range(store)?
-    .apply_domain(comp.schedule.copy()?)?
-    .set_tuple_name(DimType::In, comp.name().into())?.map_from_basic_map()?;
+  let access = comp.ctx.map_read_from_str(cstr(&s))?
+    .apply_range(store)?.apply_domain(comp.schedule.copy()?)?
+    .set_tuple_name(DimType::In, comp.name_cstr())?;
   debug!("access_to_load: access = {}", access);
   let expr = comp_access(build, access)?;
   Expr::from_isl(&comp.func, expr)

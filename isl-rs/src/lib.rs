@@ -146,6 +146,10 @@ use libc::FILE;
 #[derive(Copy, Clone)]
 pub struct CStr(NonNull<c_char>);
 
+// ISL参数接受Option<CStr>，但Rust不允许实现From<&str> for Option<CStr>，为方便提供这样一个函数
+#[inline(always)]
+pub fn cstr(s: &str) -> Option<CStr> { Some(CStr::from_str(s)) }
+
 impl CStr {
   #[inline(always)]
   pub unsafe fn from_ptr(ptr: *const c_char) -> CStr { CStr(NonNull::new_unchecked(ptr as _)) }

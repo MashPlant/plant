@@ -32,9 +32,9 @@ extern "C" {
   pub fn isl_aff_add_coefficient_val(aff: Aff, type_: DimType, pos: c_int, v: Val) -> Option<Aff>;
   pub fn isl_aff_is_cst(aff: AffRef) -> Bool;
   pub fn isl_aff_set_tuple_id(aff: Aff, type_: DimType, id: Id) -> Option<Aff>;
-  pub fn isl_aff_set_dim_name(aff: Aff, type_: DimType, pos: c_uint, s: CStr) -> Option<Aff>;
+  pub fn isl_aff_set_dim_name(aff: Aff, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Aff>;
   pub fn isl_aff_set_dim_id(aff: Aff, type_: DimType, pos: c_uint, id: Id) -> Option<Aff>;
-  pub fn isl_aff_find_dim_by_name(aff: AffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_aff_find_dim_by_name(aff: AffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_aff_plain_is_equal(aff1: AffRef, aff2: AffRef) -> Bool;
   pub fn isl_aff_plain_is_zero(aff: AffRef) -> Bool;
   pub fn isl_aff_is_nan(aff: AffRef) -> Bool;
@@ -74,7 +74,7 @@ extern "C" {
   pub fn isl_aff_ge_set(aff1: Aff, aff2: Aff) -> Option<Set>;
   pub fn isl_aff_gt_basic_set(aff1: Aff, aff2: Aff) -> Option<BasicSet>;
   pub fn isl_aff_gt_set(aff1: Aff, aff2: Aff) -> Option<Set>;
-  pub fn isl_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<Aff>;
+  pub fn isl_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<Aff>;
   pub fn isl_aff_to_str(aff: AffRef) -> Option<CString>;
   pub fn isl_printer_print_aff(p: Printer, aff: AffRef) -> Option<Printer>;
   pub fn isl_aff_dump(aff: AffRef) -> ();
@@ -94,7 +94,7 @@ extern "C" {
   pub fn isl_pw_aff_has_dim_id(pa: PwAffRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_pw_aff_get_dim_id(pa: PwAffRef, type_: DimType, pos: c_uint) -> Option<Id>;
   pub fn isl_pw_aff_set_dim_id(pma: PwAff, type_: DimType, pos: c_uint, id: Id) -> Option<PwAff>;
-  pub fn isl_pw_aff_find_dim_by_name(pa: PwAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_pw_aff_find_dim_by_name(pa: PwAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_pw_aff_is_empty(pwaff: PwAffRef) -> Bool;
   pub fn isl_pw_aff_involves_nan(pa: PwAffRef) -> Bool;
   pub fn isl_pw_aff_plain_cmp(pa1: PwAffRef, pa2: PwAffRef) -> c_int;
@@ -163,7 +163,7 @@ extern "C" {
   pub fn isl_pw_aff_eq_map(pa1: PwAff, pa2: PwAff) -> Option<Map>;
   pub fn isl_pw_aff_lt_map(pa1: PwAff, pa2: PwAff) -> Option<Map>;
   pub fn isl_pw_aff_gt_map(pa1: PwAff, pa2: PwAff) -> Option<Map>;
-  pub fn isl_pw_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<PwAff>;
+  pub fn isl_pw_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<PwAff>;
   pub fn isl_pw_aff_to_str(pa: PwAffRef) -> Option<CString>;
   pub fn isl_printer_print_pw_aff(p: Printer, pwaff: PwAffRef) -> Option<Printer>;
   pub fn isl_pw_aff_dump(pwaff: PwAffRef) -> ();
@@ -179,7 +179,7 @@ extern "C" {
   pub fn isl_multi_aff_get_ctx(multi: MultiAffRef) -> Option<CtxRef>;
   pub fn isl_multi_aff_get_space(multi: MultiAffRef) -> Option<Space>;
   pub fn isl_multi_aff_get_domain_space(multi: MultiAffRef) -> Option<Space>;
-  pub fn isl_multi_aff_find_dim_by_name(multi: MultiAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_multi_aff_find_dim_by_name(multi: MultiAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_multi_aff_from_aff_list(space: Space, list: AffList) -> Option<MultiAff>;
   pub fn isl_multi_aff_zero(space: Space) -> Option<MultiAff>;
   pub fn isl_multi_aff_copy(multi: MultiAffRef) -> Option<MultiAff>;
@@ -188,12 +188,12 @@ extern "C" {
   pub fn isl_multi_aff_involves_nan(multi: MultiAffRef) -> Bool;
   pub fn isl_multi_aff_find_dim_by_id(multi: MultiAffRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_multi_aff_get_dim_id(multi: MultiAffRef, type_: DimType, pos: c_uint) -> Option<Id>;
-  pub fn isl_multi_aff_set_dim_name(multi: MultiAff, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiAff>;
+  pub fn isl_multi_aff_set_dim_name(multi: MultiAff, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiAff>;
   pub fn isl_multi_aff_set_dim_id(multi: MultiAff, type_: DimType, pos: c_uint, id: Id) -> Option<MultiAff>;
   pub fn isl_multi_aff_get_tuple_name(multi: MultiAffRef, type_: DimType) -> Option<CStr>;
   pub fn isl_multi_aff_has_tuple_id(multi: MultiAffRef, type_: DimType) -> Bool;
   pub fn isl_multi_aff_get_tuple_id(multi: MultiAffRef, type_: DimType) -> Option<Id>;
-  pub fn isl_multi_aff_set_tuple_name(multi: MultiAff, type_: DimType, s: CStr) -> Option<MultiAff>;
+  pub fn isl_multi_aff_set_tuple_name(multi: MultiAff, type_: DimType, s: Option<CStr>) -> Option<MultiAff>;
   pub fn isl_multi_aff_set_tuple_id(multi: MultiAff, type_: DimType, id: Id) -> Option<MultiAff>;
   pub fn isl_multi_aff_reset_tuple_id(multi: MultiAff, type_: DimType) -> Option<MultiAff>;
   pub fn isl_multi_aff_reset_user(multi: MultiAff) -> Option<MultiAff>;
@@ -243,13 +243,13 @@ extern "C" {
   pub fn isl_multi_aff_lex_ge_set(ma1: MultiAff, ma2: MultiAff) -> Option<Set>;
   pub fn isl_multi_aff_to_str(ma: MultiAffRef) -> Option<CString>;
   pub fn isl_printer_print_multi_aff(p: Printer, maff: MultiAffRef) -> Option<Printer>;
-  pub fn isl_multi_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<MultiAff>;
+  pub fn isl_multi_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<MultiAff>;
   pub fn isl_multi_aff_dump(maff: MultiAffRef) -> ();
   pub fn isl_multi_pw_aff_dim(multi: MultiPwAffRef, type_: DimType) -> c_uint;
   pub fn isl_multi_pw_aff_get_ctx(multi: MultiPwAffRef) -> Option<CtxRef>;
   pub fn isl_multi_pw_aff_get_space(multi: MultiPwAffRef) -> Option<Space>;
   pub fn isl_multi_pw_aff_get_domain_space(multi: MultiPwAffRef) -> Option<Space>;
-  pub fn isl_multi_pw_aff_find_dim_by_name(multi: MultiPwAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_multi_pw_aff_find_dim_by_name(multi: MultiPwAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_multi_pw_aff_from_pw_aff_list(space: Space, list: PwAffList) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_zero(space: Space) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_copy(multi: MultiPwAffRef) -> Option<MultiPwAff>;
@@ -258,12 +258,12 @@ extern "C" {
   pub fn isl_multi_pw_aff_involves_nan(multi: MultiPwAffRef) -> Bool;
   pub fn isl_multi_pw_aff_find_dim_by_id(multi: MultiPwAffRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_multi_pw_aff_get_dim_id(multi: MultiPwAffRef, type_: DimType, pos: c_uint) -> Option<Id>;
-  pub fn isl_multi_pw_aff_set_dim_name(multi: MultiPwAff, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiPwAff>;
+  pub fn isl_multi_pw_aff_set_dim_name(multi: MultiPwAff, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_set_dim_id(multi: MultiPwAff, type_: DimType, pos: c_uint, id: Id) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_get_tuple_name(multi: MultiPwAffRef, type_: DimType) -> Option<CStr>;
   pub fn isl_multi_pw_aff_has_tuple_id(multi: MultiPwAffRef, type_: DimType) -> Bool;
   pub fn isl_multi_pw_aff_get_tuple_id(multi: MultiPwAffRef, type_: DimType) -> Option<Id>;
-  pub fn isl_multi_pw_aff_set_tuple_name(multi: MultiPwAff, type_: DimType, s: CStr) -> Option<MultiPwAff>;
+  pub fn isl_multi_pw_aff_set_tuple_name(multi: MultiPwAff, type_: DimType, s: Option<CStr>) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_set_tuple_id(multi: MultiPwAff, type_: DimType, id: Id) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_reset_tuple_id(multi: MultiPwAff, type_: DimType) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_reset_user(multi: MultiPwAff) -> Option<MultiPwAff>;
@@ -316,7 +316,7 @@ extern "C" {
   pub fn isl_pw_multi_aff_set_tuple_id(pma: PwMultiAff, type_: DimType, id: Id) -> Option<PwMultiAff>;
   pub fn isl_pw_multi_aff_reset_tuple_id(pma: PwMultiAff, type_: DimType) -> Option<PwMultiAff>;
   pub fn isl_pw_multi_aff_reset_user(pma: PwMultiAff) -> Option<PwMultiAff>;
-  pub fn isl_pw_multi_aff_find_dim_by_name(pma: PwMultiAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_pw_multi_aff_find_dim_by_name(pma: PwMultiAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_pw_multi_aff_drop_dims(pma: PwMultiAff, type_: DimType, first: c_uint, n: c_uint) -> Option<PwMultiAff>;
   pub fn isl_pw_multi_aff_domain(pma: PwMultiAff) -> Option<Set>;
   pub fn isl_pw_multi_aff_empty(space: Space) -> Option<PwMultiAff>;
@@ -360,7 +360,7 @@ extern "C" {
   pub fn isl_printer_print_pw_multi_aff(p: Printer, pma: PwMultiAffRef) -> Option<Printer>;
   pub fn isl_pw_multi_aff_from_set(set: Set) -> Option<PwMultiAff>;
   pub fn isl_pw_multi_aff_from_map(map: Map) -> Option<PwMultiAff>;
-  pub fn isl_pw_multi_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<PwMultiAff>;
+  pub fn isl_pw_multi_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<PwMultiAff>;
   pub fn isl_pw_multi_aff_dump(pma: PwMultiAffRef) -> ();
   pub fn isl_union_pw_multi_aff_empty(space: Space) -> Option<UnionPwMultiAff>;
   pub fn isl_union_pw_multi_aff_from_aff(aff: Aff) -> Option<UnionPwMultiAff>;
@@ -376,8 +376,8 @@ extern "C" {
   pub fn isl_union_pw_multi_aff_get_ctx(upma: UnionPwMultiAffRef) -> Option<CtxRef>;
   pub fn isl_union_pw_multi_aff_get_space(upma: UnionPwMultiAffRef) -> Option<Space>;
   pub fn isl_union_pw_multi_aff_dim(upma: UnionPwMultiAffRef, type_: DimType) -> c_uint;
-  pub fn isl_union_pw_multi_aff_set_dim_name(upma: UnionPwMultiAff, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwMultiAff>;
-  pub fn isl_union_pw_multi_aff_find_dim_by_name(upma: UnionPwMultiAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_union_pw_multi_aff_set_dim_name(upma: UnionPwMultiAff, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwMultiAff>;
+  pub fn isl_union_pw_multi_aff_find_dim_by_name(upma: UnionPwMultiAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_union_pw_multi_aff_drop_dims(upma: UnionPwMultiAff, type_: DimType, first: c_uint, n: c_uint) -> Option<UnionPwMultiAff>;
   pub fn isl_union_pw_multi_aff_reset_user(upma: UnionPwMultiAff) -> Option<UnionPwMultiAff>;
   pub fn isl_union_pw_multi_aff_coalesce(upma: UnionPwMultiAff) -> Option<UnionPwMultiAff>;
@@ -406,7 +406,7 @@ extern "C" {
   pub fn isl_printer_print_union_pw_multi_aff(p: Printer, upma: UnionPwMultiAffRef) -> Option<Printer>;
   pub fn isl_union_pw_multi_aff_from_union_set(uset: UnionSet) -> Option<UnionPwMultiAff>;
   pub fn isl_union_pw_multi_aff_from_union_map(umap: UnionMap) -> Option<UnionPwMultiAff>;
-  pub fn isl_union_pw_multi_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<UnionPwMultiAff>;
+  pub fn isl_union_pw_multi_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<UnionPwMultiAff>;
   pub fn isl_union_pw_multi_aff_dump(upma: UnionPwMultiAffRef) -> ();
   pub fn isl_union_pw_multi_aff_to_str(upma: UnionPwMultiAffRef) -> Option<CString>;
   pub fn isl_multi_pw_aff_get_hash(mpa: MultiPwAffRef) -> c_uint;
@@ -432,7 +432,7 @@ extern "C" {
   pub fn isl_multi_pw_aff_eq_map(mpa1: MultiPwAff, mpa2: MultiPwAff) -> Option<Map>;
   pub fn isl_multi_pw_aff_lex_lt_map(mpa1: MultiPwAff, mpa2: MultiPwAff) -> Option<Map>;
   pub fn isl_multi_pw_aff_lex_gt_map(mpa1: MultiPwAff, mpa2: MultiPwAff) -> Option<Map>;
-  pub fn isl_multi_pw_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<MultiPwAff>;
+  pub fn isl_multi_pw_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<MultiPwAff>;
   pub fn isl_multi_pw_aff_to_str(mpa: MultiPwAffRef) -> Option<CString>;
   pub fn isl_printer_print_multi_pw_aff(p: Printer, mpa: MultiPwAffRef) -> Option<Printer>;
   pub fn isl_multi_pw_aff_dump(mpa: MultiPwAffRef) -> ();
@@ -441,8 +441,8 @@ extern "C" {
   pub fn isl_union_pw_aff_get_ctx(upa: UnionPwAffRef) -> Option<CtxRef>;
   pub fn isl_union_pw_aff_get_space(upa: UnionPwAffRef) -> Option<Space>;
   pub fn isl_union_pw_aff_dim(upa: UnionPwAffRef, type_: DimType) -> c_uint;
-  pub fn isl_union_pw_aff_set_dim_name(upa: UnionPwAff, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwAff>;
-  pub fn isl_union_pw_aff_find_dim_by_name(upa: UnionPwAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_union_pw_aff_set_dim_name(upa: UnionPwAff, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwAff>;
+  pub fn isl_union_pw_aff_find_dim_by_name(upa: UnionPwAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_union_pw_aff_drop_dims(upa: UnionPwAff, type_: DimType, first: c_uint, n: c_uint) -> Option<UnionPwAff>;
   pub fn isl_union_pw_aff_reset_user(upa: UnionPwAff) -> Option<UnionPwAff>;
   pub fn isl_union_pw_aff_empty(space: Space) -> Option<UnionPwAff>;
@@ -476,7 +476,7 @@ extern "C" {
   pub fn isl_union_pw_aff_subtract_domain(upa: UnionPwAff, uset: UnionSet) -> Option<UnionPwAff>;
   pub fn isl_union_pw_aff_zero_union_set(upa: UnionPwAff) -> Option<UnionSet>;
   pub fn isl_union_map_from_union_pw_aff(upa: UnionPwAff) -> Option<UnionMap>;
-  pub fn isl_union_pw_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<UnionPwAff>;
+  pub fn isl_union_pw_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<UnionPwAff>;
   pub fn isl_union_pw_aff_to_str(upa: UnionPwAffRef) -> Option<CString>;
   pub fn isl_printer_print_union_pw_aff(p: Printer, upa: UnionPwAffRef) -> Option<Printer>;
   pub fn isl_union_pw_aff_dump(upa: UnionPwAffRef) -> ();
@@ -484,7 +484,7 @@ extern "C" {
   pub fn isl_multi_union_pw_aff_get_ctx(multi: MultiUnionPwAffRef) -> Option<CtxRef>;
   pub fn isl_multi_union_pw_aff_get_space(multi: MultiUnionPwAffRef) -> Option<Space>;
   pub fn isl_multi_union_pw_aff_get_domain_space(multi: MultiUnionPwAffRef) -> Option<Space>;
-  pub fn isl_multi_union_pw_aff_find_dim_by_name(multi: MultiUnionPwAffRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_multi_union_pw_aff_find_dim_by_name(multi: MultiUnionPwAffRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_multi_union_pw_aff_from_union_pw_aff_list(space: Space, list: UnionPwAffList) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_zero(space: Space) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_copy(multi: MultiUnionPwAffRef) -> Option<MultiUnionPwAff>;
@@ -493,12 +493,12 @@ extern "C" {
   pub fn isl_multi_union_pw_aff_involves_nan(multi: MultiUnionPwAffRef) -> Bool;
   pub fn isl_multi_union_pw_aff_find_dim_by_id(multi: MultiUnionPwAffRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_multi_union_pw_aff_get_dim_id(multi: MultiUnionPwAffRef, type_: DimType, pos: c_uint) -> Option<Id>;
-  pub fn isl_multi_union_pw_aff_set_dim_name(multi: MultiUnionPwAff, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiUnionPwAff>;
+  pub fn isl_multi_union_pw_aff_set_dim_name(multi: MultiUnionPwAff, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_set_dim_id(multi: MultiUnionPwAff, type_: DimType, pos: c_uint, id: Id) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_get_tuple_name(multi: MultiUnionPwAffRef, type_: DimType) -> Option<CStr>;
   pub fn isl_multi_union_pw_aff_has_tuple_id(multi: MultiUnionPwAffRef, type_: DimType) -> Bool;
   pub fn isl_multi_union_pw_aff_get_tuple_id(multi: MultiUnionPwAffRef, type_: DimType) -> Option<Id>;
-  pub fn isl_multi_union_pw_aff_set_tuple_name(multi: MultiUnionPwAff, type_: DimType, s: CStr) -> Option<MultiUnionPwAff>;
+  pub fn isl_multi_union_pw_aff_set_tuple_name(multi: MultiUnionPwAff, type_: DimType, s: Option<CStr>) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_set_tuple_id(multi: MultiUnionPwAff, type_: DimType, id: Id) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_reset_tuple_id(multi: MultiUnionPwAff, type_: DimType) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_reset_user(multi: MultiUnionPwAff) -> Option<MultiUnionPwAff>;
@@ -549,7 +549,7 @@ extern "C" {
   pub fn isl_union_map_from_multi_union_pw_aff(mupa: MultiUnionPwAff) -> Option<UnionMap>;
   pub fn isl_multi_union_pw_aff_zero_union_set(mupa: MultiUnionPwAff) -> Option<UnionSet>;
   pub fn isl_multi_union_pw_aff_extract_multi_pw_aff(mupa: MultiUnionPwAffRef, space: Space) -> Option<MultiPwAff>;
-  pub fn isl_multi_union_pw_aff_read_from_str(ctx: CtxRef, str: CStr) -> Option<MultiUnionPwAff>;
+  pub fn isl_multi_union_pw_aff_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<MultiUnionPwAff>;
   pub fn isl_multi_union_pw_aff_to_str(mupa: MultiUnionPwAffRef) -> Option<CString>;
   pub fn isl_printer_print_multi_union_pw_aff(p: Printer, mupa: MultiUnionPwAffRef) -> Option<Printer>;
   pub fn isl_multi_union_pw_aff_dump(mupa: MultiUnionPwAffRef) -> ();
@@ -670,7 +670,7 @@ impl Aff {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<Aff> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Aff> {
     unsafe {
       let ret = isl_aff_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1058,7 +1058,7 @@ impl AffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -1110,56 +1110,56 @@ impl AffRef {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn aff_read_from_str(self, str: CStr) -> Option<Aff> {
+  pub fn aff_read_from_str(self, str: Option<CStr>) -> Option<Aff> {
     unsafe {
       let ret = isl_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn pw_aff_read_from_str(self, str: CStr) -> Option<PwAff> {
+  pub fn pw_aff_read_from_str(self, str: Option<CStr>) -> Option<PwAff> {
     unsafe {
       let ret = isl_pw_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn multi_aff_read_from_str(self, str: CStr) -> Option<MultiAff> {
+  pub fn multi_aff_read_from_str(self, str: Option<CStr>) -> Option<MultiAff> {
     unsafe {
       let ret = isl_multi_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn pw_multi_aff_read_from_str(self, str: CStr) -> Option<PwMultiAff> {
+  pub fn pw_multi_aff_read_from_str(self, str: Option<CStr>) -> Option<PwMultiAff> {
     unsafe {
       let ret = isl_pw_multi_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn union_pw_multi_aff_read_from_str(self, str: CStr) -> Option<UnionPwMultiAff> {
+  pub fn union_pw_multi_aff_read_from_str(self, str: Option<CStr>) -> Option<UnionPwMultiAff> {
     unsafe {
       let ret = isl_union_pw_multi_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn multi_pw_aff_read_from_str(self, str: CStr) -> Option<MultiPwAff> {
+  pub fn multi_pw_aff_read_from_str(self, str: Option<CStr>) -> Option<MultiPwAff> {
     unsafe {
       let ret = isl_multi_pw_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn union_pw_aff_read_from_str(self, str: CStr) -> Option<UnionPwAff> {
+  pub fn union_pw_aff_read_from_str(self, str: Option<CStr>) -> Option<UnionPwAff> {
     unsafe {
       let ret = isl_union_pw_aff_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn multi_union_pw_aff_read_from_str(self, str: CStr) -> Option<MultiUnionPwAff> {
+  pub fn multi_union_pw_aff_read_from_str(self, str: Option<CStr>) -> Option<MultiUnionPwAff> {
     unsafe {
       let ret = isl_multi_union_pw_aff_read_from_str(self.to(), str.to());
       (ret).to()
@@ -1252,7 +1252,7 @@ impl MultiAff {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiAff> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiAff> {
     unsafe {
       let ret = isl_multi_aff_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1266,7 +1266,7 @@ impl MultiAff {
     }
   }
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<MultiAff> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<MultiAff> {
     unsafe {
       let ret = isl_multi_aff_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
@@ -1592,7 +1592,7 @@ impl MultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_multi_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -1707,7 +1707,7 @@ impl MultiPwAff {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiPwAff> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiPwAff> {
     unsafe {
       let ret = isl_multi_pw_aff_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1721,7 +1721,7 @@ impl MultiPwAff {
     }
   }
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<MultiPwAff> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<MultiPwAff> {
     unsafe {
       let ret = isl_multi_pw_aff_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
@@ -2067,7 +2067,7 @@ impl MultiPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_multi_pw_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -2196,7 +2196,7 @@ impl MultiUnionPwAff {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiUnionPwAff> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiUnionPwAff> {
     unsafe {
       let ret = isl_multi_union_pw_aff_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -2210,7 +2210,7 @@ impl MultiUnionPwAff {
     }
   }
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<MultiUnionPwAff> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<MultiUnionPwAff> {
     unsafe {
       let ret = isl_multi_union_pw_aff_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
@@ -2521,7 +2521,7 @@ impl MultiUnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_multi_union_pw_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -3219,7 +3219,7 @@ impl PwAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_pw_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -3653,7 +3653,7 @@ impl PwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_pw_multi_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -3953,7 +3953,7 @@ impl UnionPwAff {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwAff> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwAff> {
     unsafe {
       let ret = isl_union_pw_aff_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -4282,7 +4282,7 @@ impl UnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_union_pw_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -4356,7 +4356,7 @@ impl UnionPwMultiAff {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwMultiAff> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwMultiAff> {
     unsafe {
       let ret = isl_union_pw_multi_aff_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -4671,7 +4671,7 @@ impl UnionPwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_union_pw_multi_aff_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

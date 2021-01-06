@@ -6,10 +6,10 @@ extern "C" {
   pub fn isl_token_get_type(tok: TokenRef) -> c_int;
   pub fn isl_token_free(tok: Token) -> ();
   pub fn isl_stream_new_file(ctx: CtxRef, file: *mut FILE) -> Option<Stream>;
-  pub fn isl_stream_new_str(ctx: CtxRef, str: CStr) -> Option<Stream>;
+  pub fn isl_stream_new_str(ctx: CtxRef, str: Option<CStr>) -> Option<Stream>;
   pub fn isl_stream_free(s: Stream) -> ();
   pub fn isl_stream_get_ctx(s: StreamRef) -> Option<CtxRef>;
-  pub fn isl_stream_error(s: StreamRef, tok: TokenRef, msg: CStr) -> ();
+  pub fn isl_stream_error(s: StreamRef, tok: TokenRef, msg: Option<CStr>) -> ();
   pub fn isl_stream_next_token(s: StreamRef) -> Option<Token>;
   pub fn isl_stream_next_token_on_same_line(s: StreamRef) -> Option<Token>;
   pub fn isl_stream_next_token_is(s: StreamRef, type_: c_int) -> c_int;
@@ -20,7 +20,7 @@ extern "C" {
   pub fn isl_stream_eat(s: StreamRef, type_: c_int) -> c_int;
   pub fn isl_stream_is_empty(s: StreamRef) -> c_int;
   pub fn isl_stream_skip_line(s: StreamRef) -> c_int;
-  pub fn isl_stream_register_keyword(s: StreamRef, name: CStr) -> TokenType;
+  pub fn isl_stream_register_keyword(s: StreamRef, name: Option<CStr>) -> TokenType;
   pub fn isl_stream_read_obj(s: StreamRef) -> Obj;
   pub fn isl_stream_read_val(s: StreamRef) -> Option<Val>;
   pub fn isl_stream_read_multi_aff(s: StreamRef) -> Option<MultiAff>;
@@ -122,7 +122,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn stream_new_str(self, str: CStr) -> Option<Stream> {
+  pub fn stream_new_str(self, str: Option<CStr>) -> Option<Stream> {
     unsafe {
       let ret = isl_stream_new_str(self.to(), str.to());
       (ret).to()
@@ -149,7 +149,7 @@ impl StreamRef {
     }
   }
   #[inline(always)]
-  pub fn error(self, tok: TokenRef, msg: CStr) -> () {
+  pub fn error(self, tok: TokenRef, msg: Option<CStr>) -> () {
     unsafe {
       let ret = isl_stream_error(self.to(), tok.to(), msg.to());
       (ret).to()
@@ -226,7 +226,7 @@ impl StreamRef {
     }
   }
   #[inline(always)]
-  pub fn register_keyword(self, name: CStr) -> TokenType {
+  pub fn register_keyword(self, name: Option<CStr>) -> TokenType {
     unsafe {
       let ret = isl_stream_register_keyword(self.to(), name.to());
       (ret).to()

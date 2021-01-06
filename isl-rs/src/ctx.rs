@@ -2,7 +2,7 @@ use crate::*;
 
 extern "C" {
   pub fn isl_bool_not(b: Bool) -> Bool;
-  pub fn isl_handle_error(ctx: CtxRef, error: Error, msg: CStr, file: CStr, line: c_int) -> ();
+  pub fn isl_handle_error(ctx: CtxRef, error: Error, msg: Option<CStr>, file: Option<CStr>, line: c_int) -> ();
   pub fn isl_ctx_alloc() -> Option<Ctx>;
   pub fn isl_ctx_ref(ctx: CtxRef) -> ();
   pub fn isl_ctx_deref(ctx: CtxRef) -> ();
@@ -64,7 +64,7 @@ impl Ctx {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn handle_error(self, error: Error, msg: CStr, file: CStr, line: c_int) -> () {
+  pub fn handle_error(self, error: Error, msg: Option<CStr>, file: Option<CStr>, line: c_int) -> () {
     unsafe {
       let ret = isl_handle_error(self.to(), error.to(), msg.to(), file.to(), line.to());
       (ret).to()

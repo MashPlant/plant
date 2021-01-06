@@ -7,7 +7,7 @@ extern "C" {
   pub fn isl_qpolynomial_dim(qp: QpolynomialRef, type_: DimType) -> c_uint;
   pub fn isl_qpolynomial_involves_dims(qp: QpolynomialRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
   pub fn isl_qpolynomial_get_constant_val(qp: QpolynomialRef) -> Option<Val>;
-  pub fn isl_qpolynomial_set_dim_name(qp: Qpolynomial, type_: DimType, pos: c_uint, s: CStr) -> Option<Qpolynomial>;
+  pub fn isl_qpolynomial_set_dim_name(qp: Qpolynomial, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Qpolynomial>;
   pub fn isl_qpolynomial_zero_on_domain(dim: Space) -> Option<Qpolynomial>;
   pub fn isl_qpolynomial_one_on_domain(dim: Space) -> Option<Qpolynomial>;
   pub fn isl_qpolynomial_infty_on_domain(dim: Space) -> Option<Qpolynomial>;
@@ -72,8 +72,8 @@ extern "C" {
   pub fn isl_pw_qpolynomial_dim(pwqp: PwQpolynomialRef, type_: DimType) -> c_uint;
   pub fn isl_pw_qpolynomial_involves_dims(pwqp: PwQpolynomialRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
   pub fn isl_pw_qpolynomial_has_equal_space(pwqp1: PwQpolynomialRef, pwqp2: PwQpolynomialRef) -> Bool;
-  pub fn isl_pw_qpolynomial_set_dim_name(pwqp: PwQpolynomial, type_: DimType, pos: c_uint, s: CStr) -> Option<PwQpolynomial>;
-  pub fn isl_pw_qpolynomial_find_dim_by_name(pwqp: PwQpolynomialRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_pw_qpolynomial_set_dim_name(pwqp: PwQpolynomial, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<PwQpolynomial>;
+  pub fn isl_pw_qpolynomial_find_dim_by_name(pwqp: PwQpolynomialRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_pw_qpolynomial_reset_user(pwqp: PwQpolynomial) -> Option<PwQpolynomial>;
   pub fn isl_pw_qpolynomial_domain(pwqp: PwQpolynomial) -> Option<Set>;
   pub fn isl_pw_qpolynomial_intersect_domain(pwpq: PwQpolynomial, set: Set) -> Option<PwQpolynomial>;
@@ -102,7 +102,7 @@ extern "C" {
   pub fn isl_pw_qpolynomial_foreach_piece(pwqp: PwQpolynomialRef, fn_: unsafe extern "C" fn(set: Set, qp: Qpolynomial, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
   pub fn isl_pw_qpolynomial_foreach_lifted_piece(pwqp: PwQpolynomialRef, fn_: unsafe extern "C" fn(set: Set, qp: Qpolynomial, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
   pub fn isl_pw_qpolynomial_from_pw_aff(pwaff: PwAff) -> Option<PwQpolynomial>;
-  pub fn isl_pw_qpolynomial_read_from_str(ctx: CtxRef, str: CStr) -> Option<PwQpolynomial>;
+  pub fn isl_pw_qpolynomial_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<PwQpolynomial>;
   pub fn isl_pw_qpolynomial_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<PwQpolynomial>;
   pub fn isl_pw_qpolynomial_to_str(pwqp: PwQpolynomialRef) -> Option<CString>;
   pub fn isl_printer_print_pw_qpolynomial(p: Printer, pwqp: PwQpolynomialRef) -> Option<Printer>;
@@ -152,8 +152,8 @@ extern "C" {
   pub fn isl_pw_qpolynomial_fold_has_equal_space(pwf1: PwQpolynomialFoldRef, pwf2: PwQpolynomialFoldRef) -> Bool;
   pub fn isl_pw_qpolynomial_fold_size(pwf: PwQpolynomialFoldRef) -> c_int;
   pub fn isl_pw_qpolynomial_fold_zero(dim: Space, type_: Fold) -> Option<PwQpolynomialFold>;
-  pub fn isl_pw_qpolynomial_fold_set_dim_name(pwf: PwQpolynomialFold, type_: DimType, pos: c_uint, s: CStr) -> Option<PwQpolynomialFold>;
-  pub fn isl_pw_qpolynomial_fold_find_dim_by_name(pwf: PwQpolynomialFoldRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_pw_qpolynomial_fold_set_dim_name(pwf: PwQpolynomialFold, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<PwQpolynomialFold>;
+  pub fn isl_pw_qpolynomial_fold_find_dim_by_name(pwf: PwQpolynomialFoldRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_pw_qpolynomial_fold_reset_user(pwf: PwQpolynomialFold) -> Option<PwQpolynomialFold>;
   pub fn isl_pw_qpolynomial_fold_domain(pwf: PwQpolynomialFold) -> Option<Set>;
   pub fn isl_pw_qpolynomial_fold_intersect_domain(pwf: PwQpolynomialFold, set: Set) -> Option<PwQpolynomialFold>;
@@ -194,7 +194,7 @@ extern "C" {
   pub fn isl_union_pw_qpolynomial_add_pw_qpolynomial(upwqp: UnionPwQpolynomial, pwqp: PwQpolynomial) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_copy(upwqp: UnionPwQpolynomialRef) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_free(upwqp: UnionPwQpolynomial) -> *mut c_void;
-  pub fn isl_union_pw_qpolynomial_read_from_str(ctx: CtxRef, str: CStr) -> Option<UnionPwQpolynomial>;
+  pub fn isl_union_pw_qpolynomial_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_to_str(upwqp: UnionPwQpolynomialRef) -> Option<CString>;
   pub fn isl_union_pw_qpolynomial_neg(upwqp: UnionPwQpolynomial) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_add(upwqp1: UnionPwQpolynomial, upwqp2: UnionPwQpolynomial) -> Option<UnionPwQpolynomial>;
@@ -207,8 +207,8 @@ extern "C" {
   pub fn isl_union_pw_qpolynomial_intersect_params(upwpq: UnionPwQpolynomial, set: Set) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_subtract_domain(upwpq: UnionPwQpolynomial, uset: UnionSet) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_get_space(upwqp: UnionPwQpolynomialRef) -> Option<Space>;
-  pub fn isl_union_pw_qpolynomial_set_dim_name(upwqp: UnionPwQpolynomial, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwQpolynomial>;
-  pub fn isl_union_pw_qpolynomial_find_dim_by_name(upwqp: UnionPwQpolynomialRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_union_pw_qpolynomial_set_dim_name(upwqp: UnionPwQpolynomial, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwQpolynomial>;
+  pub fn isl_union_pw_qpolynomial_find_dim_by_name(upwqp: UnionPwQpolynomialRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_union_pw_qpolynomial_drop_dims(upwqp: UnionPwQpolynomial, type_: DimType, first: c_uint, n: c_uint) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_reset_user(upwqp: UnionPwQpolynomial) -> Option<UnionPwQpolynomial>;
   pub fn isl_union_pw_qpolynomial_eval(upwqp: UnionPwQpolynomial, pnt: Point) -> Option<Val>;
@@ -239,8 +239,8 @@ extern "C" {
   pub fn isl_union_pw_qpolynomial_fold_subtract_domain(upwf: UnionPwQpolynomialFold, uset: UnionSet) -> Option<UnionPwQpolynomialFold>;
   pub fn isl_union_pw_qpolynomial_fold_get_type(upwf: UnionPwQpolynomialFoldRef) -> Fold;
   pub fn isl_union_pw_qpolynomial_fold_get_space(upwf: UnionPwQpolynomialFoldRef) -> Option<Space>;
-  pub fn isl_union_pw_qpolynomial_fold_set_dim_name(upwf: UnionPwQpolynomialFold, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwQpolynomialFold>;
-  pub fn isl_union_pw_qpolynomial_fold_find_dim_by_name(upwf: UnionPwQpolynomialFoldRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_union_pw_qpolynomial_fold_set_dim_name(upwf: UnionPwQpolynomialFold, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwQpolynomialFold>;
+  pub fn isl_union_pw_qpolynomial_fold_find_dim_by_name(upwf: UnionPwQpolynomialFoldRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_union_pw_qpolynomial_fold_drop_dims(upwf: UnionPwQpolynomialFold, type_: DimType, first: c_uint, n: c_uint) -> Option<UnionPwQpolynomialFold>;
   pub fn isl_union_pw_qpolynomial_fold_reset_user(upwf: UnionPwQpolynomialFold) -> Option<UnionPwQpolynomialFold>;
   pub fn isl_union_pw_qpolynomial_fold_eval(upwf: UnionPwQpolynomialFold, pnt: Point) -> Option<Val>;
@@ -290,7 +290,7 @@ impl Constraint {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn pw_qpolynomial_read_from_str(self, str: CStr) -> Option<PwQpolynomial> {
+  pub fn pw_qpolynomial_read_from_str(self, str: Option<CStr>) -> Option<PwQpolynomial> {
     unsafe {
       let ret = isl_pw_qpolynomial_read_from_str(self.to(), str.to());
       (ret).to()
@@ -304,7 +304,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn union_pw_qpolynomial_read_from_str(self, str: CStr) -> Option<UnionPwQpolynomial> {
+  pub fn union_pw_qpolynomial_read_from_str(self, str: Option<CStr>) -> Option<UnionPwQpolynomial> {
     unsafe {
       let ret = isl_union_pw_qpolynomial_read_from_str(self.to(), str.to());
       (ret).to()
@@ -393,7 +393,7 @@ impl PwQpolynomial {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<PwQpolynomial> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<PwQpolynomial> {
     unsafe {
       let ret = isl_pw_qpolynomial_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -641,7 +641,7 @@ impl PwQpolynomialFold {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<PwQpolynomialFold> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<PwQpolynomialFold> {
     unsafe {
       let ret = isl_pw_qpolynomial_fold_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -875,7 +875,7 @@ impl PwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_pw_qpolynomial_fold_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -992,7 +992,7 @@ impl PwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_pw_qpolynomial_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -1046,7 +1046,7 @@ impl PwQpolynomialRef {
 
 impl Qpolynomial {
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<Qpolynomial> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Qpolynomial> {
     unsafe {
       let ret = isl_qpolynomial_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1727,7 +1727,7 @@ impl UnionPwQpolynomial {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwQpolynomial> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwQpolynomial> {
     unsafe {
       let ret = isl_union_pw_qpolynomial_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1870,7 +1870,7 @@ impl UnionPwQpolynomialFold {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<UnionPwQpolynomialFold> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<UnionPwQpolynomialFold> {
     unsafe {
       let ret = isl_union_pw_qpolynomial_fold_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1978,7 +1978,7 @@ impl UnionPwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_union_pw_qpolynomial_fold_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -2059,7 +2059,7 @@ impl UnionPwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_union_pw_qpolynomial_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

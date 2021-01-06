@@ -1,4 +1,4 @@
-use isl::{CtxRef, BasicSet, BasicMap, DimType};
+use isl::{CtxRef, Set, Map, DimType, CStr};
 use std::fmt::Display;
 use crate::*;
 
@@ -7,15 +7,13 @@ pub struct Comp {
   pub ctx: CtxRef,
   pub func: P<Func>,
   // isl_basic_set表示可以用一组仿射约束的交集定义的集合，isl_set表示一组isl_basic_set的并集
-  // 这里用不到isl_set，因为多面体就是可以用一组仿射约束的交集定义的，不需要并集
-  pub domain: BasicSet,
+  // 这里需要用到isl_set，例如i <= max(x, y)这样的约束无法用交集表示，必须是i <= x or i <= y
+  pub domain: Set,
   pub expr: Expr,
   // in dim名字是Comp的名字，out dim名字是空的
   // 从循环层次i到包围它的static dim：i * 2；从循环层次i到它的dynamic dim：i * 2 + 1
-  pub schedule: BasicMap,
-  pub store: Option<BasicMap>,
-  // store的目标位置，codegen时赋值(用最终的iter表示)
-  pub store_expr: Option<Expr>,
+  pub schedule: Map,
+  pub store: Option<Map>,
   pub pred: Option<P<Comp>>,
   pub succ: HashMap<P<Comp>, u32>,
   pub dim_tags: Vec<Option<DimTag>>,
@@ -46,15 +44,17 @@ impl Func {
     let s = format!("[{}] -> {{ {}{}: {} }}\0", comma_sep(params.iter()), name, i0_in(ranges.len() as _),
       sep(ranges.iter().enumerate().map(|(i, (lb, ub))| fn2display(move |f|
         write!(f, "{} <= i{} < {}", lb, i, ub))), " and "));
-    debug!("constructed domain str: {}", s);
-    let domain = self.ctx.basic_set_read_from_str(s.as_str().into()).unwrap();
+    debug!("comp: domain = {}", s);
+    let domain = self.ctx.set_read_from_str(cstr(&s)).unwrap();
     self.comp_raw(domain, expr)
   }
 
-  pub fn comp_raw(&self, domain: BasicSet, expr: Expr) -> &Comp {
+  pub fn comp_raw(&self, domain: Set, expr: Expr) -> &Comp {
+    // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
+    let domain = domain.coalesce().unwrap();
     let schedule = identity_schedule(&domain).unwrap();
-    debug!("initial identity schedule: {}", schedule);
-    let comp = box Comp { ctx: *self.ctx.as_ref(), func: self.into(), domain, expr, schedule, store: None, store_expr: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
+    debug!("comp_raw: initial identity schedule = {}", schedule);
+    let comp = box Comp { ctx: *self.ctx, func: self.into(), domain, expr, schedule, store: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
     assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     let ret = R::new(&*comp);
     P::new(self).comps.push(comp);
@@ -63,8 +63,10 @@ impl Func {
 }
 
 impl Comp {
-  // 返回的字符串来源于cstr，[len()]位置是\0
+  // 返回的字符串来源于cstr，[len()]位置是\0，可以传入ISL的接口，更直接的是使用name_cstr
   pub fn name(&self) -> &str { self.domain.get_tuple_name().unwrap().as_str() }
+
+  pub fn name_cstr(&self) -> Option<CStr> { self.domain.get_tuple_name() }
 
   pub fn n_dim(&self) -> u32 { self.domain.n_dim() }
 
@@ -155,14 +157,88 @@ impl Comp {
 
   pub fn shift(&self, i: u32, n: i32) -> &Comp {
     // 设置i_out = i_in + n
-    self.schedule.write(map_add_constraint(self.schedule.read(), i * 2, -1, n).unwrap());
+    self.schedule.write(map_set_eq(self.schedule.read(), i * 2 + 1, -1, n).unwrap());
+    debug!("shift: {}", self.schedule);
     self
+  }
+
+  pub fn separate(&self, i: u32, factor: u32) -> Option<&Comp> {
+    let (n, pos) = (self.sch_dim(), i * 2 + 1);
+    // 通过投影去掉i之后的维度，用i前面的维度表示i的上下界
+    // remove_divs会去掉类似floor(x / 2) + floor(y / 3) + 4 <= 0这样的约束
+    // 因为后面提取上下界的时候也处理不了这样的约束，所以就在这里去掉，这个近似不会造成结果出错
+    // todo: 这个apply过程可以提取一下，codegen中也用到了
+    let dom = self.domain.copy()?.apply(self.schedule.copy()?)?.set_tuple_name(cstr(self.name()))?
+      .project_out(DimType::Out, pos + 1, n - pos - 1)?.remove_divs()?;
+    debug!("separate: projected dom = {}", dom);
+    // 只支持由一个BasicSet组成的Set上的separate，否则情况太复杂
+    if dom.n_basic_set() > 1 {
+      warn!("separate: #bset > 1 not supported");
+      return None;
+    }
+    let csts = dom.get_basic_set_list()?.get_basic_set(0)?.get_constraint_list()?;
+    let (mut min, mut max) = (None, None);
+    for i in 0..csts.n_constraint() {
+      let cst = csts.get_constraint(i)?;
+      let k = cst.get_coefficient_val(DimType::Out, pos as _)?.get_num_si();
+      if k != 0 {
+        // 如果这个维度可以用前面的维度用等式表示，那它就只有这一个取值，循环变换没有意义
+        if cst.is_equality()? {
+          debug!("separate: dim has equality constraint");
+          return None;
+        }
+        let aff = cst.get_bound(DimType::Out, pos as _)?.pw_aff_from_aff()?;
+        // ISL中inequality约束一定是... >= 0
+        if k > 0 {
+          min = Some(if let Some(x) = min { aff.max(x)? } else { aff });
+        } else {
+          max = Some(if let Some(x) = max { aff.min(x)? } else { aff });
+        }
+      }
+    }
+    let (min, max) = (min?, max?);
+    let factor = self.ctx.val_int_from_ui(factor as _)?;
+    // 有没有简单一点的方法定义i和1...
+    let zero = dom.get_space()?.local_space_from_space()?.aff_zero_on_domain()?;
+    let i_aff = zero.copy()?.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
+    let one = zero.set_constant_si(1)?.pw_aff_from_aff()?;
+    let max = max.add(one)?; // max += 1，循环范围变成min <= i < max
+    // sep = min + floor((max - min) / factor) * factor，划分成i < sep和sep <= i两个区间
+    // ISL中pw_aff_scale_down_val是精确除法，结果保存成类似3 / 2的形式
+    // pw_aff_div也是精确除法，它最终会调用scale_down_val
+    // pw_aff_tdiv_q是r >= 0 ? pw_aff_floor(pw_aff_div(l, r)) : pw_aff_ceil(pw_aff_div(l, r))
+    // 这里假定max - min >= 0成立，直接调用pw_aff_floor和pw_aff_scale_down_val即可
+    let sep = min.copy()?.add(max.sub(min)?.scale_down_val(factor.copy()?)?.floor()?.scale_val(factor)?)?;
+    debug!("separate: sep = {}", sep);
+    let ge = self.schedule.copy()?.intersect_range(i_aff.copy()?.ge_set(sep.copy()?)?
+      .add_dims(DimType::Out, n - pos - 1)?)?;
+    // 被separate出去的计算迭代域是空集则不生成Comp
+    if ge.is_empty()? { return None; }
+    let name = self.func.new_comp_name();
+    let dup = box Comp {
+      ctx: self.ctx,
+      func: self.func,
+      domain: self.domain.copy()?.set_tuple_name(cstr(&name))?,
+      expr: self.expr.clone(),
+      schedule: ge.set_tuple_name(DimType::In, cstr(&name))?,
+      store: if let Some(x) = &self.store { Some(x.copy()?.set_tuple_name(DimType::In, cstr(&name))?) } else { None },
+      pred: None,
+      succ: HashMap::default(),
+      dim_tags: self.dim_tags.clone(),
+    };
+    // 上面的所有操作都只修改局部变量(修改Func::comp_cnt可以接受)，因此错误可以恢复，从这里开始的错误不能恢复
+    dup.after(self, i);
+    self.schedule.write(self.schedule.read().intersect_range(i_aff.lt_set(sep).unwrap()
+      .add_dims(DimType::Out, n - pos - 1).unwrap()).unwrap());
+    debug!("separate: created dup comp = {}", dup.name());
+    let ret = R::new(&*dup);
+    P::new(self).func.comps.push(dup);
+    Some(ret.get())
   }
 
   pub fn apply_sch_raw(&self, s: &str) -> Option<&Comp> {
     debug_assert!(s.ends_with('\0'));
-    let t = self.ctx.basic_map_read_from_str(s.into())?
-      .align_params(self.schedule.get_space()?)?;
+    let t = self.ctx.map_read_from_str(cstr(&s))?.align_params(self.schedule.get_space()?)?;
     self.schedule.write(self.schedule.read().apply_range(t)?);
     Some(self)
   }
@@ -179,7 +255,7 @@ impl Comp {
 
   pub fn store(&self, buf: &Buf) -> &Comp {
     let mut store = identity_map(&self.domain).unwrap();
-    store = store.set_tuple_name(DimType::Out, format!("{}\0", buf.name).as_str().into()).unwrap();
+    store = store.set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name))).unwrap();
     debug!("store: {}", store);
     P::new(self).store = Some(store);
     self
@@ -189,7 +265,7 @@ impl Comp {
     let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.n_dim()),
       buf.name, comma_sep(idx.iter().map(|e| e.clone_expr())));
     debug!("store_at: {}", s);
-    P::new(self).store = Some(self.ctx.basic_map_read_from_str(s.as_str().into()).unwrap());
+    P::new(self).store = Some(self.ctx.map_read_from_str(cstr(&s)).unwrap());
     self
   }
 }
@@ -224,7 +300,7 @@ impl Comp {
     for i in (0..self.sch_dim()).step_by(2) {
       // 在other的对应位置上static dim上 + 1，其余不变
       let order = get_static_dim(&other.schedule, i).unwrap() + (i == at * 2) as i32;
-      self.schedule.write(map_set_eq(self.schedule.read(), i, order).unwrap());
+      self.schedule.write(map_set_eq(self.schedule.read(), i, 0, order).unwrap());
     }
     debug!("after_raw: {}", self.schedule);
   }
@@ -238,7 +314,7 @@ pub(crate) fn i0_in(n: u32) -> impl Display {
 
 // 在pos处添加约束: k_in * i_in + i_out + val == 0; 如果k_in传0，就是设置out维度中pos处值为val
 // 如果已经存在对这个位置约束则不能使用它
-pub(crate) fn map_add_constraint(map: BasicMap, pos: u32, k_in: i32, val: i32) -> Option<BasicMap> {
+pub(crate) fn map_add_constraint(map: Map, pos: u32, k_in: i32, val: i32) -> Option<Map> {
   let pos = pos as i32;
   let mut cst = map.get_space()?.local_space_from_space()?.constraint_alloc_equality()?;
   // 我的应用中out dim总是多于in dim，所以只需要检查pos是否在in dim范围内
@@ -249,29 +325,31 @@ pub(crate) fn map_add_constraint(map: BasicMap, pos: u32, k_in: i32, val: i32) -
   map.add_constraint(cst)
 }
 
-// 设置out维度中pos处值为val，可以处理已经存在对这个位置约束的情形，但比`map_add_constraint`开销更大
-pub(crate) fn map_set_eq(map: BasicMap, pos: u32, val: i32) -> Option<BasicMap> {
+// k_in，val语义和map_add_constraint中相同
+// 可以处理已经存在对这个位置约束的情形，但比`map_add_constraint`开销更大
+pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Option<Map> {
   let mut sp = map.get_space()?;
   let (n_in, n_out) = (sp.dim(DimType::In), sp.dim(DimType::Out));
   sp = sp.add_dims(DimType::In, n_out - n_in)?;
-  let mut trans = sp.basic_map_universe()?;
+  let mut trans = sp.map_universe()?;
   for i in 0..n_out {
     // 除pos外其他维度，包括static和dynamic dim，都是恒等映射
-    let (k_in, val) = if i == pos { (0, val) } else { (-1, 0) };
+    let (k_in, val) = if i == pos { (k_in, val) } else { (-1, 0) };
     trans = map_add_constraint(trans, i, k_in, val)?;
   }
   map.apply_range(trans)
 }
 
 // 从set生成一对一的map，map的in dim名字为set名字，out dim名字为空
-pub(crate) fn identity_map(set: &BasicSet) -> Option<BasicMap> {
+// 注意ISL中名字是空字符串和名字是空指针被认为是不一样的，用reset_tuple_id将名字赋成空指针，或set_tuple_name传None
+pub(crate) fn identity_map(set: &Set) -> Option<Map> {
   let sp = set.get_space()?.add_dims(DimType::In, set.n_dim())?
-    .set_tuple_name(DimType::In, set.get_tuple_name()?)?
-    .set_tuple_name(DimType::Out, "\0".into())?;
-  sp.basic_map_identity()?.intersect_domain(set.copy()?)
+    .set_tuple_name(DimType::In, set.get_tuple_name())?
+    .reset_tuple_id(DimType::Out)?;
+  sp.map_identity()?.intersect_domain(set.copy()?)
 }
 
-pub(crate) fn identity_schedule(domain: &BasicSet) -> Option<BasicMap> {
+pub(crate) fn identity_schedule(domain: &Set) -> Option<Map> {
   let mut sch = identity_map(domain)?;
   for i in 0..=domain.n_dim() { // 在0，2，4...，2 * n_dim下标处插入0
     let pos = 2 * i;
@@ -282,12 +360,22 @@ pub(crate) fn identity_schedule(domain: &BasicSet) -> Option<BasicMap> {
 }
 
 // 获取map中对应位置的static dim
-fn get_static_dim(map: &BasicMap, pos: u32) -> Option<i32> {
-  let csts = map.get_constraint_list()?;
-  for i in 0..csts.n_constraint() {
-    let cst = csts.get_constraint(i)?;
-    let k = cst.get_coefficient_val(DimType::Out, pos as _)?;
-    if k.is_one()? { return Some(-cst.get_constant_val()?.get_num_si() as _); }
-  }
-  None
+fn get_static_dim(map: &Map, pos: u32) -> Option<i32> {
+  let mut ret = None;
+  // Map由多个BasicMap的并集组成，理论上不同的BasicMap的同一个out dim处可以有不同的constraint
+  // 但在这里不会发生，这里获取的是static dim，应该保证所有BasicMap的static dim都是相同的
+  map.foreach_basic_map(&mut |m| {
+    let csts = m.get_constraint_list()?;
+    for i in 0..csts.n_constraint() {
+      let cst = csts.get_constraint(i)?;
+      let k = cst.get_coefficient_val(DimType::Out, pos as _)?;
+      if k.is_one()? {
+        let val = -cst.get_constant_val()?.get_num_si() as _;
+        debug_assert!(ret == None || ret == Some(val));
+        ret = Some(val);
+      }
+    }
+    Some(())
+  })?;
+  ret
 }

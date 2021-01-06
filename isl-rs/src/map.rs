@@ -17,16 +17,16 @@ extern "C" {
   pub fn isl_map_get_space(map: MapRef) -> Option<Space>;
   pub fn isl_basic_map_get_div(bmap: BasicMapRef, pos: c_int) -> Option<Aff>;
   pub fn isl_basic_map_get_local_space(bmap: BasicMapRef) -> Option<LocalSpace>;
-  pub fn isl_basic_map_set_tuple_name(bmap: BasicMap, type_: DimType, s: CStr) -> Option<BasicMap>;
+  pub fn isl_basic_map_set_tuple_name(bmap: BasicMap, type_: DimType, s: Option<CStr>) -> Option<BasicMap>;
   pub fn isl_basic_map_get_tuple_name(bmap: BasicMapRef, type_: DimType) -> Option<CStr>;
   pub fn isl_map_has_tuple_name(map: MapRef, type_: DimType) -> Bool;
   pub fn isl_map_get_tuple_name(map: MapRef, type_: DimType) -> Option<CStr>;
-  pub fn isl_map_set_tuple_name(map: Map, type_: DimType, s: CStr) -> Option<Map>;
+  pub fn isl_map_set_tuple_name(map: Map, type_: DimType, s: Option<CStr>) -> Option<Map>;
   pub fn isl_basic_map_get_dim_name(bmap: BasicMapRef, type_: DimType, pos: c_uint) -> Option<CStr>;
   pub fn isl_map_has_dim_name(map: MapRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_map_get_dim_name(map: MapRef, type_: DimType, pos: c_uint) -> Option<CStr>;
-  pub fn isl_basic_map_set_dim_name(bmap: BasicMap, type_: DimType, pos: c_uint, s: CStr) -> Option<BasicMap>;
-  pub fn isl_map_set_dim_name(map: Map, type_: DimType, pos: c_uint, s: CStr) -> Option<Map>;
+  pub fn isl_basic_map_set_dim_name(bmap: BasicMap, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<BasicMap>;
+  pub fn isl_map_set_dim_name(map: Map, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Map>;
   pub fn isl_basic_map_set_tuple_id(bmap: BasicMap, type_: DimType, id: Id) -> Option<BasicMap>;
   pub fn isl_map_set_dim_id(map: Map, type_: DimType, pos: c_uint, id: Id) -> Option<Map>;
   pub fn isl_basic_map_has_dim_id(bmap: BasicMapRef, type_: DimType, pos: c_uint) -> Bool;
@@ -37,9 +37,9 @@ extern "C" {
   pub fn isl_map_has_tuple_id(map: MapRef, type_: DimType) -> Bool;
   pub fn isl_map_get_tuple_id(map: MapRef, type_: DimType) -> Option<Id>;
   pub fn isl_map_reset_user(map: Map) -> Option<Map>;
-  pub fn isl_basic_map_find_dim_by_name(bmap: BasicMapRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_basic_map_find_dim_by_name(bmap: BasicMapRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_map_find_dim_by_id(map: MapRef, type_: DimType, id: IdRef) -> c_int;
-  pub fn isl_map_find_dim_by_name(map: MapRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_map_find_dim_by_name(map: MapRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_basic_map_is_rational(bmap: BasicMapRef) -> Bool;
   pub fn isl_basic_map_identity(dim: Space) -> Option<BasicMap>;
   pub fn isl_basic_map_free(bmap: BasicMap) -> *mut c_void;
@@ -76,9 +76,9 @@ extern "C" {
   pub fn isl_basic_map_sample(bmap: BasicMap) -> Option<BasicMap>;
   pub fn isl_basic_map_detect_equalities(bmap: BasicMap) -> Option<BasicMap>;
   pub fn isl_basic_map_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<BasicMap>;
-  pub fn isl_basic_map_read_from_str(ctx: CtxRef, str: CStr) -> Option<BasicMap>;
+  pub fn isl_basic_map_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<BasicMap>;
   pub fn isl_map_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<Map>;
-  pub fn isl_map_read_from_str(ctx: CtxRef, str: CStr) -> Option<Map>;
+  pub fn isl_map_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<Map>;
   pub fn isl_basic_map_dump(bmap: BasicMapRef) -> ();
   pub fn isl_map_dump(map: MapRef) -> ();
   pub fn isl_basic_map_to_str(bmap: BasicMapRef) -> Option<CString>;
@@ -371,14 +371,14 @@ impl Aff {
 
 impl BasicMap {
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<BasicMap> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<BasicMap> {
     unsafe {
       let ret = isl_basic_map_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<BasicMap> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<BasicMap> {
     unsafe {
       let ret = isl_basic_map_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1061,7 +1061,7 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_basic_map_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
@@ -1280,7 +1280,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn basic_map_read_from_str(self, str: CStr) -> Option<BasicMap> {
+  pub fn basic_map_read_from_str(self, str: Option<CStr>) -> Option<BasicMap> {
     unsafe {
       let ret = isl_basic_map_read_from_str(self.to(), str.to());
       (ret).to()
@@ -1294,7 +1294,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn map_read_from_str(self, str: CStr) -> Option<Map> {
+  pub fn map_read_from_str(self, str: Option<CStr>) -> Option<Map> {
     unsafe {
       let ret = isl_map_read_from_str(self.to(), str.to());
       (ret).to()
@@ -1318,14 +1318,14 @@ impl CtxRef {
 
 impl Map {
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<Map> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<Map> {
     unsafe {
       let ret = isl_map_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<Map> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Map> {
     unsafe {
       let ret = isl_map_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -2363,7 +2363,7 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_map_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

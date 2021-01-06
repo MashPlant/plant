@@ -18,13 +18,13 @@ extern "C" {
   pub fn isl_basic_set_get_tuple_name(bset: BasicSetRef) -> Option<CStr>;
   pub fn isl_set_has_tuple_name(set: SetRef) -> Bool;
   pub fn isl_set_get_tuple_name(set: SetRef) -> Option<CStr>;
-  pub fn isl_basic_set_set_tuple_name(set: BasicSet, s: CStr) -> Option<BasicSet>;
-  pub fn isl_set_set_tuple_name(set: Set, s: CStr) -> Option<Set>;
+  pub fn isl_basic_set_set_tuple_name(set: BasicSet, s: Option<CStr>) -> Option<BasicSet>;
+  pub fn isl_set_set_tuple_name(set: Set, s: Option<CStr>) -> Option<Set>;
   pub fn isl_basic_set_get_dim_name(bset: BasicSetRef, type_: DimType, pos: c_uint) -> Option<CStr>;
-  pub fn isl_basic_set_set_dim_name(bset: BasicSet, type_: DimType, pos: c_uint, s: CStr) -> Option<BasicSet>;
+  pub fn isl_basic_set_set_dim_name(bset: BasicSet, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<BasicSet>;
   pub fn isl_set_has_dim_name(set: SetRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_set_get_dim_name(set: SetRef, type_: DimType, pos: c_uint) -> Option<CStr>;
-  pub fn isl_set_set_dim_name(set: Set, type_: DimType, pos: c_uint, s: CStr) -> Option<Set>;
+  pub fn isl_set_set_dim_name(set: Set, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Set>;
   pub fn isl_basic_set_get_dim_id(bset: BasicSetRef, type_: DimType, pos: c_uint) -> Option<Id>;
   pub fn isl_basic_set_set_tuple_id(bset: BasicSet, id: Id) -> Option<BasicSet>;
   pub fn isl_set_set_dim_id(set: Set, type_: DimType, pos: c_uint, id: Id) -> Option<Set>;
@@ -36,7 +36,7 @@ extern "C" {
   pub fn isl_set_get_tuple_id(set: SetRef) -> Option<Id>;
   pub fn isl_set_reset_user(set: Set) -> Option<Set>;
   pub fn isl_set_find_dim_by_id(set: SetRef, type_: DimType, id: IdRef) -> c_int;
-  pub fn isl_set_find_dim_by_name(set: SetRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_set_find_dim_by_name(set: SetRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_basic_set_is_rational(bset: BasicSetRef) -> c_int;
   pub fn isl_basic_set_free(bset: BasicSet) -> *mut c_void;
   pub fn isl_basic_set_copy(bset: BasicSetRef) -> Option<BasicSet>;
@@ -58,9 +58,9 @@ extern "C" {
   pub fn isl_basic_set_list_intersect(list: BasicSetList) -> Option<BasicSet>;
   pub fn isl_set_list_union(list: SetList) -> Option<Set>;
   pub fn isl_basic_set_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<BasicSet>;
-  pub fn isl_basic_set_read_from_str(ctx: CtxRef, str: CStr) -> Option<BasicSet>;
+  pub fn isl_basic_set_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<BasicSet>;
   pub fn isl_set_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<Set>;
-  pub fn isl_set_read_from_str(ctx: CtxRef, str: CStr) -> Option<Set>;
+  pub fn isl_set_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<Set>;
   pub fn isl_basic_set_dump(bset: BasicSetRef) -> ();
   pub fn isl_set_dump(set: SetRef) -> ();
   pub fn isl_printer_print_basic_set(printer: Printer, bset: BasicSetRef) -> Option<Printer>;
@@ -270,14 +270,14 @@ impl To<Option<StrideInfo>> for *mut c_void {
 
 impl BasicSet {
   #[inline(always)]
-  pub fn set_tuple_name(self, s: CStr) -> Option<BasicSet> {
+  pub fn set_tuple_name(self, s: Option<CStr>) -> Option<BasicSet> {
     unsafe {
       let ret = isl_basic_set_set_tuple_name(self.to(), s.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<BasicSet> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<BasicSet> {
     unsafe {
       let ret = isl_basic_set_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -843,7 +843,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn basic_set_read_from_str(self, str: CStr) -> Option<BasicSet> {
+  pub fn basic_set_read_from_str(self, str: Option<CStr>) -> Option<BasicSet> {
     unsafe {
       let ret = isl_basic_set_read_from_str(self.to(), str.to());
       (ret).to()
@@ -857,7 +857,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn set_read_from_str(self, str: CStr) -> Option<Set> {
+  pub fn set_read_from_str(self, str: Option<CStr>) -> Option<Set> {
     unsafe {
       let ret = isl_set_read_from_str(self.to(), str.to());
       (ret).to()
@@ -922,14 +922,14 @@ impl Set {
     }
   }
   #[inline(always)]
-  pub fn set_tuple_name(self, s: CStr) -> Option<Set> {
+  pub fn set_tuple_name(self, s: Option<CStr>) -> Option<Set> {
     unsafe {
       let ret = isl_set_set_tuple_name(self.to(), s.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<Set> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<Set> {
     unsafe {
       let ret = isl_set_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -1595,7 +1595,7 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_set_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

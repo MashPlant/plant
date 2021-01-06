@@ -1,7 +1,7 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_options_set_ast_iterator_type(ctx: CtxRef, val: CStr) -> Stat;
+  pub fn isl_options_set_ast_iterator_type(ctx: CtxRef, val: Option<CStr>) -> Stat;
   pub fn isl_options_get_ast_iterator_type(ctx: CtxRef) -> Option<CStr>;
   pub fn isl_options_set_ast_always_print_block(ctx: CtxRef, val: c_int) -> Stat;
   pub fn isl_options_get_ast_always_print_block(ctx: CtxRef) -> c_int;
@@ -77,7 +77,7 @@ extern "C" {
   pub fn isl_options_get_ast_print_macro_once(ctx: CtxRef) -> c_int;
   pub fn isl_ast_expr_foreach_ast_op_type(expr: AstExprRef, fn_: unsafe extern "C" fn(type_: AstOpType, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
   pub fn isl_ast_node_foreach_ast_op_type(node: AstNodeRef, fn_: unsafe extern "C" fn(type_: AstOpType, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
-  pub fn isl_ast_op_type_set_print_name(p: Printer, type_: AstOpType, name: CStr) -> Option<Printer>;
+  pub fn isl_ast_op_type_set_print_name(p: Printer, type_: AstOpType, name: Option<CStr>) -> Option<Printer>;
   pub fn isl_ast_op_type_print_macro(type_: AstOpType, p: Printer) -> Option<Printer>;
   pub fn isl_ast_expr_print_macros(expr: AstExprRef, p: Printer) -> Option<Printer>;
   pub fn isl_ast_node_print_macros(node: AstNodeRef, p: Printer) -> Option<Printer>;
@@ -609,7 +609,7 @@ impl AstPrintOptionsRef {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn options_set_ast_iterator_type(self, val: CStr) -> Option<()> {
+  pub fn options_set_ast_iterator_type(self, val: Option<CStr>) -> Option<()> {
     unsafe {
       let ret = isl_options_set_ast_iterator_type(self.to(), val.to());
       (ret).to()
@@ -685,7 +685,7 @@ impl Printer {
     }
   }
   #[inline(always)]
-  pub fn ast_op_type_set_print_name(self, type_: AstOpType, name: CStr) -> Option<Printer> {
+  pub fn ast_op_type_set_print_name(self, type_: AstOpType, name: Option<CStr>) -> Option<Printer> {
     unsafe {
       let ret = isl_ast_op_type_set_print_name(self.to(), type_.to(), name.to());
       (ret).to()

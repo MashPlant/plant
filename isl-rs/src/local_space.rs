@@ -11,13 +11,13 @@ extern "C" {
   pub fn isl_local_space_dim(ls: LocalSpaceRef, type_: DimType) -> c_int;
   pub fn isl_local_space_has_dim_name(ls: LocalSpaceRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_local_space_get_dim_name(ls: LocalSpaceRef, type_: DimType, pos: c_uint) -> Option<CStr>;
-  pub fn isl_local_space_set_dim_name(ls: LocalSpace, type_: DimType, pos: c_uint, s: CStr) -> Option<LocalSpace>;
+  pub fn isl_local_space_set_dim_name(ls: LocalSpace, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<LocalSpace>;
   pub fn isl_local_space_has_dim_id(ls: LocalSpaceRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_local_space_get_dim_id(ls: LocalSpaceRef, type_: DimType, pos: c_uint) -> Option<Id>;
   pub fn isl_local_space_set_dim_id(ls: LocalSpace, type_: DimType, pos: c_uint, id: Id) -> Option<LocalSpace>;
   pub fn isl_local_space_get_space(ls: LocalSpaceRef) -> Option<Space>;
   pub fn isl_local_space_get_div(ls: LocalSpaceRef, pos: c_int) -> Option<Aff>;
-  pub fn isl_local_space_find_dim_by_name(ls: LocalSpaceRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_local_space_find_dim_by_name(ls: LocalSpaceRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_local_space_domain(ls: LocalSpace) -> Option<LocalSpace>;
   pub fn isl_local_space_range(ls: LocalSpace) -> Option<LocalSpace>;
   pub fn isl_local_space_from_domain(ls: LocalSpace) -> Option<LocalSpace>;
@@ -82,7 +82,7 @@ impl LocalSpace {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<LocalSpace> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<LocalSpace> {
     unsafe {
       let ret = isl_local_space_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -260,7 +260,7 @@ impl LocalSpaceRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_local_space_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

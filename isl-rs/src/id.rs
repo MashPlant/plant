@@ -21,7 +21,7 @@ extern "C" {
   pub fn isl_id_list_dump(list: IdListRef) -> ();
   pub fn isl_id_get_ctx(id: IdRef) -> Option<CtxRef>;
   pub fn isl_id_get_hash(id: IdRef) -> c_uint;
-  pub fn isl_id_alloc(ctx: CtxRef, name: CStr, user: *mut c_void) -> Option<Id>;
+  pub fn isl_id_alloc(ctx: CtxRef, name: Option<CStr>, user: *mut c_void) -> Option<Id>;
   pub fn isl_id_copy(id: IdRef) -> Option<Id>;
   pub fn isl_id_free(id: Id) -> *mut c_void;
   pub fn isl_id_get_user(id: IdRef) -> *mut c_void;
@@ -103,7 +103,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn id_alloc(self, name: CStr, user: *mut c_void) -> Option<Id> {
+  pub fn id_alloc(self, name: Option<CStr>, user: *mut c_void) -> Option<Id> {
     unsafe {
       let ret = isl_id_alloc(self.to(), name.to(), user.to());
       (ret).to()

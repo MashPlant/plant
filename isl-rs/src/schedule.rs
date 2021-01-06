@@ -40,7 +40,7 @@ extern "C" {
   pub fn isl_schedule_constraints_get_conditional_validity(sc: ScheduleConstraintsRef) -> Option<UnionMap>;
   pub fn isl_schedule_constraints_get_conditional_validity_condition(sc: ScheduleConstraintsRef) -> Option<UnionMap>;
   pub fn isl_schedule_constraints_apply(sc: ScheduleConstraints, umap: UnionMap) -> Option<ScheduleConstraints>;
-  pub fn isl_schedule_constraints_read_from_str(ctx: CtxRef, str: CStr) -> Option<ScheduleConstraints>;
+  pub fn isl_schedule_constraints_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<ScheduleConstraints>;
   pub fn isl_schedule_constraints_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<ScheduleConstraints>;
   pub fn isl_printer_print_schedule_constraints(p: Printer, sc: ScheduleConstraintsRef) -> Option<Printer>;
   pub fn isl_schedule_constraints_dump(sc: ScheduleConstraintsRef) -> ();
@@ -70,7 +70,7 @@ extern "C" {
   pub fn isl_schedule_pullback_union_pw_multi_aff(schedule: Schedule, upma: UnionPwMultiAff) -> Option<Schedule>;
   pub fn isl_schedule_expand(schedule: Schedule, contraction: UnionPwMultiAff, expansion: Schedule) -> Option<Schedule>;
   pub fn isl_schedule_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<Schedule>;
-  pub fn isl_schedule_read_from_str(ctx: CtxRef, str: CStr) -> Option<Schedule>;
+  pub fn isl_schedule_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<Schedule>;
   pub fn isl_printer_print_schedule(p: Printer, schedule: ScheduleRef) -> Option<Printer>;
   pub fn isl_schedule_dump(schedule: ScheduleRef) -> ();
   pub fn isl_schedule_to_str(schedule: ScheduleRef) -> Option<CString>;
@@ -263,7 +263,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn schedule_constraints_read_from_str(self, str: CStr) -> Option<ScheduleConstraints> {
+  pub fn schedule_constraints_read_from_str(self, str: Option<CStr>) -> Option<ScheduleConstraints> {
     unsafe {
       let ret = isl_schedule_constraints_read_from_str(self.to(), str.to());
       (ret).to()
@@ -284,7 +284,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn schedule_read_from_str(self, str: CStr) -> Option<Schedule> {
+  pub fn schedule_read_from_str(self, str: Option<CStr>) -> Option<Schedule> {
     unsafe {
       let ret = isl_schedule_read_from_str(self.to(), str.to());
       (ret).to()

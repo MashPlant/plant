@@ -23,7 +23,7 @@ extern "C" {
   pub fn isl_multi_val_get_ctx(multi: MultiValRef) -> Option<CtxRef>;
   pub fn isl_multi_val_get_space(multi: MultiValRef) -> Option<Space>;
   pub fn isl_multi_val_get_domain_space(multi: MultiValRef) -> Option<Space>;
-  pub fn isl_multi_val_find_dim_by_name(multi: MultiValRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_multi_val_find_dim_by_name(multi: MultiValRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_multi_val_from_val_list(space: Space, list: ValList) -> Option<MultiVal>;
   pub fn isl_multi_val_zero(space: Space) -> Option<MultiVal>;
   pub fn isl_multi_val_copy(multi: MultiValRef) -> Option<MultiVal>;
@@ -32,12 +32,12 @@ extern "C" {
   pub fn isl_multi_val_involves_nan(multi: MultiValRef) -> Bool;
   pub fn isl_multi_val_find_dim_by_id(multi: MultiValRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_multi_val_get_dim_id(multi: MultiValRef, type_: DimType, pos: c_uint) -> Option<Id>;
-  pub fn isl_multi_val_set_dim_name(multi: MultiVal, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiVal>;
+  pub fn isl_multi_val_set_dim_name(multi: MultiVal, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiVal>;
   pub fn isl_multi_val_set_dim_id(multi: MultiVal, type_: DimType, pos: c_uint, id: Id) -> Option<MultiVal>;
   pub fn isl_multi_val_get_tuple_name(multi: MultiValRef, type_: DimType) -> Option<CStr>;
   pub fn isl_multi_val_has_tuple_id(multi: MultiValRef, type_: DimType) -> Bool;
   pub fn isl_multi_val_get_tuple_id(multi: MultiValRef, type_: DimType) -> Option<Id>;
-  pub fn isl_multi_val_set_tuple_name(multi: MultiVal, type_: DimType, s: CStr) -> Option<MultiVal>;
+  pub fn isl_multi_val_set_tuple_name(multi: MultiVal, type_: DimType, s: Option<CStr>) -> Option<MultiVal>;
   pub fn isl_multi_val_set_tuple_id(multi: MultiVal, type_: DimType, id: Id) -> Option<MultiVal>;
   pub fn isl_multi_val_reset_tuple_id(multi: MultiVal, type_: DimType) -> Option<MultiVal>;
   pub fn isl_multi_val_reset_user(multi: MultiVal) -> Option<MultiVal>;
@@ -130,13 +130,13 @@ extern "C" {
   pub fn isl_val_ne(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_abs_eq(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_is_divisible_by(v1: ValRef, v2: ValRef) -> Bool;
-  pub fn isl_val_read_from_str(ctx: CtxRef, str: CStr) -> Option<Val>;
+  pub fn isl_val_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<Val>;
   pub fn isl_printer_print_val(p: Printer, v: ValRef) -> Option<Printer>;
   pub fn isl_val_dump(v: ValRef) -> ();
   pub fn isl_val_to_str(v: ValRef) -> Option<CString>;
   pub fn isl_multi_val_add_val(mv: MultiVal, v: Val) -> Option<MultiVal>;
   pub fn isl_multi_val_mod_val(mv: MultiVal, v: Val) -> Option<MultiVal>;
-  pub fn isl_multi_val_read_from_str(ctx: CtxRef, str: CStr) -> Option<MultiVal>;
+  pub fn isl_multi_val_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<MultiVal>;
   pub fn isl_printer_print_multi_val(p: Printer, mv: MultiValRef) -> Option<Printer>;
   pub fn isl_multi_val_dump(mv: MultiValRef) -> ();
   pub fn isl_multi_val_to_str(mv: MultiValRef) -> Option<CString>;
@@ -307,14 +307,14 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn val_read_from_str(self, str: CStr) -> Option<Val> {
+  pub fn val_read_from_str(self, str: Option<CStr>) -> Option<Val> {
     unsafe {
       let ret = isl_val_read_from_str(self.to(), str.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn multi_val_read_from_str(self, str: CStr) -> Option<MultiVal> {
+  pub fn multi_val_read_from_str(self, str: Option<CStr>) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_read_from_str(self.to(), str.to());
       (ret).to()
@@ -331,7 +331,7 @@ impl MultiVal {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: CStr) -> Option<MultiVal> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
       (ret).to()
@@ -345,7 +345,7 @@ impl MultiVal {
     }
   }
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<MultiVal> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
@@ -586,7 +586,7 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_multi_val_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

@@ -67,14 +67,7 @@ impl Expr {
     }
   }
 
-  pub fn args_mut(&mut self) -> &mut [Expr] {
-    match &mut self.1 {
-      Unary(_, x) => std::slice::from_mut(x),
-      Binary(_, lr) => lr.as_mut(),
-      Call(_, args) | Access(_, args) | Load(_, args) => args,
-      Val(..) | Iter(..) | Param(..) | Alloc(..) | Free(..) => &mut [],
-    }
-  }
+  pub fn args_mut(&mut self) -> &mut [Expr] { P::new(self.args()).get() }
 
   pub fn visit<'a, R: VisitChildren>(&'a self, f: &mut impl FnMut(&'a Expr) -> R) {
     if f(self).visit() {
@@ -149,7 +142,8 @@ pub trait IntoExpr: Sized + Clone {
 
   fn clone_expr(&self) -> Expr { self.clone().expr() }
 
-  impl_other!(LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt);
+  // max_，min_是为了和std::cmp::Ord::max做出区分
+  impl_other!(LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt, Max max_, Min min_);
 }
 
 impl IntoExpr for Expr { fn expr(self) -> Expr { self } }

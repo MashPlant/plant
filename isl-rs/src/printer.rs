@@ -13,9 +13,9 @@ extern "C" {
   pub fn isl_printer_get_output_format(p: PrinterRef) -> c_int;
   pub fn isl_printer_set_yaml_style(p: Printer, yaml_style: c_int) -> Option<Printer>;
   pub fn isl_printer_get_yaml_style(p: PrinterRef) -> c_int;
-  pub fn isl_printer_set_indent_prefix(p: Printer, prefix: CStr) -> Option<Printer>;
-  pub fn isl_printer_set_prefix(p: Printer, prefix: CStr) -> Option<Printer>;
-  pub fn isl_printer_set_suffix(p: Printer, suffix: CStr) -> Option<Printer>;
+  pub fn isl_printer_set_indent_prefix(p: Printer, prefix: Option<CStr>) -> Option<Printer>;
+  pub fn isl_printer_set_prefix(p: Printer, prefix: Option<CStr>) -> Option<Printer>;
+  pub fn isl_printer_set_suffix(p: Printer, suffix: Option<CStr>) -> Option<Printer>;
   pub fn isl_printer_set_isl_int_width(p: Printer, width: c_int) -> Option<Printer>;
   pub fn isl_printer_has_note(p: PrinterRef, id: IdRef) -> Bool;
   pub fn isl_printer_get_note(p: PrinterRef, id: Id) -> Option<Id>;
@@ -24,7 +24,7 @@ extern "C" {
   pub fn isl_printer_end_line(p: Printer) -> Option<Printer>;
   pub fn isl_printer_print_double(p: Printer, d: c_double) -> Option<Printer>;
   pub fn isl_printer_print_int(p: Printer, i: c_int) -> Option<Printer>;
-  pub fn isl_printer_print_str(p: Printer, s: CStr) -> Option<Printer>;
+  pub fn isl_printer_print_str(p: Printer, s: Option<CStr>) -> Option<Printer>;
   pub fn isl_printer_yaml_start_mapping(p: Printer) -> Option<Printer>;
   pub fn isl_printer_yaml_end_mapping(p: Printer) -> Option<Printer>;
   pub fn isl_printer_yaml_start_sequence(p: Printer) -> Option<Printer>;
@@ -87,21 +87,21 @@ impl Printer {
     }
   }
   #[inline(always)]
-  pub fn set_indent_prefix(self, prefix: CStr) -> Option<Printer> {
+  pub fn set_indent_prefix(self, prefix: Option<CStr>) -> Option<Printer> {
     unsafe {
       let ret = isl_printer_set_indent_prefix(self.to(), prefix.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_prefix(self, prefix: CStr) -> Option<Printer> {
+  pub fn set_prefix(self, prefix: Option<CStr>) -> Option<Printer> {
     unsafe {
       let ret = isl_printer_set_prefix(self.to(), prefix.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_suffix(self, suffix: CStr) -> Option<Printer> {
+  pub fn set_suffix(self, suffix: Option<CStr>) -> Option<Printer> {
     unsafe {
       let ret = isl_printer_set_suffix(self.to(), suffix.to());
       (ret).to()
@@ -150,7 +150,7 @@ impl Printer {
     }
   }
   #[inline(always)]
-  pub fn print_str(self, s: CStr) -> Option<Printer> {
+  pub fn print_str(self, s: Option<CStr>) -> Option<Printer> {
     unsafe {
       let ret = isl_printer_print_str(self.to(), s.to());
       (ret).to()

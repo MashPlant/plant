@@ -11,7 +11,7 @@ extern "C" {
   pub fn isl_space_is_set(space: SpaceRef) -> Bool;
   pub fn isl_space_is_map(space: SpaceRef) -> Bool;
   pub fn isl_space_add_param_id(space: Space, id: Id) -> Option<Space>;
-  pub fn isl_space_set_tuple_name(dim: Space, type_: DimType, s: CStr) -> Option<Space>;
+  pub fn isl_space_set_tuple_name(dim: Space, type_: DimType, s: Option<CStr>) -> Option<Space>;
   pub fn isl_space_has_tuple_name(space: SpaceRef, type_: DimType) -> Bool;
   pub fn isl_space_get_tuple_name(dim: SpaceRef, type_: DimType) -> Option<CStr>;
   pub fn isl_space_set_tuple_id(dim: Space, type_: DimType, id: Id) -> Option<Space>;
@@ -23,9 +23,9 @@ extern "C" {
   pub fn isl_space_has_dim_id(dim: SpaceRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_space_get_dim_id(dim: SpaceRef, type_: DimType, pos: c_uint) -> Option<Id>;
   pub fn isl_space_find_dim_by_id(dim: SpaceRef, type_: DimType, id: IdRef) -> c_int;
-  pub fn isl_space_find_dim_by_name(space: SpaceRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_space_find_dim_by_name(space: SpaceRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_space_has_dim_name(space: SpaceRef, type_: DimType, pos: c_uint) -> Bool;
-  pub fn isl_space_set_dim_name(dim: Space, type_: DimType, pos: c_uint, name: CStr) -> Option<Space>;
+  pub fn isl_space_set_dim_name(dim: Space, type_: DimType, pos: c_uint, name: Option<CStr>) -> Option<Space>;
   pub fn isl_space_get_dim_name(dim: SpaceRef, type_: DimType, pos: c_uint) -> Option<CStr>;
   pub fn isl_space_extend(dim: Space, nparam: c_uint, n_in: c_uint, n_out: c_uint) -> Option<Space>;
   pub fn isl_space_add_dims(space: Space, type_: DimType, n: c_uint) -> Option<Space>;
@@ -166,7 +166,7 @@ impl Space {
     }
   }
   #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: CStr) -> Option<Space> {
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<Space> {
     unsafe {
       let ret = isl_space_set_tuple_name(self.to(), type_.to(), s.to());
       (ret).to()
@@ -201,7 +201,7 @@ impl Space {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, name: CStr) -> Option<Space> {
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, name: Option<CStr>) -> Option<Space> {
     unsafe {
       let ret = isl_space_set_dim_name(self.to(), type_.to(), pos.to(), name.to());
       (ret).to()
@@ -554,7 +554,7 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_space_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()

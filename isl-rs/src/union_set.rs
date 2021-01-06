@@ -60,7 +60,7 @@ extern "C" {
   pub fn isl_union_set_coefficients(bset: UnionSet) -> Option<UnionSet>;
   pub fn isl_union_set_solutions(bset: UnionSet) -> Option<UnionSet>;
   pub fn isl_union_set_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<UnionSet>;
-  pub fn isl_union_set_read_from_str(ctx: CtxRef, str: CStr) -> Option<UnionSet>;
+  pub fn isl_union_set_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<UnionSet>;
   pub fn isl_union_set_to_str(uset: UnionSetRef) -> Option<CString>;
   pub fn isl_printer_print_union_set(p: Printer, uset: UnionSetRef) -> Option<Printer>;
   pub fn isl_union_set_dump(uset: UnionSetRef) -> ();
@@ -104,7 +104,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn union_set_read_from_str(self, str: CStr) -> Option<UnionSet> {
+  pub fn union_set_read_from_str(self, str: Option<CStr>) -> Option<UnionSet> {
     unsafe {
       let ret = isl_union_set_read_from_str(self.to(), str.to());
       (ret).to()

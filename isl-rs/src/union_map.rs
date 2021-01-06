@@ -12,7 +12,7 @@ extern "C" {
   pub fn isl_union_map_get_ctx(umap: UnionMapRef) -> Option<CtxRef>;
   pub fn isl_union_map_get_space(umap: UnionMapRef) -> Option<Space>;
   pub fn isl_union_map_reset_user(umap: UnionMap) -> Option<UnionMap>;
-  pub fn isl_union_map_find_dim_by_name(umap: UnionMapRef, type_: DimType, name: CStr) -> c_int;
+  pub fn isl_union_map_find_dim_by_name(umap: UnionMapRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_union_map_universe(umap: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_params(umap: UnionMap) -> Option<Set>;
   pub fn isl_union_map_domain(umap: UnionMap) -> Option<UnionSet>;
@@ -105,7 +105,7 @@ extern "C" {
   pub fn isl_union_map_lex_lt_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
   pub fn isl_union_map_lex_gt_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
   pub fn isl_union_map_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<UnionMap>;
-  pub fn isl_union_map_read_from_str(ctx: CtxRef, str: CStr) -> Option<UnionMap>;
+  pub fn isl_union_map_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<UnionMap>;
   pub fn isl_union_map_to_str(umap: UnionMapRef) -> Option<CString>;
   pub fn isl_printer_print_union_map(p: Printer, umap: UnionMapRef) -> Option<Printer>;
   pub fn isl_union_map_dump(umap: UnionMapRef) -> ();
@@ -156,7 +156,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn union_map_read_from_str(self, str: CStr) -> Option<UnionMap> {
+  pub fn union_map_read_from_str(self, str: Option<CStr>) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_read_from_str(self.to(), str.to());
       (ret).to()
@@ -918,7 +918,7 @@ impl UnionMapRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: CStr) -> c_int {
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
     unsafe {
       let ret = isl_union_map_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
