@@ -29,7 +29,7 @@ impl Func {
     self.bufs.iter().find(|c| &*c.name == name).map(|c| P::new(&**c))
   }
 
-  pub fn iter(&self, level: u32) -> Expr { Expr(self.iter_ty, Iter(level)) }
+  pub fn iter(&self, level: u32) -> Expr { Iter(self.iter_ty, level) }
 
   pub(crate) fn new_comp_name(&self) -> String {
     format!("_C{}\0", (self.comp_cnt, P::new(self).comp_cnt += 1).0)
@@ -51,7 +51,7 @@ impl Func {
   // 只是为了避免写太多unwrap()，用一个返回Option的函数包一下，里面可以用?来处理
   fn align_schedule_impl(&self) -> Option<()> {
     let mut max_dim = 0;
-    let mut all_params = self.comps.get(0).expect("no computation").domain.get_space()?;
+    let mut all_params = self.comps.get(0).expect("no comp").domain.get_space()?;
     for c in &self.comps {
       max_dim = max_dim.max(c.sch_dim());
       all_params = all_params.align_params(c.schedule.get_space()?)?;
@@ -78,17 +78,18 @@ impl Func {
     self.align_schedule();
     let mut vis = HashSet::default();
     let mut prev = None;
-    for c in self.sch_comps() {
+    for c in &self.comps {
       if c.pred.is_none() {
         // 所有没有前驱的节点按定义顺序排序
         // after_raw要求按照从前往后顺序调用，例如B after_raw C, A after_raw B，不能是A after_raw B, B after_raw C
         // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
         if let Some(x) = prev { c.after_raw(x, 0); }
         prev = Some(c);
-        self.sch_graph_dfs(P::new(c), &mut vis);
+        self.sch_graph_dfs(P::new(c.as_ref()), &mut vis);
       }
     }
-    let ast = self.build_isl_ast().unwrap(); // todo: 可以从这个ast中提取特征，无需自己维护ast了
+    let mut info = Vec::new();
+    let ast = self.build_isl_ast(&mut info).unwrap(); // todo: 可以从这个ast中提取特征，无需自己维护ast了
     let mut tags = HashMap::default();
     extract_tags(*ast, &mut Vec::new(), &mut tags);
     let mut w = BufWriter::new(File::create(path)?);
@@ -112,11 +113,6 @@ struct CompInfo {
 }
 
 impl Func {
-  // 返回参与调度的所有Comp。Comp::expr为None表示一个输入，不参与调度
-  fn sch_comps(&self) -> impl IntoIterator<Item=&Comp> {
-    self.comps.iter().map(|c| c.as_ref())
-  }
-
   fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) {
     if !vis.insert(c) { panic!("schedule graph should be acyclic"); }
     for (&s, &at) in &c.succ {
@@ -125,9 +121,13 @@ impl Func {
     }
   }
 
-  fn build_isl_ast(&self) -> Option<AstNode> {
+  // info不能是本函数的局部变量，否则会在本函数中析构，而codegen中仍需使用其中的数据
+  // 若真的是局部变量，set_at_each_domain(&mut move ...)和&mut ...的区别在于前者info在这句结束时析构，后者本函数结束时析构
+  // 前一种可能不会引发错误，因为那时info中还没有元素，析构是空操作，之后还可以向里面push，后push的元素不会析构
+  // 但这也是错误的，首先会内存泄露，其次本函数结束后访问info是访问无效的栈内存
+  fn build_isl_ast(&self, info: &mut Vec<Box<CompInfo>>) -> Option<AstNode> {
     let mut union_sch = None;
-    for c in self.sch_comps() {
+    for c in &self.comps {
       let sch_domain = c.domain.copy()?.apply(c.schedule.copy()?)?.set_tuple_name(cstr(c.name()))?;
       // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，`identity_map`保证这一点
       let sch = identity_map(&sch_domain)?.union_map_from_map()?;
@@ -138,7 +138,7 @@ impl Func {
     let mut build = if let Some(ctx) = self.func_ctx.as_ref() {
       ctx.copy()?.set_from_basic_set()?.ast_build_from_context()
     } else { self.ctx.ast_build_alloc() }?;
-    let n_dim = self.sch_comps().into_iter().next()?.sch_dim();
+    let n_dim = self.comps.first().expect("no comp").sch_dim();
     debug_assert_eq!(n_dim % 2, 1); // 一定是 static, dynamic, ..., static的模式
     let mut iters = self.ctx.id_list_alloc(n_dim as _)?;
     for i in 0..n_dim / 2 {
@@ -146,10 +146,9 @@ impl Func {
       iters = iters.add(self.ctx.id_alloc(cstr(&format!("_i{}\0", i)), 0 as _)?)?
         .add(self.ctx.id_alloc(cstr(&format!("i{}\0", i)), 0 as _)?)?;
     }
-    let mut info = Vec::new();
     // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
     build = build.set_iterators(iters)?
-      .set_at_each_domain(&mut |node, build| self.visit_comp(node, build, &mut info))?;
+      .set_at_each_domain(&mut |node, build| self.visit_comp(node, build, info))?;
     self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
     self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
     self.ctx.options_set_ast_build_group_coscheduled(1)?;
@@ -179,15 +178,15 @@ impl Func {
     }
     debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
     let mut expr = comp.expr.clone();
-    expr.visit_mut(&mut move |e| match &e.1 {
+    expr.visit_mut(&mut move |e| match e {
       // access_to_load已经将原下标替换成了新下标，不能再访问它的孩子再替换一次了
       Access(arg, idx) => {
         *e = access_to_load(build, &comp, arg, idx).unwrap();
         debug!("modify_comp: replaced access = {}", e);
         false
       }
-      &Iter(x) => {
-        *e = iter_map[x as usize].clone();
+      Iter(_, x) => {
+        *e = iter_map[*x as usize].clone();
         false
       }
       _ => true
@@ -237,7 +236,7 @@ impl Func {
             write!(f, "{}={};", store, comp.expr)?;
           } else {
             // 没有store的comp表示成一个标量定义
-            write!(f, "{} {}={};", comp.expr.0, comp.comp.name(), comp.expr)?;
+            write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr)?;
           }
         }
         _ => panic!("invalid ast node type"),

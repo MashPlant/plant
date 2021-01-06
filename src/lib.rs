@@ -17,7 +17,7 @@ pub use fmt::*;
 
 use ptr::*;
 use isl::cstr;
-pub use expr::{Type::*, ExprKind::*};
+pub use expr::{Type::*, Expr::*};
 pub use comp::DimTag::*;
 pub use buf::BufKind::*;
 

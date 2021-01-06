@@ -25,7 +25,7 @@ impl Func {
 impl Buf {
   pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
     assert_eq!(idx.len(), self.sizes.len());
-    Expr(self.ty, Load(self.into(), idx.iter().map(|e| e.clone_expr()).collect()))
+    Load(self.into(), idx.iter().map(|e| e.clone_expr()).collect())
   }
 }
 

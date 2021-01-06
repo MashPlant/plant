@@ -33,15 +33,16 @@ impl Func {
     // 很多时候调用方可以提供&[(Expr, Expr)]，这里的拷贝是多余的，但这点浪费可以忽略
     let ranges = ranges.iter().map(|(lb, ub)| (lb.clone_expr(), ub.clone_expr())).collect::<Vec<_>>();
     let expr = expr.expr();
-    let mut params = HashSet::<&str>::default();
+    let mut params = HashSet::default();
     // 收集ranges，expr中的所有Param
-    let ref mut vis = |e: &Expr| if let Param(x) = &e.1 { params.insert(x.get()); };
+    let ref mut vis = |e: &Expr| if let &Param(x) = e { params.insert(x); };
     for (lb, ub) in &ranges {
       lb.visit(vis);
       ub.visit(vis);
     }
     expr.visit(vis);
-    let s = format!("[{}] -> {{ {}{}: {} }}\0", comma_sep(params.iter()), name, i0_in(ranges.len() as _),
+    let s = format!("[{}] -> {{ {}{}: {} }}\0", comma_sep(params.iter().map(|c| c.name())),
+      name, i0_in(ranges.len() as _),
       sep(ranges.iter().enumerate().map(|(i, (lb, ub))| fn2display(move |f|
         write!(f, "{} <= i{} < {}", lb, i, ub))), " and "));
     debug!("comp: domain = {}", s);
@@ -84,19 +85,17 @@ impl Comp {
   // 当且仅当它没有store的时候，生成的代码会在计算发生的地方定义一个对应名字的局部变量，所以它必须没有store
   // 如果Comp的计算结果用于其他Comp中的循环范围，Access下标，则必须用as_param
   // 如果只是用于普通运算，可以用as_param或at，as_param会往domain/schedule中引入一个参数，应该没有什么好处
-  pub fn as_param(&self) -> Expr {
-    Expr(self.expr.0, Param(self.name().into()))
-  }
+  pub fn as_param(&self) -> Expr { Param(self.into()) }
 
   pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
     assert_eq!(idx.len() as u32, self.n_dim());
-    Expr(self.expr.0, Access(self.into(), idx.iter().map(|e| e.clone_expr()).collect()))
+    Access(self.into(), idx.iter().map(|e| e.clone_expr()).collect())
   }
 
   pub fn at_inline(&self, idx: &[impl IntoExpr]) -> Expr {
     assert_eq!(idx.len() as u32, self.n_dim());
     let mut expr = self.expr.clone();
-    expr.visit_mut(&mut |e| if let Iter(x) = &mut e.1 { *e = idx[*x as usize].clone_expr(); });
+    expr.visit_mut(&mut |e| if let Iter(_, x) = &e { *e = idx[*x as usize].clone_expr(); });
     expr
   }
 }
