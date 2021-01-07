@@ -29,6 +29,9 @@ pub struct Ctx(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct CtxRef(pub NonNull<c_void>);
 
+impl_try!(Ctx);
+impl_try!(CtxRef);
+
 impl Ctx {
   #[inline(always)]
   pub fn read(&self) -> Ctx { unsafe { ptr::read(self) } }
@@ -41,7 +44,7 @@ impl AsRef<CtxRef> for Ctx {
   fn as_ref(&self) -> &CtxRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Ctx {
+impl Deref for Ctx {
   type Target = CtxRef;
   #[inline(always)]
   fn deref(&self) -> &CtxRef { self.as_ref() }

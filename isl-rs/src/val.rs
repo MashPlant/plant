@@ -150,6 +150,9 @@ pub struct Val(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ValRef(pub NonNull<c_void>);
 
+impl_try!(Val);
+impl_try!(ValRef);
+
 impl Val {
   #[inline(always)]
   pub fn read(&self) -> Val { unsafe { ptr::read(self) } }
@@ -162,7 +165,7 @@ impl AsRef<ValRef> for Val {
   fn as_ref(&self) -> &ValRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Val {
+impl Deref for Val {
   type Target = ValRef;
   #[inline(always)]
   fn deref(&self) -> &ValRef { self.as_ref() }
@@ -181,6 +184,9 @@ pub struct ValList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ValListRef(pub NonNull<c_void>);
 
+impl_try!(ValList);
+impl_try!(ValListRef);
+
 impl ValList {
   #[inline(always)]
   pub fn read(&self) -> ValList { unsafe { ptr::read(self) } }
@@ -193,7 +199,7 @@ impl AsRef<ValListRef> for ValList {
   fn as_ref(&self) -> &ValListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for ValList {
+impl Deref for ValList {
   type Target = ValListRef;
   #[inline(always)]
   fn deref(&self) -> &ValListRef { self.as_ref() }
@@ -212,6 +218,9 @@ pub struct MultiVal(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiValRef(pub NonNull<c_void>);
 
+impl_try!(MultiVal);
+impl_try!(MultiValRef);
+
 impl MultiVal {
   #[inline(always)]
   pub fn read(&self) -> MultiVal { unsafe { ptr::read(self) } }
@@ -224,7 +233,7 @@ impl AsRef<MultiValRef> for MultiVal {
   fn as_ref(&self) -> &MultiValRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MultiVal {
+impl Deref for MultiVal {
   type Target = MultiValRef;
   #[inline(always)]
   fn deref(&self) -> &MultiValRef { self.as_ref() }
@@ -600,14 +609,14 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, multi2: MultiValRef) -> Option<bool> {
+  pub fn plain_is_equal(self, multi2: MultiValRef) -> Bool {
     unsafe {
       let ret = isl_multi_val_plain_is_equal(self.to(), multi2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_multi_val_involves_nan(self.to());
       (ret).to()
@@ -635,7 +644,7 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_multi_val_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -656,14 +665,14 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
-  pub fn range_is_wrapping(self) -> Option<bool> {
+  pub fn range_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_multi_val_range_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_multi_val_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -937,7 +946,7 @@ impl ValList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(Val) -> Option<Val>>(self, fn_: &mut F1) -> Option<ValList> {
-    unsafe extern "C" fn fn1<F: FnMut(Val) -> Option<Val>>(el: Val, user: *mut c_void) -> Option<Val> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Val) -> Option<Val>>(el: Val, user: *mut c_void) -> Option<Val> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_val_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -945,7 +954,7 @@ impl ValList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(ValRef, ValRef) -> c_int>(self, cmp: &mut F1) -> Option<ValList> {
-    unsafe extern "C" fn fn1<F: FnMut(ValRef, ValRef) -> c_int>(a: ValRef, b: ValRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(ValRef, ValRef) -> c_int>(a: ValRef, b: ValRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_val_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -983,17 +992,17 @@ impl ValListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Val) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Val) -> Option<()>>(el: Val, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(Val) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Val) -> Stat>(el: Val, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_val_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(ValRef, ValRef) -> Option<bool>, F2: FnMut(ValList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(ValRef, ValRef) -> Option<bool>>(a: ValRef, b: ValRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(ValList) -> Option<()>>(scc: ValList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(ValRef, ValRef) -> Bool, F2: FnMut(ValList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(ValRef, ValRef) -> Bool>(a: ValRef, b: ValRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(ValList) -> Stat>(scc: ValList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_val_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -1080,84 +1089,84 @@ impl ValRef {
     }
   }
   #[inline(always)]
-  pub fn is_zero(self) -> Option<bool> {
+  pub fn is_zero(self) -> Bool {
     unsafe {
       let ret = isl_val_is_zero(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_one(self) -> Option<bool> {
+  pub fn is_one(self) -> Bool {
     unsafe {
       let ret = isl_val_is_one(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_negone(self) -> Option<bool> {
+  pub fn is_negone(self) -> Bool {
     unsafe {
       let ret = isl_val_is_negone(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_nonneg(self) -> Option<bool> {
+  pub fn is_nonneg(self) -> Bool {
     unsafe {
       let ret = isl_val_is_nonneg(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_nonpos(self) -> Option<bool> {
+  pub fn is_nonpos(self) -> Bool {
     unsafe {
       let ret = isl_val_is_nonpos(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_pos(self) -> Option<bool> {
+  pub fn is_pos(self) -> Bool {
     unsafe {
       let ret = isl_val_is_pos(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_neg(self) -> Option<bool> {
+  pub fn is_neg(self) -> Bool {
     unsafe {
       let ret = isl_val_is_neg(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_int(self) -> Option<bool> {
+  pub fn is_int(self) -> Bool {
     unsafe {
       let ret = isl_val_is_int(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_rat(self) -> Option<bool> {
+  pub fn is_rat(self) -> Bool {
     unsafe {
       let ret = isl_val_is_rat(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_nan(self) -> Option<bool> {
+  pub fn is_nan(self) -> Bool {
     unsafe {
       let ret = isl_val_is_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_infty(self) -> Option<bool> {
+  pub fn is_infty(self) -> Bool {
     unsafe {
       let ret = isl_val_is_infty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_neginfty(self) -> Option<bool> {
+  pub fn is_neginfty(self) -> Bool {
     unsafe {
       let ret = isl_val_is_neginfty(self.to());
       (ret).to()
@@ -1171,56 +1180,56 @@ impl ValRef {
     }
   }
   #[inline(always)]
-  pub fn lt(self, v2: ValRef) -> Option<bool> {
+  pub fn lt(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_lt(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn le(self, v2: ValRef) -> Option<bool> {
+  pub fn le(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_le(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn gt(self, v2: ValRef) -> Option<bool> {
+  pub fn gt(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_gt(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn ge(self, v2: ValRef) -> Option<bool> {
+  pub fn ge(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_ge(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn eq(self, v2: ValRef) -> Option<bool> {
+  pub fn eq(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_eq(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn ne(self, v2: ValRef) -> Option<bool> {
+  pub fn ne(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_ne(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn abs_eq(self, v2: ValRef) -> Option<bool> {
+  pub fn abs_eq(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_abs_eq(self.to(), v2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_divisible_by(self, v2: ValRef) -> Option<bool> {
+  pub fn is_divisible_by(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_is_divisible_by(self.to(), v2.to());
       (ret).to()
@@ -1248,7 +1257,7 @@ impl Drop for MultiVal {
 
 impl fmt::Display for MultiValRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for MultiVal {
@@ -1266,7 +1275,7 @@ impl Drop for ValList {
 
 impl fmt::Display for ValRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Val {

@@ -897,7 +897,7 @@ impl BasicMapList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(BasicMap) -> Option<BasicMap>>(self, fn_: &mut F1) -> Option<BasicMapList> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Option<BasicMap>>(el: BasicMap, user: *mut c_void) -> Option<BasicMap> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Option<BasicMap>>(el: BasicMap, user: *mut c_void) -> Option<BasicMap> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_basic_map_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -905,7 +905,7 @@ impl BasicMapList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(BasicMapRef, BasicMapRef) -> c_int>(self, cmp: &mut F1) -> Option<BasicMapList> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicMapRef, BasicMapRef) -> c_int>(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(BasicMapRef, BasicMapRef) -> c_int>(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_basic_map_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -943,17 +943,17 @@ impl BasicMapListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(BasicMap) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Option<()>>(el: BasicMap, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(BasicMap) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Stat>(el: BasicMap, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_basic_map_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(BasicMapRef, BasicMapRef) -> Option<bool>, F2: FnMut(BasicMapList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicMapRef, BasicMapRef) -> Option<bool>>(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(BasicMapList) -> Option<()>>(scc: BasicMapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(BasicMapRef, BasicMapRef) -> Bool, F2: FnMut(BasicMapList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicMapRef, BasicMapRef) -> Bool>(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(BasicMapList) -> Stat>(scc: BasicMapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_basic_map_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -1054,7 +1054,7 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_basic_map_has_dim_id(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -1068,7 +1068,7 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn is_rational(self) -> Option<bool> {
+  pub fn is_rational(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_rational(self.to());
       (ret).to()
@@ -1096,14 +1096,14 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, bmap2: BasicMapRef) -> Option<bool> {
+  pub fn is_equal(self, bmap2: BasicMapRef) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_equal(self.to(), bmap2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_disjoint(self, bmap2: BasicMapRef) -> Option<bool> {
+  pub fn is_disjoint(self, bmap2: BasicMapRef) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_disjoint(self.to(), bmap2.to());
       (ret).to()
@@ -1124,84 +1124,84 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn image_is_bounded(self) -> Option<bool> {
+  pub fn image_is_bounded(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_image_is_bounded(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_universe(self) -> Option<bool> {
+  pub fn plain_is_universe(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_plain_is_universe(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_universe(self) -> Option<bool> {
+  pub fn is_universe(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_universe(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_empty(self) -> Option<bool> {
+  pub fn plain_is_empty(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_plain_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_subset(self, bmap2: BasicMapRef) -> Option<bool> {
+  pub fn is_subset(self, bmap2: BasicMapRef) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_subset(self.to(), bmap2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_strict_subset(self, bmap2: BasicMapRef) -> Option<bool> {
+  pub fn is_strict_subset(self, bmap2: BasicMapRef) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_strict_subset(self.to(), bmap2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_single_valued(self) -> Option<bool> {
+  pub fn is_single_valued(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_is_single_valued(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_zip(self) -> Option<bool> {
+  pub fn can_zip(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_can_zip(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_curry(self) -> Option<bool> {
+  pub fn can_curry(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_can_curry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_uncurry(self) -> Option<bool> {
+  pub fn can_uncurry(self) -> Bool {
     unsafe {
       let ret = isl_basic_map_can_uncurry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_basic_map_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -1263,7 +1263,7 @@ impl BasicSet {
 
 impl BasicSetRef {
   #[inline(always)]
-  pub fn is_wrapping(self) -> Option<bool> {
+  pub fn is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_wrapping(self.to());
       (ret).to()
@@ -2185,7 +2185,7 @@ impl MapList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(Map) -> Option<Map>>(self, fn_: &mut F1) -> Option<MapList> {
-    unsafe extern "C" fn fn1<F: FnMut(Map) -> Option<Map>>(el: Map, user: *mut c_void) -> Option<Map> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Map) -> Option<Map>>(el: Map, user: *mut c_void) -> Option<Map> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_map_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -2193,7 +2193,7 @@ impl MapList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(MapRef, MapRef) -> c_int>(self, cmp: &mut F1) -> Option<MapList> {
-    unsafe extern "C" fn fn1<F: FnMut(MapRef, MapRef) -> c_int>(a: MapRef, b: MapRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(MapRef, MapRef) -> c_int>(a: MapRef, b: MapRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_map_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -2231,17 +2231,17 @@ impl MapListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Map) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Map) -> Option<()>>(el: Map, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(Map) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Map) -> Stat>(el: Map, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_map_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(MapRef, MapRef) -> Option<bool>, F2: FnMut(MapList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(MapRef, MapRef) -> Option<bool>>(a: MapRef, b: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(MapList) -> Option<()>>(scc: MapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(MapRef, MapRef) -> Bool, F2: FnMut(MapList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(MapRef, MapRef) -> Bool>(a: MapRef, b: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(MapList) -> Stat>(scc: MapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_map_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -2300,7 +2300,7 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_name(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_name(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_map_has_tuple_name(self.to(), type_.to());
       (ret).to()
@@ -2314,7 +2314,7 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_map_has_dim_name(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -2328,7 +2328,7 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_map_has_dim_id(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -2342,7 +2342,7 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_map_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -2391,112 +2391,112 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn domain_is_wrapping(self) -> Option<bool> {
+  pub fn domain_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_map_domain_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn range_is_wrapping(self) -> Option<bool> {
+  pub fn range_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_map_range_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_product(self) -> Option<bool> {
+  pub fn is_product(self) -> Bool {
     unsafe {
       let ret = isl_map_is_product(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_empty(self) -> Option<bool> {
+  pub fn plain_is_empty(self) -> Bool {
     unsafe {
       let ret = isl_map_plain_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_universe(self) -> Option<bool> {
+  pub fn plain_is_universe(self) -> Bool {
     unsafe {
       let ret = isl_map_plain_is_universe(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_map_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_subset(self, map2: MapRef) -> Option<bool> {
+  pub fn is_subset(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_is_subset(self.to(), map2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_strict_subset(self, map2: MapRef) -> Option<bool> {
+  pub fn is_strict_subset(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_is_strict_subset(self.to(), map2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, map2: MapRef) -> Option<bool> {
+  pub fn is_equal(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_is_equal(self.to(), map2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_disjoint(self, map2: MapRef) -> Option<bool> {
+  pub fn is_disjoint(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_is_disjoint(self.to(), map2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_single_valued(self) -> Option<bool> {
+  pub fn plain_is_single_valued(self) -> Bool {
     unsafe {
       let ret = isl_map_plain_is_single_valued(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_single_valued(self) -> Option<bool> {
+  pub fn is_single_valued(self) -> Bool {
     unsafe {
       let ret = isl_map_is_single_valued(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_injective(self) -> Option<bool> {
+  pub fn plain_is_injective(self) -> Bool {
     unsafe {
       let ret = isl_map_plain_is_injective(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_injective(self) -> Option<bool> {
+  pub fn is_injective(self) -> Bool {
     unsafe {
       let ret = isl_map_is_injective(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_bijective(self) -> Option<bool> {
+  pub fn is_bijective(self) -> Bool {
     unsafe {
       let ret = isl_map_is_bijective(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_identity(self) -> Option<bool> {
+  pub fn is_identity(self) -> Bool {
     unsafe {
       let ret = isl_map_is_identity(self.to());
       (ret).to()
@@ -2510,42 +2510,42 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn has_equal_space(self, map2: MapRef) -> Option<bool> {
+  pub fn has_equal_space(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_has_equal_space(self.to(), map2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_zip(self) -> Option<bool> {
+  pub fn can_zip(self) -> Bool {
     unsafe {
       let ret = isl_map_can_zip(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_curry(self) -> Option<bool> {
+  pub fn can_curry(self) -> Bool {
     unsafe {
       let ret = isl_map_can_curry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_range_curry(self) -> Option<bool> {
+  pub fn can_range_curry(self) -> Bool {
     unsafe {
       let ret = isl_map_can_range_curry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_uncurry(self) -> Option<bool> {
+  pub fn can_uncurry(self) -> Bool {
     unsafe {
       let ret = isl_map_can_uncurry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_map_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -2566,7 +2566,7 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, map2: MapRef) -> Option<bool> {
+  pub fn plain_is_equal(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_plain_is_equal(self.to(), map2.to());
       (ret).to()
@@ -2587,8 +2587,8 @@ impl MapRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_basic_map<F1: FnMut(BasicMap) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Option<()>>(bmap: BasicMap, user: *mut c_void) -> Stat { (*(user as *mut F))(bmap.to()).to() }
+  pub fn foreach_basic_map<F1: FnMut(BasicMap) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Stat>(bmap: BasicMap, user: *mut c_void) -> Stat { (*(user as *mut F))(bmap.to()) }
     unsafe {
       let ret = isl_map_foreach_basic_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -2705,7 +2705,7 @@ impl Set {
 
 impl SetRef {
   #[inline(always)]
-  pub fn is_wrapping(self) -> Option<bool> {
+  pub fn is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_set_is_wrapping(self.to());
       (ret).to()
@@ -2873,7 +2873,7 @@ impl Drop for BasicMapList {
 
 impl fmt::Display for BasicMapRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for BasicMap {
@@ -2891,7 +2891,7 @@ impl Drop for MapList {
 
 impl fmt::Display for MapRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Map {

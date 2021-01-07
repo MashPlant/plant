@@ -11,6 +11,9 @@ pub struct MaybeIslId(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslIdRef(pub NonNull<c_void>);
 
+impl_try!(MaybeIslId);
+impl_try!(MaybeIslIdRef);
+
 impl MaybeIslId {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslId { unsafe { ptr::read(self) } }
@@ -23,7 +26,7 @@ impl AsRef<MaybeIslIdRef> for MaybeIslId {
   fn as_ref(&self) -> &MaybeIslIdRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MaybeIslId {
+impl Deref for MaybeIslId {
   type Target = MaybeIslIdRef;
   #[inline(always)]
   fn deref(&self) -> &MaybeIslIdRef { self.as_ref() }

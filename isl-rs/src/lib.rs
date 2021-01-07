@@ -1,5 +1,28 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_snake_case)]
+#![feature(try_trait)]
+#![allow(non_upper_case_globals, non_snake_case)]
+
+#[inline(never)]
+#[cold]
+#[track_caller]
+pub fn try_failed() -> ! { panic!("try failed") }
+
+#[macro_use]
+mod macros {
+  // 为一个非Option/Result类型实现Try，效果是在?失败时直接panic，即?相当于unwrap()
+  #[macro_export] macro_rules! impl_try {
+    ($ty: ty) => {
+      impl std::ops::Try for $ty {
+        type Ok = Self;
+        type Error = std::option::NoneError;
+        fn into_result(self) -> std::result::Result<Self::Ok, Self::Error> { Ok(self) }
+        #[inline(always)]
+        #[track_caller]
+        fn from_error(_: Self::Error) -> Self { try_failed() }
+        fn from_ok(v: Self::Ok) -> Self { v }
+      }
+    };
+  }
+}
 
 pub mod aff;
 pub mod aff_type;
@@ -82,27 +105,51 @@ pub use stream::*;
 pub use union_map::*;
 pub use union_map_type::*;
 pub use union_set::*;
-pub use val::*;
-pub use vec::*;
+// Vec和Val会引起名字冲突，默认不导出它们
+use val::*;
+use vec::*;
 pub use version::*;
 pub use vertices::*;
 
 impl Ctx {
   #[inline(always)]
-  pub fn new() -> Option<Ctx> { unsafe { isl_ctx_alloc() } }
+  pub fn new() -> Ctx { unsafe { isl_ctx_alloc()? } }
 }
 
+#[must_use]
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Error { None = 0, Abort, Alloc, Unknown, Internal, Invalid, Quota, Unsupported }
 
+#[must_use]
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Stat { Error = -1, Ok }
 
+impl Try for Stat {
+  type Ok = ();
+  type Error = NoneError;
+  fn into_result(self) -> Result<(), NoneError> { match self { Stat::Error => Err(NoneError), Stat::Ok => Ok(()) } }
+  #[inline(always)]
+  #[track_caller]
+  fn from_error(_: NoneError) -> Self { try_failed() }
+  fn from_ok(_: ()) -> Self { Stat::Ok }
+}
+
+#[must_use]
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Bool { Error = -1, False, True }
+
+impl Try for Bool {
+  type Ok = bool;
+  type Error = NoneError;
+  fn into_result(self) -> Result<bool, NoneError> { match self { Bool::Error => Err(NoneError), Bool::False => Ok(false), Bool::True => Ok(true) } }
+  #[inline(always)]
+  #[track_caller]
+  fn from_error(_: NoneError) -> Self { try_failed() }
+  fn from_ok(v: bool) -> Self { if v { Bool::True } else { Bool::False } }
+}
 
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -138,7 +185,7 @@ pub enum ScheduleNodeType { Error = -1, Band, Context, Domain, Expansion, Extens
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum TokenType { Error = -1, Unknown = 256, Value = 257, Ident, Ge, Le, Gt, Lt, Ne, EqEq, LexGe, LexLe, LexGt, LexLt, To, And, Or, Exists, Not, Def, Infty, Nan, Min, Max, Rat, True, False, Ceild, Floord, Mod, String, Map, Aff, Ceil, Floor, Implies, Last }
 
-use std::{os::raw::{c_int, c_uint, c_long, c_ulong, c_double, c_char, c_void}, ptr::{self, NonNull}, mem, fmt};
+use std::{os::raw::{c_int, c_uint, c_long, c_ulong, c_double, c_char, c_void}, ptr::{self, NonNull}, mem, fmt, ops::{Try, Deref}, option::NoneError};
 use libc::FILE;
 
 // a CStr/CString implementation with same layout as `*const c_char`, and use malloc/free to manage CString memory
@@ -172,7 +219,7 @@ impl AsRef<str> for CStr {
   fn as_ref(&self) -> &str { self.as_str() }
 }
 
-impl std::ops::Deref for CStr {
+impl Deref for CStr {
   type Target = str;
   #[inline(always)]
   fn deref(&self) -> &str { self.as_str() }
@@ -196,7 +243,7 @@ impl CString {
   pub unsafe fn from_ptr(ptr: *mut c_char) -> CString { CString(NonNull::new_unchecked(ptr)) }
 }
 
-impl std::ops::Deref for CString {
+impl Deref for CString {
   type Target = CStr;
   #[inline(always)]
   fn deref(&self) -> &CStr { unsafe { mem::transmute(self) } }
@@ -239,29 +286,9 @@ impl To<Option<CString>> for *mut c_char {
   unsafe fn to(self) -> Option<CString> { if self.is_null() { None } else { Some(CString::from_ptr(self)) } }
 }
 
-impl To<Option<bool>> for Bool {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<bool> { match self { Bool::Error => None, Bool::False => Some(false), Bool::True => Some(true) } }
-}
-
-impl To<Bool> for Option<bool> {
-  #[inline(always)]
-  unsafe fn to(self) -> Bool { match self { None => Bool::Error, Some(false) => Bool::False, Some(true) => Bool::True } }
-}
-
 impl To<Bool> for bool {
   #[inline(always)]
   unsafe fn to(self) -> Bool { if self { Bool::True } else { Bool::False } }
-}
-
-impl To<Option<()>> for Stat {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<()> { match self { Stat::Error => None, Stat::Ok => Some(()) } }
-}
-
-impl To<Stat> for Option<()> {
-  #[inline(always)]
-  unsafe fn to(self) -> Stat { match self { None => Stat::Error, Some(()) => Stat::Ok } }
 }
 
 impl To<()> for *mut c_void {
@@ -274,14 +301,24 @@ impl<T1: To<Option<U1>>, T2: To<Option<U2>>, U1, U2> To<Option<(U1, U2)>> for (T
   unsafe fn to(self) -> Option<(U1, U2)> { match (self.0.to(), self.1.to()) { (Some(a), Some(b)) => Some((a, b)), _ => None } }
 }
 
+impl<T2: To<Option<U2>>, U2> To<Option<(Bool, U2)>> for (Bool, T2) {
+  #[inline(always)]
+  unsafe fn to(self) -> Option<(Bool, U2)> { match self.1.to() { Some(b) => Some((self.0, b)), _ => None } }
+}
+
 impl<T1: To<Option<U1>>, T2: To<Option<U2>>, T3: To<Option<U3>>, U1, U2, U3> To<Option<(U1, U2, U3)>> for (T1, T2, T3) {
   #[inline(always)]
   unsafe fn to(self) -> Option<(U1, U2, U3)> { match (self.0.to(), self.1.to(), self.2.to()) { (Some(a), Some(b), Some(c)) => Some((a, b, c)), _ => None } }
 }
 
-impl<T1: To<Option<()>>, T2: To<Option<U2>>, T3: To<Option<U3>>, U2, U3> To<Option<(U2, U3)>> for (T1, T2, T3) {
+impl<T2: To<Option<U2>>, T3: To<Option<U3>>, U2, U3> To<Option<(Bool, U2, U3)>> for (Bool, T2, T3) {
   #[inline(always)]
-  unsafe fn to(self) -> Option<(U2, U3)> { match (self.0.to(), self.1.to(), self.2.to()) { (Some(_), Some(b), Some(c)) => Some((b, c)), _ => None } }
+  unsafe fn to(self) -> Option<(Bool, U2, U3)> { match (self.1.to(), self.2.to()) { (Some(b), Some(c)) => Some((self.0, b, c)), _ => None } }
+}
+
+impl<T2: To<Option<U2>>, T3: To<Option<U3>>, U2, U3> To<Option<(Stat, U2, U3)>> for (Stat, T2, T3) {
+  #[inline(always)]
+  unsafe fn to(self) -> Option<(Stat, U2, U3)> { match (self.1.to(), self.2.to()) { (Some(b), Some(c)) => Some((self.0, b, c)), _ => None } }
 }
 
 impl<T2: To<Option<U2>>, T3: To<Option<U3>>, T4: To<Option<U4>>, T5: To<Option<U5>>, U2, U3, U4, U5> To<Option<(c_int, U2, U3, U4, U5)>> for (c_int, T2, T3, T4, T5) {

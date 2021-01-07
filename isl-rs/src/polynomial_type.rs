@@ -11,6 +11,9 @@ pub struct Qpolynomial(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct QpolynomialRef(pub NonNull<c_void>);
 
+impl_try!(Qpolynomial);
+impl_try!(QpolynomialRef);
+
 impl Qpolynomial {
   #[inline(always)]
   pub fn read(&self) -> Qpolynomial { unsafe { ptr::read(self) } }
@@ -23,7 +26,7 @@ impl AsRef<QpolynomialRef> for Qpolynomial {
   fn as_ref(&self) -> &QpolynomialRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Qpolynomial {
+impl Deref for Qpolynomial {
   type Target = QpolynomialRef;
   #[inline(always)]
   fn deref(&self) -> &QpolynomialRef { self.as_ref() }
@@ -42,6 +45,9 @@ pub struct Term(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct TermRef(pub NonNull<c_void>);
 
+impl_try!(Term);
+impl_try!(TermRef);
+
 impl Term {
   #[inline(always)]
   pub fn read(&self) -> Term { unsafe { ptr::read(self) } }
@@ -54,7 +60,7 @@ impl AsRef<TermRef> for Term {
   fn as_ref(&self) -> &TermRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Term {
+impl Deref for Term {
   type Target = TermRef;
   #[inline(always)]
   fn deref(&self) -> &TermRef { self.as_ref() }
@@ -73,6 +79,9 @@ pub struct PwQpolynomial(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwQpolynomialRef(pub NonNull<c_void>);
 
+impl_try!(PwQpolynomial);
+impl_try!(PwQpolynomialRef);
+
 impl PwQpolynomial {
   #[inline(always)]
   pub fn read(&self) -> PwQpolynomial { unsafe { ptr::read(self) } }
@@ -85,7 +94,7 @@ impl AsRef<PwQpolynomialRef> for PwQpolynomial {
   fn as_ref(&self) -> &PwQpolynomialRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for PwQpolynomial {
+impl Deref for PwQpolynomial {
   type Target = PwQpolynomialRef;
   #[inline(always)]
   fn deref(&self) -> &PwQpolynomialRef { self.as_ref() }
@@ -104,6 +113,9 @@ pub struct QpolynomialFold(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct QpolynomialFoldRef(pub NonNull<c_void>);
 
+impl_try!(QpolynomialFold);
+impl_try!(QpolynomialFoldRef);
+
 impl QpolynomialFold {
   #[inline(always)]
   pub fn read(&self) -> QpolynomialFold { unsafe { ptr::read(self) } }
@@ -116,7 +128,7 @@ impl AsRef<QpolynomialFoldRef> for QpolynomialFold {
   fn as_ref(&self) -> &QpolynomialFoldRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for QpolynomialFold {
+impl Deref for QpolynomialFold {
   type Target = QpolynomialFoldRef;
   #[inline(always)]
   fn deref(&self) -> &QpolynomialFoldRef { self.as_ref() }
@@ -135,6 +147,9 @@ pub struct PwQpolynomialFold(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwQpolynomialFoldRef(pub NonNull<c_void>);
 
+impl_try!(PwQpolynomialFold);
+impl_try!(PwQpolynomialFoldRef);
+
 impl PwQpolynomialFold {
   #[inline(always)]
   pub fn read(&self) -> PwQpolynomialFold { unsafe { ptr::read(self) } }
@@ -147,7 +162,7 @@ impl AsRef<PwQpolynomialFoldRef> for PwQpolynomialFold {
   fn as_ref(&self) -> &PwQpolynomialFoldRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for PwQpolynomialFold {
+impl Deref for PwQpolynomialFold {
   type Target = PwQpolynomialFoldRef;
   #[inline(always)]
   fn deref(&self) -> &PwQpolynomialFoldRef { self.as_ref() }
@@ -166,6 +181,9 @@ pub struct UnionPwQpolynomial(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwQpolynomialRef(pub NonNull<c_void>);
 
+impl_try!(UnionPwQpolynomial);
+impl_try!(UnionPwQpolynomialRef);
+
 impl UnionPwQpolynomial {
   #[inline(always)]
   pub fn read(&self) -> UnionPwQpolynomial { unsafe { ptr::read(self) } }
@@ -178,7 +196,7 @@ impl AsRef<UnionPwQpolynomialRef> for UnionPwQpolynomial {
   fn as_ref(&self) -> &UnionPwQpolynomialRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionPwQpolynomial {
+impl Deref for UnionPwQpolynomial {
   type Target = UnionPwQpolynomialRef;
   #[inline(always)]
   fn deref(&self) -> &UnionPwQpolynomialRef { self.as_ref() }
@@ -197,6 +215,9 @@ pub struct UnionPwQpolynomialFold(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwQpolynomialFoldRef(pub NonNull<c_void>);
 
+impl_try!(UnionPwQpolynomialFold);
+impl_try!(UnionPwQpolynomialFoldRef);
+
 impl UnionPwQpolynomialFold {
   #[inline(always)]
   pub fn read(&self) -> UnionPwQpolynomialFold { unsafe { ptr::read(self) } }
@@ -209,7 +230,7 @@ impl AsRef<UnionPwQpolynomialFoldRef> for UnionPwQpolynomialFold {
   fn as_ref(&self) -> &UnionPwQpolynomialFoldRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionPwQpolynomialFold {
+impl Deref for UnionPwQpolynomialFold {
   type Target = UnionPwQpolynomialFoldRef;
   #[inline(always)]
   fn deref(&self) -> &UnionPwQpolynomialFoldRef { self.as_ref() }

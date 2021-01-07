@@ -52,6 +52,9 @@ pub struct AccessLevelBefore(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AccessLevelBeforeRef(pub NonNull<c_void>);
 
+impl_try!(AccessLevelBefore);
+impl_try!(AccessLevelBeforeRef);
+
 impl AccessLevelBefore {
   #[inline(always)]
   pub fn read(&self) -> AccessLevelBefore { unsafe { ptr::read(self) } }
@@ -64,7 +67,7 @@ impl AsRef<AccessLevelBeforeRef> for AccessLevelBefore {
   fn as_ref(&self) -> &AccessLevelBeforeRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AccessLevelBefore {
+impl Deref for AccessLevelBefore {
   type Target = AccessLevelBeforeRef;
   #[inline(always)]
   fn deref(&self) -> &AccessLevelBeforeRef { self.as_ref() }
@@ -83,6 +86,9 @@ pub struct Restriction(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct RestrictionRef(pub NonNull<c_void>);
 
+impl_try!(Restriction);
+impl_try!(RestrictionRef);
+
 impl Restriction {
   #[inline(always)]
   pub fn read(&self) -> Restriction { unsafe { ptr::read(self) } }
@@ -95,7 +101,7 @@ impl AsRef<RestrictionRef> for Restriction {
   fn as_ref(&self) -> &RestrictionRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Restriction {
+impl Deref for Restriction {
   type Target = RestrictionRef;
   #[inline(always)]
   fn deref(&self) -> &RestrictionRef { self.as_ref() }
@@ -114,6 +120,9 @@ pub struct AccessRestrict(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AccessRestrictRef(pub NonNull<c_void>);
 
+impl_try!(AccessRestrict);
+impl_try!(AccessRestrictRef);
+
 impl AccessRestrict {
   #[inline(always)]
   pub fn read(&self) -> AccessRestrict { unsafe { ptr::read(self) } }
@@ -126,7 +135,7 @@ impl AsRef<AccessRestrictRef> for AccessRestrict {
   fn as_ref(&self) -> &AccessRestrictRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AccessRestrict {
+impl Deref for AccessRestrict {
   type Target = AccessRestrictRef;
   #[inline(always)]
   fn deref(&self) -> &AccessRestrictRef { self.as_ref() }
@@ -145,6 +154,9 @@ pub struct AccessInfo(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AccessInfoRef(pub NonNull<c_void>);
 
+impl_try!(AccessInfo);
+impl_try!(AccessInfoRef);
+
 impl AccessInfo {
   #[inline(always)]
   pub fn read(&self) -> AccessInfo { unsafe { ptr::read(self) } }
@@ -157,7 +169,7 @@ impl AsRef<AccessInfoRef> for AccessInfo {
   fn as_ref(&self) -> &AccessInfoRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AccessInfo {
+impl Deref for AccessInfo {
   type Target = AccessInfoRef;
   #[inline(always)]
   fn deref(&self) -> &AccessInfoRef { self.as_ref() }
@@ -176,6 +188,9 @@ pub struct Flow(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct FlowRef(pub NonNull<c_void>);
 
+impl_try!(Flow);
+impl_try!(FlowRef);
+
 impl Flow {
   #[inline(always)]
   pub fn read(&self) -> Flow { unsafe { ptr::read(self) } }
@@ -188,7 +203,7 @@ impl AsRef<FlowRef> for Flow {
   fn as_ref(&self) -> &FlowRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Flow {
+impl Deref for Flow {
   type Target = FlowRef;
   #[inline(always)]
   fn deref(&self) -> &FlowRef { self.as_ref() }
@@ -207,6 +222,9 @@ pub struct UnionAccessInfo(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionAccessInfoRef(pub NonNull<c_void>);
 
+impl_try!(UnionAccessInfo);
+impl_try!(UnionAccessInfoRef);
+
 impl UnionAccessInfo {
   #[inline(always)]
   pub fn read(&self) -> UnionAccessInfo { unsafe { ptr::read(self) } }
@@ -219,7 +237,7 @@ impl AsRef<UnionAccessInfoRef> for UnionAccessInfo {
   fn as_ref(&self) -> &UnionAccessInfoRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionAccessInfo {
+impl Deref for UnionAccessInfo {
   type Target = UnionAccessInfoRef;
   #[inline(always)]
   fn deref(&self) -> &UnionAccessInfoRef { self.as_ref() }
@@ -238,6 +256,9 @@ pub struct UnionFlow(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionFlowRef(pub NonNull<c_void>);
 
+impl_try!(UnionFlow);
+impl_try!(UnionFlowRef);
+
 impl UnionFlow {
   #[inline(always)]
   pub fn read(&self) -> UnionFlow { unsafe { ptr::read(self) } }
@@ -250,7 +271,7 @@ impl AsRef<UnionFlowRef> for UnionFlow {
   fn as_ref(&self) -> &UnionFlowRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionFlow {
+impl Deref for UnionFlow {
   type Target = UnionFlowRef;
   #[inline(always)]
   fn deref(&self) -> &UnionFlowRef { self.as_ref() }
@@ -264,7 +285,7 @@ impl To<Option<UnionFlow>> for *mut c_void {
 impl AccessInfo {
   #[inline(always)]
   pub fn set_restrict<F1: FnMut(MapRef, SetRef, *mut c_void) -> Option<Restriction>>(self, fn_: &mut F1) -> Option<AccessInfo> {
-    unsafe extern "C" fn fn1<F: FnMut(MapRef, SetRef, *mut c_void) -> Option<Restriction>>(source_map: MapRef, sink: SetRef, source_user: *mut c_void, user: *mut c_void) -> Option<Restriction> { (*(user as *mut F))(source_map.to(), sink.to(), source_user.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(MapRef, SetRef, *mut c_void) -> Option<Restriction>>(source_map: MapRef, sink: SetRef, source_user: *mut c_void, user: *mut c_void) -> Option<Restriction> { (*(user as *mut F))(source_map.to(), sink.to(), source_user.to()) }
     unsafe {
       let ret = isl_access_info_set_restrict(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -325,8 +346,8 @@ impl Flow {
 
 impl FlowRef {
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Map, c_int, *mut c_void) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Map, c_int, *mut c_void) -> Option<()>>(dep: Map, must: c_int, dep_user: *mut c_void, user: *mut c_void) -> Stat { (*(user as *mut F))(dep.to(), must.to(), dep_user.to()).to() }
+  pub fn foreach<F1: FnMut(Map, c_int, *mut c_void) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Map, c_int, *mut c_void) -> Stat>(dep: Map, must: c_int, dep_user: *mut c_void, user: *mut c_void) -> Stat { (*(user as *mut F))(dep.to(), must.to(), dep_user.to()) }
     unsafe {
       let ret = isl_flow_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -617,7 +638,7 @@ impl Drop for UnionAccessInfo {
 
 impl fmt::Display for UnionAccessInfoRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionAccessInfo {
@@ -631,7 +652,7 @@ impl Drop for UnionFlow {
 
 impl fmt::Display for UnionFlowRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionFlow {

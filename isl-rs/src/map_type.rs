@@ -47,6 +47,9 @@ pub struct BasicMap(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicMapRef(pub NonNull<c_void>);
 
+impl_try!(BasicMap);
+impl_try!(BasicMapRef);
+
 impl BasicMap {
   #[inline(always)]
   pub fn read(&self) -> BasicMap { unsafe { ptr::read(self) } }
@@ -59,7 +62,7 @@ impl AsRef<BasicMapRef> for BasicMap {
   fn as_ref(&self) -> &BasicMapRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for BasicMap {
+impl Deref for BasicMap {
   type Target = BasicMapRef;
   #[inline(always)]
   fn deref(&self) -> &BasicMapRef { self.as_ref() }
@@ -78,6 +81,9 @@ pub struct BasicMapList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicMapListRef(pub NonNull<c_void>);
 
+impl_try!(BasicMapList);
+impl_try!(BasicMapListRef);
+
 impl BasicMapList {
   #[inline(always)]
   pub fn read(&self) -> BasicMapList { unsafe { ptr::read(self) } }
@@ -90,7 +96,7 @@ impl AsRef<BasicMapListRef> for BasicMapList {
   fn as_ref(&self) -> &BasicMapListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for BasicMapList {
+impl Deref for BasicMapList {
   type Target = BasicMapListRef;
   #[inline(always)]
   fn deref(&self) -> &BasicMapListRef { self.as_ref() }
@@ -109,6 +115,9 @@ pub struct Map(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MapRef(pub NonNull<c_void>);
 
+impl_try!(Map);
+impl_try!(MapRef);
+
 impl Map {
   #[inline(always)]
   pub fn read(&self) -> Map { unsafe { ptr::read(self) } }
@@ -121,7 +130,7 @@ impl AsRef<MapRef> for Map {
   fn as_ref(&self) -> &MapRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Map {
+impl Deref for Map {
   type Target = MapRef;
   #[inline(always)]
   fn deref(&self) -> &MapRef { self.as_ref() }
@@ -140,6 +149,9 @@ pub struct MapList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MapListRef(pub NonNull<c_void>);
 
+impl_try!(MapList);
+impl_try!(MapListRef);
+
 impl MapList {
   #[inline(always)]
   pub fn read(&self) -> MapList { unsafe { ptr::read(self) } }
@@ -152,7 +164,7 @@ impl AsRef<MapListRef> for MapList {
   fn as_ref(&self) -> &MapListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MapList {
+impl Deref for MapList {
   type Target = MapListRef;
   #[inline(always)]
   fn deref(&self) -> &MapListRef { self.as_ref() }
@@ -171,6 +183,9 @@ pub struct BasicSet(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicSetRef(pub NonNull<c_void>);
 
+impl_try!(BasicSet);
+impl_try!(BasicSetRef);
+
 impl BasicSet {
   #[inline(always)]
   pub fn read(&self) -> BasicSet { unsafe { ptr::read(self) } }
@@ -183,7 +198,7 @@ impl AsRef<BasicSetRef> for BasicSet {
   fn as_ref(&self) -> &BasicSetRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for BasicSet {
+impl Deref for BasicSet {
   type Target = BasicSetRef;
   #[inline(always)]
   fn deref(&self) -> &BasicSetRef { self.as_ref() }
@@ -202,6 +217,9 @@ pub struct BasicSetList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct BasicSetListRef(pub NonNull<c_void>);
 
+impl_try!(BasicSetList);
+impl_try!(BasicSetListRef);
+
 impl BasicSetList {
   #[inline(always)]
   pub fn read(&self) -> BasicSetList { unsafe { ptr::read(self) } }
@@ -214,7 +232,7 @@ impl AsRef<BasicSetListRef> for BasicSetList {
   fn as_ref(&self) -> &BasicSetListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for BasicSetList {
+impl Deref for BasicSetList {
   type Target = BasicSetListRef;
   #[inline(always)]
   fn deref(&self) -> &BasicSetListRef { self.as_ref() }
@@ -233,6 +251,9 @@ pub struct Set(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct SetRef(pub NonNull<c_void>);
 
+impl_try!(Set);
+impl_try!(SetRef);
+
 impl Set {
   #[inline(always)]
   pub fn read(&self) -> Set { unsafe { ptr::read(self) } }
@@ -245,7 +266,7 @@ impl AsRef<SetRef> for Set {
   fn as_ref(&self) -> &SetRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Set {
+impl Deref for Set {
   type Target = SetRef;
   #[inline(always)]
   fn deref(&self) -> &SetRef { self.as_ref() }
@@ -264,6 +285,9 @@ pub struct SetList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct SetListRef(pub NonNull<c_void>);
 
+impl_try!(SetList);
+impl_try!(SetListRef);
+
 impl SetList {
   #[inline(always)]
   pub fn read(&self) -> SetList { unsafe { ptr::read(self) } }
@@ -276,7 +300,7 @@ impl AsRef<SetListRef> for SetList {
   fn as_ref(&self) -> &SetListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for SetList {
+impl Deref for SetList {
   type Target = SetListRef;
   #[inline(always)]
   fn deref(&self) -> &SetListRef { self.as_ref() }
@@ -342,7 +366,7 @@ impl BasicSetList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(BasicSet) -> Option<BasicSet>>(self, fn_: &mut F1) -> Option<BasicSetList> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicSet) -> Option<BasicSet>>(el: BasicSet, user: *mut c_void) -> Option<BasicSet> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(BasicSet) -> Option<BasicSet>>(el: BasicSet, user: *mut c_void) -> Option<BasicSet> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_basic_set_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -350,7 +374,7 @@ impl BasicSetList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(BasicSetRef, BasicSetRef) -> c_int>(self, cmp: &mut F1) -> Option<BasicSetList> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicSetRef, BasicSetRef) -> c_int>(a: BasicSetRef, b: BasicSetRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(BasicSetRef, BasicSetRef) -> c_int>(a: BasicSetRef, b: BasicSetRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_basic_set_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -388,17 +412,17 @@ impl BasicSetListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(BasicSet) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicSet) -> Option<()>>(el: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(BasicSet) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicSet) -> Stat>(el: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_basic_set_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(BasicSetRef, BasicSetRef) -> Option<bool>, F2: FnMut(BasicSetList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicSetRef, BasicSetRef) -> Option<bool>>(a: BasicSetRef, b: BasicSetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(BasicSetList) -> Option<()>>(scc: BasicSetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(BasicSetRef, BasicSetRef) -> Bool, F2: FnMut(BasicSetList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicSetRef, BasicSetRef) -> Bool>(a: BasicSetRef, b: BasicSetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(BasicSetList) -> Stat>(scc: BasicSetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_basic_set_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -502,7 +526,7 @@ impl SetList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(Set) -> Option<Set>>(self, fn_: &mut F1) -> Option<SetList> {
-    unsafe extern "C" fn fn1<F: FnMut(Set) -> Option<Set>>(el: Set, user: *mut c_void) -> Option<Set> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Set) -> Option<Set>>(el: Set, user: *mut c_void) -> Option<Set> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_set_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -510,7 +534,7 @@ impl SetList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(SetRef, SetRef) -> c_int>(self, cmp: &mut F1) -> Option<SetList> {
-    unsafe extern "C" fn fn1<F: FnMut(SetRef, SetRef) -> c_int>(a: SetRef, b: SetRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(SetRef, SetRef) -> c_int>(a: SetRef, b: SetRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_set_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -548,17 +572,17 @@ impl SetListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Set) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set) -> Option<()>>(el: Set, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(Set) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set) -> Stat>(el: Set, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_set_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(SetRef, SetRef) -> Option<bool>, F2: FnMut(SetList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(SetRef, SetRef) -> Option<bool>>(a: SetRef, b: SetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(SetList) -> Option<()>>(scc: SetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(SetRef, SetRef) -> Bool, F2: FnMut(SetList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(SetRef, SetRef) -> Bool>(a: SetRef, b: SetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(SetList) -> Stat>(scc: SetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_set_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()

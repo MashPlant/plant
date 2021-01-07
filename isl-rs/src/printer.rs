@@ -237,7 +237,7 @@ impl PrinterRef {
     }
   }
   #[inline(always)]
-  pub fn has_note(self, id: IdRef) -> Option<bool> {
+  pub fn has_note(self, id: IdRef) -> Bool {
     unsafe {
       let ret = isl_printer_has_note(self.to(), id.to());
       (ret).to()

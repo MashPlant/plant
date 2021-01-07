@@ -1,4 +1,4 @@
-#![feature(box_syntax, box_patterns)]
+#![feature(box_syntax, box_patterns, try_trait)]
 
 #[macro_use]
 extern crate log;
@@ -16,16 +16,14 @@ pub use func::*;
 pub use fmt::*;
 
 use ptr::*;
-use isl::cstr;
+use isl::*;
+use std::fmt::{*, Result as FmtResult};
 pub use expr::{Type::*, Expr::*};
 pub use comp::DimTag::*;
 pub use buf::BufKind::*;
 
-use std::hash::BuildHasherDefault;
-use ahash::AHasher;
-
-pub type HashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<AHasher>>;
-pub type HashSet<K> = std::collections::HashSet<K, BuildHasherDefault<AHasher>>;
+pub type HashMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<ahash::AHasher>>;
+pub type HashSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<ahash::AHasher>>;
 
 pub fn init_log() {
   env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
@@ -34,5 +32,10 @@ pub fn init_log() {
       writeln!(buf, "{}:{}:{}: {}", record.level(), record.file().unwrap(), record.line().unwrap(), record.args())
     }).init();
 }
+
+// Unit与()完全一样，但是没法为()实现Try，所以定义一个新类型来实现Try
+#[derive(Copy, Clone)]
+pub struct Unit;
+impl_try!(Unit);
 
 pub enum Backend { C, CUDA }

@@ -616,8 +616,8 @@ impl UnionMap {
     }
   }
   #[inline(always)]
-  pub fn remove_map_if<F1: FnMut(MapRef) -> Option<bool>>(self, fn_: &mut F1) -> Option<UnionMap> {
-    unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Option<bool>>(map: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(map.to()).to() }
+  pub fn remove_map_if<F1: FnMut(MapRef) -> Bool>(self, fn_: &mut F1) -> Option<UnionMap> {
+    unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Bool>(map: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(map.to()) }
     unsafe {
       let ret = isl_union_map_remove_map_if(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -803,7 +803,7 @@ impl UnionMapList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(UnionMap) -> Option<UnionMap>>(self, fn_: &mut F1) -> Option<UnionMapList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionMap) -> Option<UnionMap>>(el: UnionMap, user: *mut c_void) -> Option<UnionMap> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionMap) -> Option<UnionMap>>(el: UnionMap, user: *mut c_void) -> Option<UnionMap> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_map_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -811,7 +811,7 @@ impl UnionMapList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(UnionMapRef, UnionMapRef) -> c_int>(self, cmp: &mut F1) -> Option<UnionMapList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionMapRef, UnionMapRef) -> c_int>(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionMapRef, UnionMapRef) -> c_int>(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_union_map_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -849,17 +849,17 @@ impl UnionMapListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(UnionMap) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionMap) -> Option<()>>(el: UnionMap, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(UnionMap) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionMap) -> Stat>(el: UnionMap, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_map_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(UnionMapRef, UnionMapRef) -> Option<bool>, F2: FnMut(UnionMapList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionMapRef, UnionMapRef) -> Option<bool>>(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(UnionMapList) -> Option<()>>(scc: UnionMapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(UnionMapRef, UnionMapRef) -> Bool, F2: FnMut(UnionMapList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionMapRef, UnionMapRef) -> Bool>(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(UnionMapList) -> Stat>(scc: UnionMapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_union_map_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -883,7 +883,7 @@ impl UnionMapRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_union_map_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -925,77 +925,77 @@ impl UnionMapRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_empty(self) -> Option<bool> {
+  pub fn plain_is_empty(self) -> Bool {
     unsafe {
       let ret = isl_union_map_plain_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_union_map_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_single_valued(self) -> Option<bool> {
+  pub fn is_single_valued(self) -> Bool {
     unsafe {
       let ret = isl_union_map_is_single_valued(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_injective(self) -> Option<bool> {
+  pub fn plain_is_injective(self) -> Bool {
     unsafe {
       let ret = isl_union_map_plain_is_injective(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_injective(self) -> Option<bool> {
+  pub fn is_injective(self) -> Bool {
     unsafe {
       let ret = isl_union_map_is_injective(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_bijective(self) -> Option<bool> {
+  pub fn is_bijective(self) -> Bool {
     unsafe {
       let ret = isl_union_map_is_bijective(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_identity(self) -> Option<bool> {
+  pub fn is_identity(self) -> Bool {
     unsafe {
       let ret = isl_union_map_is_identity(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_subset(self, umap2: UnionMapRef) -> Option<bool> {
+  pub fn is_subset(self, umap2: UnionMapRef) -> Bool {
     unsafe {
       let ret = isl_union_map_is_subset(self.to(), umap2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, umap2: UnionMapRef) -> Option<bool> {
+  pub fn is_equal(self, umap2: UnionMapRef) -> Bool {
     unsafe {
       let ret = isl_union_map_is_equal(self.to(), umap2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_disjoint(self, umap2: UnionMapRef) -> Option<bool> {
+  pub fn is_disjoint(self, umap2: UnionMapRef) -> Bool {
     unsafe {
       let ret = isl_union_map_is_disjoint(self.to(), umap2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_strict_subset(self, umap2: UnionMapRef) -> Option<bool> {
+  pub fn is_strict_subset(self, umap2: UnionMapRef) -> Bool {
     unsafe {
       let ret = isl_union_map_is_strict_subset(self.to(), umap2.to());
       (ret).to()
@@ -1016,23 +1016,23 @@ impl UnionMapRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_map<F1: FnMut(Map) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Map) -> Option<()>>(map: Map, user: *mut c_void) -> Stat { (*(user as *mut F))(map.to()).to() }
+  pub fn foreach_map<F1: FnMut(Map) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Map) -> Stat>(map: Map, user: *mut c_void) -> Stat { (*(user as *mut F))(map.to()) }
     unsafe {
       let ret = isl_union_map_foreach_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn every_map<F1: FnMut(MapRef) -> Option<bool>>(self, test: &mut F1) -> Option<bool> {
-    unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Option<bool>>(map: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(map.to()).to() }
+  pub fn every_map<F1: FnMut(MapRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Bool>(map: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(map.to()) }
     unsafe {
       let ret = isl_union_map_every_map(self.to(), fn1::<F1>, test as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn contains(self, space: SpaceRef) -> Option<bool> {
+  pub fn contains(self, space: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_union_map_contains(self.to(), space.to());
       (ret).to()
@@ -1123,7 +1123,7 @@ impl Drop for UnionMapList {
 
 impl fmt::Display for UnionMapRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionMap {

@@ -309,7 +309,7 @@ impl AstExprRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, expr2: AstExprRef) -> Option<bool> {
+  pub fn is_equal(self, expr2: AstExprRef) -> Bool {
     unsafe {
       let ret = isl_ast_expr_is_equal(self.to(), expr2.to());
       (ret).to()
@@ -337,8 +337,8 @@ impl AstExprRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_ast_op_type<F1: FnMut(AstOpType) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstOpType) -> Option<()>>(type_: AstOpType, user: *mut c_void) -> Stat { (*(user as *mut F))(type_.to()).to() }
+  pub fn foreach_ast_op_type<F1: FnMut(AstOpType) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstOpType) -> Stat>(type_: AstOpType, user: *mut c_void) -> Stat { (*(user as *mut F))(type_.to()) }
     unsafe {
       let ret = isl_ast_expr_foreach_ast_op_type(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -435,7 +435,7 @@ impl AstNodeRef {
     }
   }
   #[inline(always)]
-  pub fn for_is_degenerate(self) -> Option<bool> {
+  pub fn for_is_degenerate(self) -> Bool {
     unsafe {
       let ret = isl_ast_node_for_is_degenerate(self.to());
       (ret).to()
@@ -456,7 +456,7 @@ impl AstNodeRef {
     }
   }
   #[inline(always)]
-  pub fn if_has_else(self) -> Option<bool> {
+  pub fn if_has_else(self) -> Bool {
     unsafe {
       let ret = isl_ast_node_if_has_else(self.to());
       (ret).to()
@@ -498,8 +498,8 @@ impl AstNodeRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_descendant_top_down<F1: FnMut(AstNodeRef) -> Option<bool>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNodeRef) -> Option<bool>>(node: AstNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()).to() }
+  pub fn foreach_descendant_top_down<F1: FnMut(AstNodeRef) -> Bool>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstNodeRef) -> Bool>(node: AstNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_ast_node_foreach_descendant_top_down(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -520,8 +520,8 @@ impl AstNodeRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_ast_op_type<F1: FnMut(AstOpType) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstOpType) -> Option<()>>(type_: AstOpType, user: *mut c_void) -> Stat { (*(user as *mut F))(type_.to()).to() }
+  pub fn foreach_ast_op_type<F1: FnMut(AstOpType) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstOpType) -> Stat>(type_: AstOpType, user: *mut c_void) -> Stat { (*(user as *mut F))(type_.to()) }
     unsafe {
       let ret = isl_ast_node_foreach_ast_op_type(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -574,7 +574,7 @@ impl AstPrintOptions {
   }
   #[inline(always)]
   pub fn set_print_user<F1: FnMut(Printer, AstPrintOptions, AstNodeRef) -> Option<Printer>>(self, print_user: &mut F1) -> Option<AstPrintOptions> {
-    unsafe extern "C" fn fn1<F: FnMut(Printer, AstPrintOptions, AstNodeRef) -> Option<Printer>>(p: Printer, options: AstPrintOptions, node: AstNodeRef, user: *mut c_void) -> Option<Printer> { (*(user as *mut F))(p.to(), options.to(), node.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Printer, AstPrintOptions, AstNodeRef) -> Option<Printer>>(p: Printer, options: AstPrintOptions, node: AstNodeRef, user: *mut c_void) -> Option<Printer> { (*(user as *mut F))(p.to(), options.to(), node.to()) }
     unsafe {
       let ret = isl_ast_print_options_set_print_user(self.to(), fn1::<F1>, print_user as *mut _ as _);
       (ret).to()
@@ -582,7 +582,7 @@ impl AstPrintOptions {
   }
   #[inline(always)]
   pub fn set_print_for<F1: FnMut(Printer, AstPrintOptions, AstNodeRef) -> Option<Printer>>(self, print_for: &mut F1) -> Option<AstPrintOptions> {
-    unsafe extern "C" fn fn1<F: FnMut(Printer, AstPrintOptions, AstNodeRef) -> Option<Printer>>(p: Printer, options: AstPrintOptions, node: AstNodeRef, user: *mut c_void) -> Option<Printer> { (*(user as *mut F))(p.to(), options.to(), node.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Printer, AstPrintOptions, AstNodeRef) -> Option<Printer>>(p: Printer, options: AstPrintOptions, node: AstNodeRef, user: *mut c_void) -> Option<Printer> { (*(user as *mut F))(p.to(), options.to(), node.to()) }
     unsafe {
       let ret = isl_ast_print_options_set_print_for(self.to(), fn1::<F1>, print_for as *mut _ as _);
       (ret).to()
@@ -609,7 +609,7 @@ impl AstPrintOptionsRef {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn options_set_ast_iterator_type(self, val: Option<CStr>) -> Option<()> {
+  pub fn options_set_ast_iterator_type(self, val: Option<CStr>) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_iterator_type(self.to(), val.to());
       (ret).to()
@@ -623,7 +623,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_always_print_block(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_always_print_block(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_always_print_block(self.to(), val.to());
       (ret).to()
@@ -644,7 +644,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_print_macro_once(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_print_macro_once(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_print_macro_once(self.to(), val.to());
       (ret).to()
@@ -709,7 +709,7 @@ impl Drop for AstExpr {
 
 impl fmt::Display for AstExprRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for AstExpr {
@@ -723,7 +723,7 @@ impl Drop for AstNode {
 
 impl fmt::Display for AstNodeRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for AstNode {

@@ -981,7 +981,7 @@ impl AffRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_aff_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -1051,7 +1051,7 @@ impl AffRef {
     }
   }
   #[inline(always)]
-  pub fn is_cst(self) -> Option<bool> {
+  pub fn is_cst(self) -> Bool {
     unsafe {
       let ret = isl_aff_is_cst(self.to());
       (ret).to()
@@ -1065,21 +1065,21 @@ impl AffRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, aff2: AffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, aff2: AffRef) -> Bool {
     unsafe {
       let ret = isl_aff_plain_is_equal(self.to(), aff2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_zero(self) -> Option<bool> {
+  pub fn plain_is_zero(self) -> Bool {
     unsafe {
       let ret = isl_aff_plain_is_zero(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_nan(self) -> Option<bool> {
+  pub fn is_nan(self) -> Bool {
     unsafe {
       let ret = isl_aff_is_nan(self.to());
       (ret).to()
@@ -1606,14 +1606,14 @@ impl MultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, multi2: MultiAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, multi2: MultiAffRef) -> Bool {
     unsafe {
       let ret = isl_multi_aff_plain_is_equal(self.to(), multi2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_multi_aff_involves_nan(self.to());
       (ret).to()
@@ -1641,7 +1641,7 @@ impl MultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_multi_aff_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -1662,7 +1662,7 @@ impl MultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn range_is_wrapping(self) -> Option<bool> {
+  pub fn range_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_multi_aff_range_is_wrapping(self.to());
       (ret).to()
@@ -1676,7 +1676,7 @@ impl MultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_multi_aff_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -2081,14 +2081,14 @@ impl MultiPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, multi2: MultiPwAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, multi2: MultiPwAffRef) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_plain_is_equal(self.to(), multi2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_involves_nan(self.to());
       (ret).to()
@@ -2116,7 +2116,7 @@ impl MultiPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -2137,14 +2137,14 @@ impl MultiPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn range_is_wrapping(self) -> Option<bool> {
+  pub fn range_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_range_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -2158,14 +2158,14 @@ impl MultiPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn is_cst(self) -> Option<bool> {
+  pub fn is_cst(self) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_is_cst(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, mpa2: MultiPwAffRef) -> Option<bool> {
+  pub fn is_equal(self, mpa2: MultiPwAffRef) -> Bool {
     unsafe {
       let ret = isl_multi_pw_aff_is_equal(self.to(), mpa2.to());
       (ret).to()
@@ -2535,14 +2535,14 @@ impl MultiUnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, multi2: MultiUnionPwAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, multi2: MultiUnionPwAffRef) -> Bool {
     unsafe {
       let ret = isl_multi_union_pw_aff_plain_is_equal(self.to(), multi2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_multi_union_pw_aff_involves_nan(self.to());
       (ret).to()
@@ -2570,7 +2570,7 @@ impl MultiUnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_multi_union_pw_aff_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -2591,7 +2591,7 @@ impl MultiUnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn range_is_wrapping(self) -> Option<bool> {
+  pub fn range_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_multi_union_pw_aff_range_is_wrapping(self.to());
       (ret).to()
@@ -3205,7 +3205,7 @@ impl PwAffRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_pw_aff_has_dim_id(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -3226,14 +3226,14 @@ impl PwAffRef {
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_pw_aff_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_pw_aff_involves_nan(self.to());
       (ret).to()
@@ -3247,14 +3247,14 @@ impl PwAffRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, pwaff2: PwAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, pwaff2: PwAffRef) -> Bool {
     unsafe {
       let ret = isl_pw_aff_plain_is_equal(self.to(), pwaff2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, pa2: PwAffRef) -> Option<bool> {
+  pub fn is_equal(self, pa2: PwAffRef) -> Bool {
     unsafe {
       let ret = isl_pw_aff_is_equal(self.to(), pa2.to());
       (ret).to()
@@ -3275,21 +3275,21 @@ impl PwAffRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_pw_aff_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_cst(self) -> Option<bool> {
+  pub fn is_cst(self) -> Bool {
     unsafe {
       let ret = isl_pw_aff_is_cst(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_pw_aff_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -3310,8 +3310,8 @@ impl PwAffRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_piece<F1: FnMut(Set, Aff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set, Aff) -> Option<()>>(set: Set, aff: Aff, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), aff.to()).to() }
+  pub fn foreach_piece<F1: FnMut(Set, Aff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set, Aff) -> Stat>(set: Set, aff: Aff, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), aff.to()) }
     unsafe {
       let ret = isl_pw_aff_foreach_piece(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -3625,7 +3625,7 @@ impl PwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_name(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_name(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_pw_multi_aff_has_tuple_name(self.to(), type_.to());
       (ret).to()
@@ -3646,7 +3646,7 @@ impl PwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_pw_multi_aff_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -3674,21 +3674,21 @@ impl PwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_pw_multi_aff_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, pma2: PwMultiAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, pma2: PwMultiAffRef) -> Bool {
     unsafe {
       let ret = isl_pw_multi_aff_plain_is_equal(self.to(), pma2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, pma2: PwMultiAffRef) -> Option<bool> {
+  pub fn is_equal(self, pma2: PwMultiAffRef) -> Bool {
     unsafe {
       let ret = isl_pw_multi_aff_is_equal(self.to(), pma2.to());
       (ret).to()
@@ -3702,8 +3702,8 @@ impl PwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_piece<F1: FnMut(Set, MultiAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set, MultiAff) -> Option<()>>(set: Set, maff: MultiAff, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), maff.to()).to() }
+  pub fn foreach_piece<F1: FnMut(Set, MultiAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set, MultiAff) -> Stat>(set: Set, maff: MultiAff, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), maff.to()) }
     unsafe {
       let ret = isl_pw_multi_aff_foreach_piece(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -4181,7 +4181,7 @@ impl UnionPwAffList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(UnionPwAff) -> Option<UnionPwAff>>(self, fn_: &mut F1) -> Option<UnionPwAffList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwAff) -> Option<UnionPwAff>>(el: UnionPwAff, user: *mut c_void) -> Option<UnionPwAff> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwAff) -> Option<UnionPwAff>>(el: UnionPwAff, user: *mut c_void) -> Option<UnionPwAff> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_pw_aff_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -4189,7 +4189,7 @@ impl UnionPwAffList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(UnionPwAffRef, UnionPwAffRef) -> c_int>(self, cmp: &mut F1) -> Option<UnionPwAffList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwAffRef, UnionPwAffRef) -> c_int>(a: UnionPwAffRef, b: UnionPwAffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwAffRef, UnionPwAffRef) -> c_int>(a: UnionPwAffRef, b: UnionPwAffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_union_pw_aff_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -4227,17 +4227,17 @@ impl UnionPwAffListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(UnionPwAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwAff) -> Option<()>>(el: UnionPwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(UnionPwAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwAff) -> Stat>(el: UnionPwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_pw_aff_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(UnionPwAffRef, UnionPwAffRef) -> Option<bool>, F2: FnMut(UnionPwAffList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwAffRef, UnionPwAffRef) -> Option<bool>>(a: UnionPwAffRef, b: UnionPwAffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(UnionPwAffList) -> Option<()>>(scc: UnionPwAffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(UnionPwAffRef, UnionPwAffRef) -> Bool, F2: FnMut(UnionPwAffList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwAffRef, UnionPwAffRef) -> Bool>(a: UnionPwAffRef, b: UnionPwAffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(UnionPwAffList) -> Stat>(scc: UnionPwAffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_union_pw_aff_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -4296,8 +4296,8 @@ impl UnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_pw_aff<F1: FnMut(PwAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(PwAff) -> Option<()>>(pa: PwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(pa.to()).to() }
+  pub fn foreach_pw_aff<F1: FnMut(PwAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(PwAff) -> Stat>(pa: PwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(pa.to()) }
     unsafe {
       let ret = isl_union_pw_aff_foreach_pw_aff(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -4311,14 +4311,14 @@ impl UnionPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_union_pw_aff_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, upa2: UnionPwAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, upa2: UnionPwAffRef) -> Bool {
     unsafe {
       let ret = isl_union_pw_aff_plain_is_equal(self.to(), upa2.to());
       (ret).to()
@@ -4563,7 +4563,7 @@ impl UnionPwMultiAffList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(UnionPwMultiAff) -> Option<UnionPwMultiAff>>(self, fn_: &mut F1) -> Option<UnionPwMultiAffList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAff) -> Option<UnionPwMultiAff>>(el: UnionPwMultiAff, user: *mut c_void) -> Option<UnionPwMultiAff> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAff) -> Option<UnionPwMultiAff>>(el: UnionPwMultiAff, user: *mut c_void) -> Option<UnionPwMultiAff> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_pw_multi_aff_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -4571,7 +4571,7 @@ impl UnionPwMultiAffList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> c_int>(self, cmp: &mut F1) -> Option<UnionPwMultiAffList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> c_int>(a: UnionPwMultiAffRef, b: UnionPwMultiAffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> c_int>(a: UnionPwMultiAffRef, b: UnionPwMultiAffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_union_pw_multi_aff_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -4609,17 +4609,17 @@ impl UnionPwMultiAffListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(UnionPwMultiAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAff) -> Option<()>>(el: UnionPwMultiAff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(UnionPwMultiAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAff) -> Stat>(el: UnionPwMultiAff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_pw_multi_aff_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> Option<bool>, F2: FnMut(UnionPwMultiAffList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> Option<bool>>(a: UnionPwMultiAffRef, b: UnionPwMultiAffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(UnionPwMultiAffList) -> Option<()>>(scc: UnionPwMultiAffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> Bool, F2: FnMut(UnionPwMultiAffList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionPwMultiAffRef, UnionPwMultiAffRef) -> Bool>(a: UnionPwMultiAffRef, b: UnionPwMultiAffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(UnionPwMultiAffList) -> Stat>(scc: UnionPwMultiAffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_union_pw_multi_aff_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -4685,8 +4685,8 @@ impl UnionPwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_pw_multi_aff<F1: FnMut(PwMultiAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(PwMultiAff) -> Option<()>>(pma: PwMultiAff, user: *mut c_void) -> Stat { (*(user as *mut F))(pma.to()).to() }
+  pub fn foreach_pw_multi_aff<F1: FnMut(PwMultiAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(PwMultiAff) -> Stat>(pma: PwMultiAff, user: *mut c_void) -> Stat { (*(user as *mut F))(pma.to()) }
     unsafe {
       let ret = isl_union_pw_multi_aff_foreach_pw_multi_aff(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -4700,14 +4700,14 @@ impl UnionPwMultiAffRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_union_pw_multi_aff_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, upma2: UnionPwMultiAffRef) -> Option<bool> {
+  pub fn plain_is_equal(self, upma2: UnionPwMultiAffRef) -> Bool {
     unsafe {
       let ret = isl_union_pw_multi_aff_plain_is_equal(self.to(), upma2.to());
       (ret).to()
@@ -4815,7 +4815,7 @@ impl Drop for Aff {
 
 impl fmt::Display for AffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Aff {
@@ -4829,7 +4829,7 @@ impl Drop for MultiAff {
 
 impl fmt::Display for MultiAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for MultiAff {
@@ -4843,7 +4843,7 @@ impl Drop for MultiPwAff {
 
 impl fmt::Display for MultiPwAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for MultiPwAff {
@@ -4857,7 +4857,7 @@ impl Drop for MultiUnionPwAff {
 
 impl fmt::Display for MultiUnionPwAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for MultiUnionPwAff {
@@ -4871,7 +4871,7 @@ impl Drop for PwAff {
 
 impl fmt::Display for PwAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for PwAff {
@@ -4885,7 +4885,7 @@ impl Drop for PwMultiAff {
 
 impl fmt::Display for PwMultiAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for PwMultiAff {
@@ -4903,7 +4903,7 @@ impl Drop for UnionPwAffList {
 
 impl fmt::Display for UnionPwAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionPwAff {
@@ -4921,7 +4921,7 @@ impl Drop for UnionPwMultiAffList {
 
 impl fmt::Display for UnionPwMultiAffRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionPwMultiAff {

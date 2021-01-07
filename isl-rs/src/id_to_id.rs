@@ -23,6 +23,9 @@ pub struct MaybeIslId(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslIdRef(pub NonNull<c_void>);
 
+impl_try!(MaybeIslId);
+impl_try!(MaybeIslIdRef);
+
 impl MaybeIslId {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslId { unsafe { ptr::read(self) } }
@@ -35,7 +38,7 @@ impl AsRef<MaybeIslIdRef> for MaybeIslId {
   fn as_ref(&self) -> &MaybeIslIdRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MaybeIslId {
+impl Deref for MaybeIslId {
   type Target = MaybeIslIdRef;
   #[inline(always)]
   fn deref(&self) -> &MaybeIslIdRef { self.as_ref() }
@@ -54,6 +57,9 @@ pub struct IdToId(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdToIdRef(pub NonNull<c_void>);
 
+impl_try!(IdToId);
+impl_try!(IdToIdRef);
+
 impl IdToId {
   #[inline(always)]
   pub fn read(&self) -> IdToId { unsafe { ptr::read(self) } }
@@ -66,7 +72,7 @@ impl AsRef<IdToIdRef> for IdToId {
   fn as_ref(&self) -> &IdToIdRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for IdToId {
+impl Deref for IdToId {
   type Target = IdToIdRef;
   #[inline(always)]
   fn deref(&self) -> &IdToIdRef { self.as_ref() }
@@ -134,7 +140,7 @@ impl IdToIdRef {
     }
   }
   #[inline(always)]
-  pub fn has(self, key: IdRef) -> Option<bool> {
+  pub fn has(self, key: IdRef) -> Bool {
     unsafe {
       let ret = isl_id_to_id_has(self.to(), key.to());
       (ret).to()
@@ -148,8 +154,8 @@ impl IdToIdRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Id, Id) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Id, Id) -> Option<()>>(key: Id, val: Id, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()).to() }
+  pub fn foreach<F1: FnMut(Id, Id) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Id, Id) -> Stat>(key: Id, val: Id, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()) }
     unsafe {
       let ret = isl_id_to_id_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()

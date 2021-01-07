@@ -25,6 +25,9 @@ pub struct Point(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PointRef(pub NonNull<c_void>);
 
+impl_try!(Point);
+impl_try!(PointRef);
+
 impl Point {
   #[inline(always)]
   pub fn read(&self) -> Point { unsafe { ptr::read(self) } }
@@ -37,7 +40,7 @@ impl AsRef<PointRef> for Point {
   fn as_ref(&self) -> &PointRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Point {
+impl Deref for Point {
   type Target = PointRef;
   #[inline(always)]
   fn deref(&self) -> &PointRef { self.as_ref() }
@@ -109,7 +112,7 @@ impl PointRef {
     }
   }
   #[inline(always)]
-  pub fn is_void(self) -> Option<bool> {
+  pub fn is_void(self) -> Bool {
     unsafe {
       let ret = isl_point_is_void(self.to());
       (ret).to()
@@ -164,7 +167,7 @@ impl Drop for Point {
 
 impl fmt::Display for PointRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Point {

@@ -11,6 +11,9 @@ pub struct ObjType(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ObjTypeRef(pub NonNull<c_void>);
 
+impl_try!(ObjType);
+impl_try!(ObjTypeRef);
+
 impl ObjType {
   #[inline(always)]
   pub fn read(&self) -> ObjType { unsafe { ptr::read(self) } }
@@ -23,7 +26,7 @@ impl AsRef<ObjTypeRef> for ObjType {
   fn as_ref(&self) -> &ObjTypeRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for ObjType {
+impl Deref for ObjType {
   type Target = ObjTypeRef;
   #[inline(always)]
   fn deref(&self) -> &ObjTypeRef { self.as_ref() }
@@ -42,6 +45,9 @@ pub struct Obj(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ObjRef(pub NonNull<c_void>);
 
+impl_try!(Obj);
+impl_try!(ObjRef);
+
 impl Obj {
   #[inline(always)]
   pub fn read(&self) -> Obj { unsafe { ptr::read(self) } }
@@ -54,7 +60,7 @@ impl AsRef<ObjRef> for Obj {
   fn as_ref(&self) -> &ObjRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Obj {
+impl Deref for Obj {
   type Target = ObjRef;
   #[inline(always)]
   fn deref(&self) -> &ObjRef { self.as_ref() }

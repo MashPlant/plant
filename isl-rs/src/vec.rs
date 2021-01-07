@@ -40,6 +40,9 @@ pub struct Vec(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct VecRef(pub NonNull<c_void>);
 
+impl_try!(Vec);
+impl_try!(VecRef);
+
 impl Vec {
   #[inline(always)]
   pub fn read(&self) -> Vec { unsafe { ptr::read(self) } }
@@ -52,7 +55,7 @@ impl AsRef<VecRef> for Vec {
   fn as_ref(&self) -> &VecRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Vec {
+impl Deref for Vec {
   type Target = VecRef;
   #[inline(always)]
   fn deref(&self) -> &VecRef { self.as_ref() }
@@ -256,7 +259,7 @@ impl VecRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, vec2: VecRef) -> Option<bool> {
+  pub fn is_equal(self, vec2: VecRef) -> Bool {
     unsafe {
       let ret = isl_vec_is_equal(self.to(), vec2.to());
       (ret).to()

@@ -23,6 +23,9 @@ pub struct MaybeIslPwAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslPwAffRef(pub NonNull<c_void>);
 
+impl_try!(MaybeIslPwAff);
+impl_try!(MaybeIslPwAffRef);
+
 impl MaybeIslPwAff {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslPwAff { unsafe { ptr::read(self) } }
@@ -35,7 +38,7 @@ impl AsRef<MaybeIslPwAffRef> for MaybeIslPwAff {
   fn as_ref(&self) -> &MaybeIslPwAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MaybeIslPwAff {
+impl Deref for MaybeIslPwAff {
   type Target = MaybeIslPwAffRef;
   #[inline(always)]
   fn deref(&self) -> &MaybeIslPwAffRef { self.as_ref() }
@@ -54,6 +57,9 @@ pub struct IdToPwAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdToPwAffRef(pub NonNull<c_void>);
 
+impl_try!(IdToPwAff);
+impl_try!(IdToPwAffRef);
+
 impl IdToPwAff {
   #[inline(always)]
   pub fn read(&self) -> IdToPwAff { unsafe { ptr::read(self) } }
@@ -66,7 +72,7 @@ impl AsRef<IdToPwAffRef> for IdToPwAff {
   fn as_ref(&self) -> &IdToPwAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for IdToPwAff {
+impl Deref for IdToPwAff {
   type Target = IdToPwAffRef;
   #[inline(always)]
   fn deref(&self) -> &IdToPwAffRef { self.as_ref() }
@@ -134,7 +140,7 @@ impl IdToPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn has(self, key: IdRef) -> Option<bool> {
+  pub fn has(self, key: IdRef) -> Bool {
     unsafe {
       let ret = isl_id_to_pw_aff_has(self.to(), key.to());
       (ret).to()
@@ -148,8 +154,8 @@ impl IdToPwAffRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Id, PwAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Id, PwAff) -> Option<()>>(key: Id, val: PwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()).to() }
+  pub fn foreach<F1: FnMut(Id, PwAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Id, PwAff) -> Stat>(key: Id, val: PwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()) }
     unsafe {
       let ret = isl_id_to_pw_aff_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()

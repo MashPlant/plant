@@ -78,6 +78,9 @@ pub struct Constraint(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ConstraintRef(pub NonNull<c_void>);
 
+impl_try!(Constraint);
+impl_try!(ConstraintRef);
+
 impl Constraint {
   #[inline(always)]
   pub fn read(&self) -> Constraint { unsafe { ptr::read(self) } }
@@ -90,7 +93,7 @@ impl AsRef<ConstraintRef> for Constraint {
   fn as_ref(&self) -> &ConstraintRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Constraint {
+impl Deref for Constraint {
   type Target = ConstraintRef;
   #[inline(always)]
   fn deref(&self) -> &ConstraintRef { self.as_ref() }
@@ -109,6 +112,9 @@ pub struct ConstraintList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ConstraintListRef(pub NonNull<c_void>);
 
+impl_try!(ConstraintList);
+impl_try!(ConstraintListRef);
+
 impl ConstraintList {
   #[inline(always)]
   pub fn read(&self) -> ConstraintList { unsafe { ptr::read(self) } }
@@ -121,7 +127,7 @@ impl AsRef<ConstraintListRef> for ConstraintList {
   fn as_ref(&self) -> &ConstraintListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for ConstraintList {
+impl Deref for ConstraintList {
   type Target = ConstraintListRef;
   #[inline(always)]
   fn deref(&self) -> &ConstraintListRef { self.as_ref() }
@@ -168,8 +174,8 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_constraint<F1: FnMut(Constraint) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Option<()>>(c: Constraint, user: *mut c_void) -> Stat { (*(user as *mut F))(c.to()).to() }
+  pub fn foreach_constraint<F1: FnMut(Constraint) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Stat>(c: Constraint, user: *mut c_void) -> Stat { (*(user as *mut F))(c.to()) }
     unsafe {
       let ret = isl_basic_map_foreach_constraint(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -183,7 +189,7 @@ impl BasicMapRef {
     }
   }
   #[inline(always)]
-  pub fn has_defining_equality(self, type_: DimType, pos: c_int) -> Option<(bool, Constraint)> {
+  pub fn has_defining_equality(self, type_: DimType, pos: c_int) -> Option<(Bool, Constraint)> {
     unsafe {
       let ref mut c = 0 as *mut c_void;
       let ret = isl_basic_map_has_defining_equality(self.to(), type_.to(), pos.to(), c as *mut _ as _);
@@ -211,8 +217,8 @@ impl BasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_constraint<F1: FnMut(Constraint) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Option<()>>(c: Constraint, user: *mut c_void) -> Stat { (*(user as *mut F))(c.to()).to() }
+  pub fn foreach_constraint<F1: FnMut(Constraint) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Stat>(c: Constraint, user: *mut c_void) -> Stat { (*(user as *mut F))(c.to()) }
     unsafe {
       let ret = isl_basic_set_foreach_constraint(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -226,15 +232,15 @@ impl BasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_bound_pair<F1: FnMut(Constraint, Constraint, BasicSet) -> Option<()>>(self, type_: DimType, pos: c_uint, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Constraint, Constraint, BasicSet) -> Option<()>>(lower: Constraint, upper: Constraint, bset: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(lower.to(), upper.to(), bset.to()).to() }
+  pub fn foreach_bound_pair<F1: FnMut(Constraint, Constraint, BasicSet) -> Stat>(self, type_: DimType, pos: c_uint, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Constraint, Constraint, BasicSet) -> Stat>(lower: Constraint, upper: Constraint, bset: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(lower.to(), upper.to(), bset.to()) }
     unsafe {
       let ret = isl_basic_set_foreach_bound_pair(self.to(), type_.to(), pos.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_defining_equality(self, type_: DimType, pos: c_int) -> Option<(bool, Constraint)> {
+  pub fn has_defining_equality(self, type_: DimType, pos: c_int) -> Option<(Bool, Constraint)> {
     unsafe {
       let ref mut constraint = 0 as *mut c_void;
       let ret = isl_basic_set_has_defining_equality(self.to(), type_.to(), pos.to(), constraint as *mut _ as _);
@@ -242,7 +248,7 @@ impl BasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn has_defining_inequalities(self, type_: DimType, pos: c_int) -> Option<(bool, Constraint, Constraint)> {
+  pub fn has_defining_inequalities(self, type_: DimType, pos: c_int) -> Option<(Bool, Constraint, Constraint)> {
     unsafe {
       let ref mut lower = 0 as *mut c_void;
       let ref mut upper = 0 as *mut c_void;
@@ -363,7 +369,7 @@ impl ConstraintList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(Constraint) -> Option<Constraint>>(self, fn_: &mut F1) -> Option<ConstraintList> {
-    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Option<Constraint>>(el: Constraint, user: *mut c_void) -> Option<Constraint> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Option<Constraint>>(el: Constraint, user: *mut c_void) -> Option<Constraint> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_constraint_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -371,7 +377,7 @@ impl ConstraintList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(ConstraintRef, ConstraintRef) -> c_int>(self, cmp: &mut F1) -> Option<ConstraintList> {
-    unsafe extern "C" fn fn1<F: FnMut(ConstraintRef, ConstraintRef) -> c_int>(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(ConstraintRef, ConstraintRef) -> c_int>(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_constraint_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -409,17 +415,17 @@ impl ConstraintListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Constraint) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Option<()>>(el: Constraint, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(Constraint) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Constraint) -> Stat>(el: Constraint, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_constraint_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(ConstraintRef, ConstraintRef) -> Option<bool>, F2: FnMut(ConstraintList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(ConstraintRef, ConstraintRef) -> Option<bool>>(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(ConstraintList) -> Option<()>>(scc: ConstraintList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(ConstraintRef, ConstraintRef) -> Bool, F2: FnMut(ConstraintList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(ConstraintRef, ConstraintRef) -> Bool>(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(ConstraintList) -> Stat>(scc: ConstraintList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_constraint_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -478,7 +484,7 @@ impl ConstraintRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_constraint_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -513,7 +519,7 @@ impl ConstraintRef {
     }
   }
   #[inline(always)]
-  pub fn is_equality(self) -> Option<bool> {
+  pub fn is_equality(self) -> Bool {
     unsafe {
       let ret = isl_constraint_is_equality(self.to());
       (ret).to()
@@ -527,14 +533,14 @@ impl ConstraintRef {
     }
   }
   #[inline(always)]
-  pub fn is_lower_bound(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn is_lower_bound(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_constraint_is_lower_bound(self.to(), type_.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_upper_bound(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn is_upper_bound(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_constraint_is_upper_bound(self.to(), type_.to(), pos.to());
       (ret).to()

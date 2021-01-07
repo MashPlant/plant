@@ -47,6 +47,9 @@ pub struct AstExpr(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstExprRef(pub NonNull<c_void>);
 
+impl_try!(AstExpr);
+impl_try!(AstExprRef);
+
 impl AstExpr {
   #[inline(always)]
   pub fn read(&self) -> AstExpr { unsafe { ptr::read(self) } }
@@ -59,7 +62,7 @@ impl AsRef<AstExprRef> for AstExpr {
   fn as_ref(&self) -> &AstExprRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AstExpr {
+impl Deref for AstExpr {
   type Target = AstExprRef;
   #[inline(always)]
   fn deref(&self) -> &AstExprRef { self.as_ref() }
@@ -78,6 +81,9 @@ pub struct AstNode(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstNodeRef(pub NonNull<c_void>);
 
+impl_try!(AstNode);
+impl_try!(AstNodeRef);
+
 impl AstNode {
   #[inline(always)]
   pub fn read(&self) -> AstNode { unsafe { ptr::read(self) } }
@@ -90,7 +96,7 @@ impl AsRef<AstNodeRef> for AstNode {
   fn as_ref(&self) -> &AstNodeRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AstNode {
+impl Deref for AstNode {
   type Target = AstNodeRef;
   #[inline(always)]
   fn deref(&self) -> &AstNodeRef { self.as_ref() }
@@ -109,6 +115,9 @@ pub struct AstPrintOptions(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstPrintOptionsRef(pub NonNull<c_void>);
 
+impl_try!(AstPrintOptions);
+impl_try!(AstPrintOptionsRef);
+
 impl AstPrintOptions {
   #[inline(always)]
   pub fn read(&self) -> AstPrintOptions { unsafe { ptr::read(self) } }
@@ -121,7 +130,7 @@ impl AsRef<AstPrintOptionsRef> for AstPrintOptions {
   fn as_ref(&self) -> &AstPrintOptionsRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AstPrintOptions {
+impl Deref for AstPrintOptions {
   type Target = AstPrintOptionsRef;
   #[inline(always)]
   fn deref(&self) -> &AstPrintOptionsRef { self.as_ref() }
@@ -140,6 +149,9 @@ pub struct AstExprList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstExprListRef(pub NonNull<c_void>);
 
+impl_try!(AstExprList);
+impl_try!(AstExprListRef);
+
 impl AstExprList {
   #[inline(always)]
   pub fn read(&self) -> AstExprList { unsafe { ptr::read(self) } }
@@ -152,7 +164,7 @@ impl AsRef<AstExprListRef> for AstExprList {
   fn as_ref(&self) -> &AstExprListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AstExprList {
+impl Deref for AstExprList {
   type Target = AstExprListRef;
   #[inline(always)]
   fn deref(&self) -> &AstExprListRef { self.as_ref() }
@@ -171,6 +183,9 @@ pub struct AstNodeList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstNodeListRef(pub NonNull<c_void>);
 
+impl_try!(AstNodeList);
+impl_try!(AstNodeListRef);
+
 impl AstNodeList {
   #[inline(always)]
   pub fn read(&self) -> AstNodeList { unsafe { ptr::read(self) } }
@@ -183,7 +198,7 @@ impl AsRef<AstNodeListRef> for AstNodeList {
   fn as_ref(&self) -> &AstNodeListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AstNodeList {
+impl Deref for AstNodeList {
   type Target = AstNodeListRef;
   #[inline(always)]
   fn deref(&self) -> &AstNodeListRef { self.as_ref() }
@@ -249,7 +264,7 @@ impl AstExprList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(AstExpr) -> Option<AstExpr>>(self, fn_: &mut F1) -> Option<AstExprList> {
-    unsafe extern "C" fn fn1<F: FnMut(AstExpr) -> Option<AstExpr>>(el: AstExpr, user: *mut c_void) -> Option<AstExpr> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstExpr) -> Option<AstExpr>>(el: AstExpr, user: *mut c_void) -> Option<AstExpr> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_ast_expr_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -257,7 +272,7 @@ impl AstExprList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(AstExprRef, AstExprRef) -> c_int>(self, cmp: &mut F1) -> Option<AstExprList> {
-    unsafe extern "C" fn fn1<F: FnMut(AstExprRef, AstExprRef) -> c_int>(a: AstExprRef, b: AstExprRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstExprRef, AstExprRef) -> c_int>(a: AstExprRef, b: AstExprRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_ast_expr_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -295,17 +310,17 @@ impl AstExprListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(AstExpr) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstExpr) -> Option<()>>(el: AstExpr, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(AstExpr) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstExpr) -> Stat>(el: AstExpr, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_ast_expr_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(AstExprRef, AstExprRef) -> Option<bool>, F2: FnMut(AstExprList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstExprRef, AstExprRef) -> Option<bool>>(a: AstExprRef, b: AstExprRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(AstExprList) -> Option<()>>(scc: AstExprList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(AstExprRef, AstExprRef) -> Bool, F2: FnMut(AstExprList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstExprRef, AstExprRef) -> Bool>(a: AstExprRef, b: AstExprRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(AstExprList) -> Stat>(scc: AstExprList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_ast_expr_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -375,7 +390,7 @@ impl AstNodeList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(AstNode) -> Option<AstNode>>(self, fn_: &mut F1) -> Option<AstNodeList> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNode) -> Option<AstNode>>(el: AstNode, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstNode) -> Option<AstNode>>(el: AstNode, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_ast_node_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -383,7 +398,7 @@ impl AstNodeList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(AstNodeRef, AstNodeRef) -> c_int>(self, cmp: &mut F1) -> Option<AstNodeList> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNodeRef, AstNodeRef) -> c_int>(a: AstNodeRef, b: AstNodeRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstNodeRef, AstNodeRef) -> c_int>(a: AstNodeRef, b: AstNodeRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_ast_node_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -421,17 +436,17 @@ impl AstNodeListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(AstNode) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNode) -> Option<()>>(el: AstNode, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(AstNode) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstNode) -> Stat>(el: AstNode, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_ast_node_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(AstNodeRef, AstNodeRef) -> Option<bool>, F2: FnMut(AstNodeList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNodeRef, AstNodeRef) -> Option<bool>>(a: AstNodeRef, b: AstNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(AstNodeList) -> Option<()>>(scc: AstNodeList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(AstNodeRef, AstNodeRef) -> Bool, F2: FnMut(AstNodeList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AstNodeRef, AstNodeRef) -> Bool>(a: AstNodeRef, b: AstNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(AstNodeList) -> Stat>(scc: AstNodeList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_ast_node_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()

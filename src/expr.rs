@@ -1,4 +1,3 @@
-use isl::{AstExpr, AstExprType, AstOpType};
 use crate::*;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -30,6 +29,8 @@ pub enum Expr {
   Alloc(Box<str>),
   Free(Box<str>),
 }
+
+impl_try!(Expr);
 
 // 可用于Func::comp，Comp::at等接受impl Expr的slice的函数，直接传&[]会报错无法推断类型
 pub const EMPTY: &[Expr] = &[];
@@ -96,8 +97,8 @@ impl Expr {
     }
   }
 
-  pub fn from_isl(f: &Func, e: AstExpr) -> Option<Expr> {
-    Some(match e.get_type() {
+  pub fn from_isl(f: &Func, e: AstExpr) -> Expr {
+    match e.get_type() {
       // iter_ty是I32或I64都可以直接用as转换
       AstExprType::Int => Val(f.iter_ty, e.get_val()?.get_num_si() as _),
       AstExprType::Id => {
@@ -112,31 +113,31 @@ impl Expr {
       AstExprType::Op => {
         use AstOpType::*;
         let (n, op) = (e.get_op_n_arg(), e.get_op_type());
-        let op0 = Expr::from_isl(f, e.get_op_arg(0)?)?;
         match e.get_op_type() {
-          Minus => Binary(BinOp::Sub, box [0.expr(), op0]),
           Access => {
-            // 不使用op0和处理AstExprType::Id的逻辑
+            // 不使用处理AstExprType::Id的逻辑
             let name = e.get_op_arg(0)?.get_id()?.get_name()?.as_str();
             let buf = f.find_buf(name)?;
             let mut idx = Vec::with_capacity(n as usize - 1);
-            for i in 1..n { idx.push(Expr::from_isl(f, e.get_op_arg(i)?)?); }
+            for i in 1..n { idx.push(Expr::from_isl(f, e.get_op_arg(i)?)); }
             Load(buf, idx.into())
           }
           _ => {
-            let op1 = Expr::from_isl(f, e.get_op_arg(1)?)?;
+            let op0 = Expr::from_isl(f, e.get_op_arg(0)?);
             let op = match op {
               Max => BinOp::Max, Min => BinOp::Min, Add => BinOp::Add, Sub => BinOp::Sub, Mul => BinOp::Mul,
               FDivQ => BinOp::Div, PDivQ => BinOp::Div, PDivR => BinOp::Rem, ZDivR => BinOp::Rem,
               Eq => BinOp::Eq, Le => BinOp::Le, Lt => BinOp::Lt, Ge => BinOp::Ge, Gt => BinOp::Gt,
-              _ => return None,
+              Minus => return Binary(BinOp::Sub, box [0.expr(), op0]),
+              _ => try_failed(),
             };
+            let op1 = Expr::from_isl(f, e.get_op_arg(1)?);
             Binary(op, box [op0, op1])
           }
         }
       }
-      _ => return None,
-    })
+      _ => try_failed(),
+    }
   }
 }
 

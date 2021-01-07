@@ -61,6 +61,9 @@ pub struct Mat(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MatRef(pub NonNull<c_void>);
 
+impl_try!(Mat);
+impl_try!(MatRef);
+
 impl Mat {
   #[inline(always)]
   pub fn read(&self) -> Mat { unsafe { ptr::read(self) } }
@@ -73,7 +76,7 @@ impl AsRef<MatRef> for Mat {
   fn as_ref(&self) -> &MatRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Mat {
+impl Deref for Mat {
   type Target = MatRef;
   #[inline(always)]
   fn deref(&self) -> &MatRef { self.as_ref() }
@@ -388,14 +391,14 @@ impl MatRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, mat2: MatRef) -> Option<bool> {
+  pub fn is_equal(self, mat2: MatRef) -> Bool {
     unsafe {
       let ret = isl_mat_is_equal(self.to(), mat2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_linearly_independent_rows(self, mat2: MatRef) -> Option<bool> {
+  pub fn has_linearly_independent_rows(self, mat2: MatRef) -> Bool {
     unsafe {
       let ret = isl_mat_has_linearly_independent_rows(self.to(), mat2.to());
       (ret).to()

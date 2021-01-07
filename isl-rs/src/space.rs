@@ -93,6 +93,9 @@ pub struct Space(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct SpaceRef(pub NonNull<c_void>);
 
+impl_try!(Space);
+impl_try!(SpaceRef);
+
 impl Space {
   #[inline(always)]
   pub fn read(&self) -> Space { unsafe { ptr::read(self) } }
@@ -105,7 +108,7 @@ impl AsRef<SpaceRef> for Space {
   fn as_ref(&self) -> &SpaceRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Space {
+impl Deref for Space {
   type Target = SpaceRef;
   #[inline(always)]
   fn deref(&self) -> &SpaceRef { self.as_ref() }
@@ -484,28 +487,28 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn is_params(self) -> Option<bool> {
+  pub fn is_params(self) -> Bool {
     unsafe {
       let ret = isl_space_is_params(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_set(self) -> Option<bool> {
+  pub fn is_set(self) -> Bool {
     unsafe {
       let ret = isl_space_is_set(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_map(self) -> Option<bool> {
+  pub fn is_map(self) -> Bool {
     unsafe {
       let ret = isl_space_is_map(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_tuple_name(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_name(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_space_has_tuple_name(self.to(), type_.to());
       (ret).to()
@@ -519,7 +522,7 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self, type_: DimType) -> Option<bool> {
+  pub fn has_tuple_id(self, type_: DimType) -> Bool {
     unsafe {
       let ret = isl_space_has_tuple_id(self.to(), type_.to());
       (ret).to()
@@ -533,7 +536,7 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_space_has_dim_id(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -561,7 +564,7 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_space_has_dim_name(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -575,105 +578,105 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn is_wrapping(self) -> Option<bool> {
+  pub fn is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_space_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn domain_is_wrapping(self) -> Option<bool> {
+  pub fn domain_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_space_domain_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn range_is_wrapping(self) -> Option<bool> {
+  pub fn range_is_wrapping(self) -> Bool {
     unsafe {
       let ret = isl_space_range_is_wrapping(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_product(self) -> Option<bool> {
+  pub fn is_product(self) -> Bool {
     unsafe {
       let ret = isl_space_is_product(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_zip(self) -> Option<bool> {
+  pub fn can_zip(self) -> Bool {
     unsafe {
       let ret = isl_space_can_zip(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_curry(self) -> Option<bool> {
+  pub fn can_curry(self) -> Bool {
     unsafe {
       let ret = isl_space_can_curry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_range_curry(self) -> Option<bool> {
+  pub fn can_range_curry(self) -> Bool {
     unsafe {
       let ret = isl_space_can_range_curry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn can_uncurry(self) -> Option<bool> {
+  pub fn can_uncurry(self) -> Bool {
     unsafe {
       let ret = isl_space_can_uncurry(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_domain(self, space2: SpaceRef) -> Option<bool> {
+  pub fn is_domain(self, space2: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_space_is_domain(self.to(), space2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_range(self, space2: SpaceRef) -> Option<bool> {
+  pub fn is_range(self, space2: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_space_is_range(self.to(), space2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, space2: SpaceRef) -> Option<bool> {
+  pub fn is_equal(self, space2: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_space_is_equal(self.to(), space2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_equal_params(self, space2: SpaceRef) -> Option<bool> {
+  pub fn has_equal_params(self, space2: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_space_has_equal_params(self.to(), space2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_equal_tuples(self, space2: SpaceRef) -> Option<bool> {
+  pub fn has_equal_tuples(self, space2: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_space_has_equal_tuples(self.to(), space2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn tuple_is_equal(self, type1: DimType, space2: SpaceRef, type2: DimType) -> Option<bool> {
+  pub fn tuple_is_equal(self, type1: DimType, space2: SpaceRef, type2: DimType) -> Bool {
     unsafe {
       let ret = isl_space_tuple_is_equal(self.to(), type1.to(), space2.to(), type2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn match_(self, type1: DimType, space2: SpaceRef, type2: DimType) -> Option<bool> {
+  pub fn match_(self, type1: DimType, space2: SpaceRef, type2: DimType) -> Bool {
     unsafe {
       let ret = isl_space_match(self.to(), type1.to(), space2.to(), type2.to());
       (ret).to()
@@ -708,7 +711,7 @@ impl Drop for Space {
 
 impl fmt::Display for SpaceRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Space {

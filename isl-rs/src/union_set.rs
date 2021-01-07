@@ -480,7 +480,7 @@ impl UnionSetList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(UnionSet) -> Option<UnionSet>>(self, fn_: &mut F1) -> Option<UnionSetList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionSet) -> Option<UnionSet>>(el: UnionSet, user: *mut c_void) -> Option<UnionSet> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionSet) -> Option<UnionSet>>(el: UnionSet, user: *mut c_void) -> Option<UnionSet> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_set_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -488,7 +488,7 @@ impl UnionSetList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(UnionSetRef, UnionSetRef) -> c_int>(self, cmp: &mut F1) -> Option<UnionSetList> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionSetRef, UnionSetRef) -> c_int>(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(UnionSetRef, UnionSetRef) -> c_int>(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_union_set_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -533,17 +533,17 @@ impl UnionSetListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(UnionSet) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionSet) -> Option<()>>(el: UnionSet, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(UnionSet) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionSet) -> Stat>(el: UnionSet, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_union_set_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(UnionSetRef, UnionSetRef) -> Option<bool>, F2: FnMut(UnionSetList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(UnionSetRef, UnionSetRef) -> Option<bool>>(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(UnionSetList) -> Option<()>>(scc: UnionSetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(UnionSetRef, UnionSetRef) -> Bool, F2: FnMut(UnionSetList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(UnionSetRef, UnionSetRef) -> Bool>(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(UnionSetList) -> Stat>(scc: UnionSetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_union_set_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -588,42 +588,42 @@ impl UnionSetRef {
     }
   }
   #[inline(always)]
-  pub fn is_params(self) -> Option<bool> {
+  pub fn is_params(self) -> Bool {
     unsafe {
       let ret = isl_union_set_is_params(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_union_set_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_subset(self, uset2: UnionSetRef) -> Option<bool> {
+  pub fn is_subset(self, uset2: UnionSetRef) -> Bool {
     unsafe {
       let ret = isl_union_set_is_subset(self.to(), uset2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, uset2: UnionSetRef) -> Option<bool> {
+  pub fn is_equal(self, uset2: UnionSetRef) -> Bool {
     unsafe {
       let ret = isl_union_set_is_equal(self.to(), uset2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_disjoint(self, uset2: UnionSetRef) -> Option<bool> {
+  pub fn is_disjoint(self, uset2: UnionSetRef) -> Bool {
     unsafe {
       let ret = isl_union_set_is_disjoint(self.to(), uset2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_strict_subset(self, uset2: UnionSetRef) -> Option<bool> {
+  pub fn is_strict_subset(self, uset2: UnionSetRef) -> Bool {
     unsafe {
       let ret = isl_union_set_is_strict_subset(self.to(), uset2.to());
       (ret).to()
@@ -644,8 +644,8 @@ impl UnionSetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_set<F1: FnMut(Set) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set) -> Option<()>>(set: Set, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to()).to() }
+  pub fn foreach_set<F1: FnMut(Set) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set) -> Stat>(set: Set, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to()) }
     unsafe {
       let ret = isl_union_set_foreach_set(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -659,7 +659,7 @@ impl UnionSetRef {
     }
   }
   #[inline(always)]
-  pub fn contains(self, space: SpaceRef) -> Option<bool> {
+  pub fn contains(self, space: SpaceRef) -> Bool {
     unsafe {
       let ret = isl_union_set_contains(self.to(), space.to());
       (ret).to()
@@ -673,8 +673,8 @@ impl UnionSetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_point<F1: FnMut(Point) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Point) -> Option<()>>(pnt: Point, user: *mut c_void) -> Stat { (*(user as *mut F))(pnt.to()).to() }
+  pub fn foreach_point<F1: FnMut(Point) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Point) -> Stat>(pnt: Point, user: *mut c_void) -> Stat { (*(user as *mut F))(pnt.to()) }
     unsafe {
       let ret = isl_union_set_foreach_point(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -706,7 +706,7 @@ impl Drop for UnionSetList {
 
 impl fmt::Display for UnionSetRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionSet {

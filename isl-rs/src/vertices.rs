@@ -26,6 +26,9 @@ pub struct Vertex(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct VertexRef(pub NonNull<c_void>);
 
+impl_try!(Vertex);
+impl_try!(VertexRef);
+
 impl Vertex {
   #[inline(always)]
   pub fn read(&self) -> Vertex { unsafe { ptr::read(self) } }
@@ -38,7 +41,7 @@ impl AsRef<VertexRef> for Vertex {
   fn as_ref(&self) -> &VertexRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Vertex {
+impl Deref for Vertex {
   type Target = VertexRef;
   #[inline(always)]
   fn deref(&self) -> &VertexRef { self.as_ref() }
@@ -57,6 +60,9 @@ pub struct Cell(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct CellRef(pub NonNull<c_void>);
 
+impl_try!(Cell);
+impl_try!(CellRef);
+
 impl Cell {
   #[inline(always)]
   pub fn read(&self) -> Cell { unsafe { ptr::read(self) } }
@@ -69,7 +75,7 @@ impl AsRef<CellRef> for Cell {
   fn as_ref(&self) -> &CellRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Cell {
+impl Deref for Cell {
   type Target = CellRef;
   #[inline(always)]
   fn deref(&self) -> &CellRef { self.as_ref() }
@@ -88,6 +94,9 @@ pub struct Vertices(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct VerticesRef(pub NonNull<c_void>);
 
+impl_try!(Vertices);
+impl_try!(VerticesRef);
+
 impl Vertices {
   #[inline(always)]
   pub fn read(&self) -> Vertices { unsafe { ptr::read(self) } }
@@ -100,7 +109,7 @@ impl AsRef<VerticesRef> for Vertices {
   fn as_ref(&self) -> &VerticesRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Vertices {
+impl Deref for Vertices {
   type Target = VerticesRef;
   #[inline(always)]
   fn deref(&self) -> &VerticesRef { self.as_ref() }
@@ -147,8 +156,8 @@ impl CellRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_vertex<F1: FnMut(Vertex) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Vertex) -> Option<()>>(vertex: Vertex, user: *mut c_void) -> Stat { (*(user as *mut F))(vertex.to()).to() }
+  pub fn foreach_vertex<F1: FnMut(Vertex) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Vertex) -> Stat>(vertex: Vertex, user: *mut c_void) -> Stat { (*(user as *mut F))(vertex.to()) }
     unsafe {
       let ret = isl_cell_foreach_vertex(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -223,16 +232,16 @@ impl VerticesRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_vertex<F1: FnMut(Vertex) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Vertex) -> Option<()>>(vertex: Vertex, user: *mut c_void) -> Stat { (*(user as *mut F))(vertex.to()).to() }
+  pub fn foreach_vertex<F1: FnMut(Vertex) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Vertex) -> Stat>(vertex: Vertex, user: *mut c_void) -> Stat { (*(user as *mut F))(vertex.to()) }
     unsafe {
       let ret = isl_vertices_foreach_vertex(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_cell<F1: FnMut(Cell) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Cell) -> Option<()>>(cell: Cell, user: *mut c_void) -> Stat { (*(user as *mut F))(cell.to()).to() }
+  pub fn foreach_cell<F1: FnMut(Cell) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Cell) -> Stat>(cell: Cell, user: *mut c_void) -> Stat { (*(user as *mut F))(cell.to()) }
     unsafe {
       let ret = isl_vertices_foreach_cell(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()

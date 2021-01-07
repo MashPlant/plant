@@ -54,6 +54,9 @@ pub struct AstBuild(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AstBuildRef(pub NonNull<c_void>);
 
+impl_try!(AstBuild);
+impl_try!(AstBuildRef);
+
 impl AstBuild {
   #[inline(always)]
   pub fn read(&self) -> AstBuild { unsafe { ptr::read(self) } }
@@ -66,7 +69,7 @@ impl AsRef<AstBuildRef> for AstBuild {
   fn as_ref(&self) -> &AstBuildRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AstBuild {
+impl Deref for AstBuild {
   type Target = AstBuildRef;
   #[inline(always)]
   fn deref(&self) -> &AstBuildRef { self.as_ref() }
@@ -108,7 +111,7 @@ impl AstBuild {
   }
   #[inline(always)]
   pub fn set_at_each_domain<F1: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(self, fn_: &mut F1) -> Option<AstBuild> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(node: AstNode, build: AstBuildRef, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(node.to(), build.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(node: AstNode, build: AstBuildRef, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(node.to(), build.to()) }
     unsafe {
       let ret = isl_ast_build_set_at_each_domain(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -116,7 +119,7 @@ impl AstBuild {
   }
   #[inline(always)]
   pub fn set_before_each_for<F1: FnMut(AstBuildRef) -> Option<Id>>(self, fn_: &mut F1) -> Option<AstBuild> {
-    unsafe extern "C" fn fn1<F: FnMut(AstBuildRef) -> Option<Id>>(build: AstBuildRef, user: *mut c_void) -> Option<Id> { (*(user as *mut F))(build.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstBuildRef) -> Option<Id>>(build: AstBuildRef, user: *mut c_void) -> Option<Id> { (*(user as *mut F))(build.to()) }
     unsafe {
       let ret = isl_ast_build_set_before_each_for(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -124,15 +127,15 @@ impl AstBuild {
   }
   #[inline(always)]
   pub fn set_after_each_for<F1: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(self, fn_: &mut F1) -> Option<AstBuild> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(node: AstNode, build: AstBuildRef, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(node.to(), build.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(node: AstNode, build: AstBuildRef, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(node.to(), build.to()) }
     unsafe {
       let ret = isl_ast_build_set_after_each_for(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn set_before_each_mark<F1: FnMut(IdRef, AstBuildRef) -> Option<()>>(self, fn_: &mut F1) -> Option<AstBuild> {
-    unsafe extern "C" fn fn1<F: FnMut(IdRef, AstBuildRef) -> Option<()>>(mark: IdRef, build: AstBuildRef, user: *mut c_void) -> Stat { (*(user as *mut F))(mark.to(), build.to()).to() }
+  pub fn set_before_each_mark<F1: FnMut(IdRef, AstBuildRef) -> Stat>(self, fn_: &mut F1) -> Option<AstBuild> {
+    unsafe extern "C" fn fn1<F: FnMut(IdRef, AstBuildRef) -> Stat>(mark: IdRef, build: AstBuildRef, user: *mut c_void) -> Stat { (*(user as *mut F))(mark.to(), build.to()) }
     unsafe {
       let ret = isl_ast_build_set_before_each_mark(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -140,7 +143,7 @@ impl AstBuild {
   }
   #[inline(always)]
   pub fn set_after_each_mark<F1: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(self, fn_: &mut F1) -> Option<AstBuild> {
-    unsafe extern "C" fn fn1<F: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(node: AstNode, build: AstBuildRef, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(node.to(), build.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstNode, AstBuildRef) -> Option<AstNode>>(node: AstNode, build: AstBuildRef, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(node.to(), build.to()) }
     unsafe {
       let ret = isl_ast_build_set_after_each_mark(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -148,7 +151,7 @@ impl AstBuild {
   }
   #[inline(always)]
   pub fn set_create_leaf<F1: FnMut(AstBuild) -> Option<AstNode>>(self, fn_: &mut F1) -> Option<AstBuild> {
-    unsafe extern "C" fn fn1<F: FnMut(AstBuild) -> Option<AstNode>>(build: AstBuild, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(build.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AstBuild) -> Option<AstNode>>(build: AstBuild, user: *mut c_void) -> Option<AstNode> { (*(user as *mut F))(build.to()) }
     unsafe {
       let ret = isl_ast_build_set_create_leaf(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -252,7 +255,7 @@ impl AstBuildRef {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn options_set_ast_build_atomic_upper_bound(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_atomic_upper_bound(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_atomic_upper_bound(self.to(), val.to());
       (ret).to()
@@ -266,7 +269,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_prefer_pdiv(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_prefer_pdiv(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_prefer_pdiv(self.to(), val.to());
       (ret).to()
@@ -280,7 +283,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_detect_min_max(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_detect_min_max(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_detect_min_max(self.to(), val.to());
       (ret).to()
@@ -294,7 +297,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_exploit_nested_bounds(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_exploit_nested_bounds(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_exploit_nested_bounds(self.to(), val.to());
       (ret).to()
@@ -308,7 +311,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_group_coscheduled(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_group_coscheduled(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_group_coscheduled(self.to(), val.to());
       (ret).to()
@@ -322,7 +325,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_separation_bounds(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_separation_bounds(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_separation_bounds(self.to(), val.to());
       (ret).to()
@@ -336,7 +339,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_scale_strides(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_scale_strides(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_scale_strides(self.to(), val.to());
       (ret).to()
@@ -350,7 +353,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_allow_else(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_allow_else(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_allow_else(self.to(), val.to());
       (ret).to()
@@ -364,7 +367,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_ast_build_allow_or(self, val: c_int) -> Option<()> {
+  pub fn options_set_ast_build_allow_or(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_ast_build_allow_or(self.to(), val.to());
       (ret).to()

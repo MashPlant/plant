@@ -1,5 +1,4 @@
-use isl::{Ctx, BasicSet, DimType, AstNode, AstBuildRef, Map, AstExpr, AstNodeType, AstNodeRef};
-use std::{io::{self, Write, BufWriter}, fs::File, fmt::Display};
+use std::{io::{self, Write, BufWriter}, fs::File};
 use crate::*;
 
 #[derive(Debug)]
@@ -18,7 +17,7 @@ pub struct Func {
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, ctx: Ctx::new().unwrap() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<P<Comp>> {
@@ -36,20 +35,17 @@ impl Func {
   }
 
   // 设置domain/schedule中的params的取值范围
-  pub fn set_constraint(&self, csts: &[Expr]) {
+  pub fn set_constraint(&self, csts: &[Expr]) -> Unit {
     self.align_schedule();
-    let s = format!("{} -> {{: {}}}\0", self.comps.first().unwrap().params(), sep(csts.iter(), " and "));
+    let s = format!("{} -> {{: {}}}\0", self.comps.first().expect("no comp").params(), sep(csts.iter(), " and "));
     debug!("set_constraint: {}", s);
-    P::new(self).func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s)).unwrap());
+    P::new(self).func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s))?);
+    Unit
   }
 
   // 将所有Comp的schedule的range维度统一成最大的，不足的维度补0
   // 并将domain和schedule的params都统一成全部params
-  pub fn align_schedule(&self) { self.align_schedule_impl().unwrap() }
-
-  // 这是一种我常用的模式，虽然返回Option类型，但发生的错误不会被处理，而是直接unwrap()
-  // 只是为了避免写太多unwrap()，用一个返回Option的函数包一下，里面可以用?来处理
-  fn align_schedule_impl(&self) -> Option<()> {
+  pub fn align_schedule(&self) -> Unit {
     let mut max_dim = 0;
     let mut all_params = self.comps.get(0).expect("no comp").domain.get_space()?;
     for c in &self.comps {
@@ -60,7 +56,7 @@ impl Func {
       let mut sch = c.schedule.read();
       let orig_dim = sch.dim(DimType::Out);
       sch = sch.add_dims(DimType::Out, max_dim - orig_dim)?;
-      for i in orig_dim..max_dim { sch = map_add_constraint(sch, i, 0, 0)?; }
+      for i in orig_dim..max_dim { sch = map_add_constraint(sch, i, 0, 0); }
       sch = sch.align_params(all_params.copy()?)?;
       c.schedule.write(sch);
       c.domain.write(c.domain.read().align_params(all_params.copy()?)?);
@@ -70,7 +66,7 @@ impl Func {
         debug!("aligned store: {}", store);
       }
     }
-    Some(())
+    Unit
   }
 
   pub fn codegen(&self, args: &[&Buf], path: &str) -> io::Result<()> {
@@ -89,7 +85,7 @@ impl Func {
       }
     }
     let mut info = Vec::new();
-    let ast = self.build_isl_ast(&mut info).unwrap(); // todo: 可以从这个ast中提取特征，无需自己维护ast了
+    let ast = self.build_isl_ast(&mut info); // todo: 可以从这个ast中提取特征，无需自己维护ast了
     let mut tags = HashMap::default();
     extract_tags(*ast, &mut Vec::new(), &mut tags);
     let mut w = BufWriter::new(File::create(path)?);
@@ -106,6 +102,9 @@ impl Func {
 // set_at_each_domain的函数可能多次接受表示同一个Comp的节点，这些节点会在生成的代码中重复多次
 // 同一个Comp在代码的不同位置中可能会有不同的iter_map(见visit_comp)，所以不能直接修改Comp，而是保存到CompInfo中
 struct CompInfo {
+  // 将Comp::schedule中的每个循环层次(sch_dims() / 2个)映射到ISL AST中的for层次
+  // 正常情况下dim_map为[Some(0), Some(1), ...]，但也可能不是，有些循环层次不会映射到for
+  dim_map: Vec<Option<u32>>,
   // store的目标位置，以Load表示
   store: Option<Expr>,
   expr: Expr,
@@ -114,7 +113,7 @@ struct CompInfo {
 
 impl Func {
   fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) {
-    if !vis.insert(c) { panic!("schedule graph should be acyclic"); }
+    if !vis.insert(c) { panic!("cyclic schedule graph"); }
     for (&s, &at) in &c.succ {
       s.get().after_raw(c.get(), at);
       self.sch_graph_dfs(s, vis);
@@ -125,12 +124,12 @@ impl Func {
   // 若真的是局部变量，set_at_each_domain(&mut move ...)和&mut ...的区别在于前者info在这句结束时析构，后者本函数结束时析构
   // 前一种可能不会引发错误，因为那时info中还没有元素，析构是空操作，之后还可以向里面push，后push的元素不会析构
   // 但这也是错误的，首先会内存泄露，其次本函数结束后访问info是访问无效的栈内存
-  fn build_isl_ast(&self, info: &mut Vec<Box<CompInfo>>) -> Option<AstNode> {
+  fn build_isl_ast(&self, info: &mut Vec<Box<CompInfo>>) -> AstNode {
     let mut union_sch = None;
     for c in &self.comps {
       let sch_domain = c.domain.copy()?.apply(c.schedule.copy()?)?.set_tuple_name(cstr(c.name()))?;
       // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，`identity_map`保证这一点
-      let sch = identity_map(&sch_domain)?.union_map_from_map()?;
+      let sch = identity_map(&sch_domain).union_map_from_map()?;
       union_sch = Some(if let Some(x) = union_sch { sch.union(x)? } else { sch });
     }
     let union_sch = union_sch?;
@@ -148,40 +147,48 @@ impl Func {
     }
     // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
     build = build.set_iterators(iters)?
-      .set_at_each_domain(&mut |node, build| self.visit_comp(node, build, info))?;
+      .set_at_each_domain(&mut |node, build| self.visit_comp(node, build, info).into())?;
     self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
     self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
     self.ctx.options_set_ast_build_group_coscheduled(1)?;
-    build.ast_from_schedule(union_sch)
+    build.ast_from_schedule(union_sch)?
   }
 
   // 将node表示的comp的expr中的原下标替换成新下标，对comp的access替换成对buf的load
   // 将store的位置也用load保存在store_expr中(虽然实际不是load，但下标表示是一样的)
-  fn visit_comp(&self, node: AstNode, build: AstBuildRef, info: &mut Vec<Box<CompInfo>>) -> Option<AstNode> {
+  fn visit_comp(&self, node: AstNode, build: AstBuildRef, info: &mut Vec<Box<CompInfo>>) -> AstNode {
     let expr = node.user_get_expr()?;
     let name = expr.get_op_arg(0)?.get_id()?.get_name()?;
     let comp = self.find_comp(&name)?;
+    let mut dim_map = vec![None; comp.sch_dim() as usize / 2];
+    // get_schedule_space返回的space形如{ [i0, ix, ...] }，每维的名字来源于build.set_iterators
+    // 每维对应AST中的一个for层次，例如[i0, i2]是for (i0) { for(i2) {} }，得到dim_map是[Some(0), None, Some(1)]
+    let sp = build.get_schedule_space()?;
+    for i in 0..sp.dim(DimType::Out) {
+      let it = sp.get_dim_name(DimType::Out, i)?.as_str();
+      assert!(it.starts_with("i"));
+      dim_map[it.get(1..)?.parse::<usize>().ok()?] = Some(i);
+    }
     let store = if let Some(store) = comp.store.as_ref() {
       let access = store.copy()?.apply_domain(comp.schedule.copy()?)?
         .set_tuple_name(DimType::In, comp.name_cstr())?;
-      let idx = comp_access(build, access)?;
-      Some(Expr::from_isl(self, idx)?)
+      Some(Expr::from_isl(self, comp_access(build, access)))
     } else { None };
     // 创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
-    let access_self = comp_access(build, identity_map(&comp.domain)?
+    let access_self = comp_access(build, identity_map(&comp.domain)
       .apply_domain(comp.schedule.copy()?)?
-      .set_tuple_name(DimType::In, comp.name_cstr())?)?;
+      .set_tuple_name(DimType::In, comp.name_cstr())?);
     let n = access_self.get_op_n_arg();
     let mut iter_map = Vec::with_capacity(n as usize - 1);
     for i in 1..n {
       iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?)?);
     }
-    debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
+    debug!("visit_comp: comp = {}, dim_map = {:?}, iter_map = [{}]", comp.name(), dim_map, comma_sep(iter_map.iter()));
     let mut expr = comp.expr.clone();
     expr.visit_mut(&mut move |e| match e {
       // access_to_load已经将原下标替换成了新下标，不能再访问它的孩子再替换一次了
       Access(arg, idx) => {
-        *e = access_to_load(build, &comp, arg, idx).unwrap();
+        *e = access_to_load(build, &comp, arg, idx);
         debug!("modify_comp: replaced access = {}", e);
         false
       }
@@ -191,8 +198,8 @@ impl Func {
       }
       _ => true
     });
-    let ci = box CompInfo { store, expr, comp };
-    let node = node.set_annotation(self.ctx.id_alloc(None, ci.as_ref() as *const _ as _)?);
+    let ci = box CompInfo { dim_map, store, expr, comp };
+    let node = node.set_annotation(self.ctx.id_alloc(None, ci.as_ref() as *const _ as _)?)?;
     info.push(ci);
     node
   }
@@ -247,7 +254,7 @@ impl Func {
 }
 
 // 从user node中提取Comp::dim_tags中循环的tag，用HashMap保存for node对应的循环的tag
-fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashMap<AstNodeRef, DimTag>) -> Option<()> {
+fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashMap<AstNodeRef, DimTag>) -> Unit {
   match node.get_type() {
     AstNodeType::For => {
       levels.push(node);
@@ -265,37 +272,35 @@ fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashM
     AstNodeType::User => {
       let comp = P::new(node.get_annotation()?.get_user() as *const CompInfo);
       for (i, &tag) in comp.comp.dim_tags.iter().enumerate() {
-        if let Some(tag) = tag {
-          assert!(tags.insert(levels[i], tag).is_none()); // 不允许重复的tag
+        if let (Some(i), Some(tag)) = (comp.dim_map[i], tag) {
+          tags.insert(levels[i as usize], tag);
         }
       }
     }
     _ => panic!("invalid ast node type"),
   }
-  Some(())
+  Unit
 }
 
-fn access_to_load(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Option<Expr> {
+fn access_to_load(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {
   let s = format!("{} -> {{ {}{} -> {}[{}] }}\0", comp.params(),
     comp.name(), i0_in(comp.n_dim()), arg.name(), comma_sep(idx.iter()));
   debug!("access_to_load: {}", s);
   // 对于没有store的arg返回Param表达式，这不会影响到domain/schedule的参数，这个表达式之后只会用于输出
-  let store = if let Some(x) = arg.store.as_ref() { x.copy()? } else {
-    return Some(arg.as_param());
-  };
-  let access = comp.ctx.map_read_from_str(cstr(&s))?
+  let store = if let Some(x) = arg.store.as_ref() { x.copy()? } else { return arg.as_param(); };
+  let access = comp.ctx.map_read_from_str(cstr(&s))
+    .expect("failed to read access map, comp may have non-affine access")
     .apply_range(store)?.apply_domain(comp.schedule.copy()?)?
     .set_tuple_name(DimType::In, comp.name_cstr())?;
   debug!("access_to_load: access = {}", access);
-  let expr = comp_access(build, access)?;
-  Expr::from_isl(&comp.func, expr)
+  Expr::from_isl(&comp.func, comp_access(build, access))
 }
 
-fn comp_access(build: AstBuildRef, access: Map) -> Option<AstExpr> {
+fn comp_access(build: AstBuildRef, access: Map) -> AstExpr {
   let sch = build.get_schedule()?.map_from_union_map()?;
   let map = sch.reverse()?;
   let mut iter_map = map.pw_multi_aff_from_map()?;
   let index_aff = access.pw_multi_aff_from_map()?;
   iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;
-  build.access_from_pw_multi_aff(iter_map)
+  build.access_from_pw_multi_aff(iter_map)?
 }

@@ -23,6 +23,9 @@ pub struct MaybeIslAstExpr(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslAstExprRef(pub NonNull<c_void>);
 
+impl_try!(MaybeIslAstExpr);
+impl_try!(MaybeIslAstExprRef);
+
 impl MaybeIslAstExpr {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslAstExpr { unsafe { ptr::read(self) } }
@@ -35,7 +38,7 @@ impl AsRef<MaybeIslAstExprRef> for MaybeIslAstExpr {
   fn as_ref(&self) -> &MaybeIslAstExprRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MaybeIslAstExpr {
+impl Deref for MaybeIslAstExpr {
   type Target = MaybeIslAstExprRef;
   #[inline(always)]
   fn deref(&self) -> &MaybeIslAstExprRef { self.as_ref() }
@@ -54,6 +57,9 @@ pub struct IdToAstExpr(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdToAstExprRef(pub NonNull<c_void>);
 
+impl_try!(IdToAstExpr);
+impl_try!(IdToAstExprRef);
+
 impl IdToAstExpr {
   #[inline(always)]
   pub fn read(&self) -> IdToAstExpr { unsafe { ptr::read(self) } }
@@ -66,7 +72,7 @@ impl AsRef<IdToAstExprRef> for IdToAstExpr {
   fn as_ref(&self) -> &IdToAstExprRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for IdToAstExpr {
+impl Deref for IdToAstExpr {
   type Target = IdToAstExprRef;
   #[inline(always)]
   fn deref(&self) -> &IdToAstExprRef { self.as_ref() }
@@ -134,7 +140,7 @@ impl IdToAstExprRef {
     }
   }
   #[inline(always)]
-  pub fn has(self, key: IdRef) -> Option<bool> {
+  pub fn has(self, key: IdRef) -> Bool {
     unsafe {
       let ret = isl_id_to_ast_expr_has(self.to(), key.to());
       (ret).to()
@@ -148,8 +154,8 @@ impl IdToAstExprRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Id, AstExpr) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Id, AstExpr) -> Option<()>>(key: Id, val: AstExpr, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()).to() }
+  pub fn foreach<F1: FnMut(Id, AstExpr) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Id, AstExpr) -> Stat>(key: Id, val: AstExpr, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()) }
     unsafe {
       let ret = isl_id_to_ast_expr_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()

@@ -43,6 +43,9 @@ pub struct LocalSpace(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct LocalSpaceRef(pub NonNull<c_void>);
 
+impl_try!(LocalSpace);
+impl_try!(LocalSpaceRef);
+
 impl LocalSpace {
   #[inline(always)]
   pub fn read(&self) -> LocalSpace { unsafe { ptr::read(self) } }
@@ -55,7 +58,7 @@ impl AsRef<LocalSpaceRef> for LocalSpace {
   fn as_ref(&self) -> &LocalSpaceRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for LocalSpace {
+impl Deref for LocalSpace {
   type Target = LocalSpaceRef;
   #[inline(always)]
   fn deref(&self) -> &LocalSpaceRef { self.as_ref() }
@@ -197,14 +200,14 @@ impl LocalSpaceRef {
     }
   }
   #[inline(always)]
-  pub fn is_params(self) -> Option<bool> {
+  pub fn is_params(self) -> Bool {
     unsafe {
       let ret = isl_local_space_is_params(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_set(self) -> Option<bool> {
+  pub fn is_set(self) -> Bool {
     unsafe {
       let ret = isl_local_space_is_set(self.to());
       (ret).to()
@@ -218,7 +221,7 @@ impl LocalSpaceRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_local_space_has_dim_name(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -232,7 +235,7 @@ impl LocalSpaceRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_local_space_has_dim_id(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -267,7 +270,7 @@ impl LocalSpaceRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, ls2: LocalSpaceRef) -> Option<bool> {
+  pub fn is_equal(self, ls2: LocalSpaceRef) -> Bool {
     unsafe {
       let ret = isl_local_space_is_equal(self.to(), ls2.to());
       (ret).to()

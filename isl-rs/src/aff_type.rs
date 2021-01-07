@@ -47,6 +47,9 @@ pub struct Aff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AffRef(pub NonNull<c_void>);
 
+impl_try!(Aff);
+impl_try!(AffRef);
+
 impl Aff {
   #[inline(always)]
   pub fn read(&self) -> Aff { unsafe { ptr::read(self) } }
@@ -59,7 +62,7 @@ impl AsRef<AffRef> for Aff {
   fn as_ref(&self) -> &AffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Aff {
+impl Deref for Aff {
   type Target = AffRef;
   #[inline(always)]
   fn deref(&self) -> &AffRef { self.as_ref() }
@@ -78,6 +81,9 @@ pub struct AffList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct AffListRef(pub NonNull<c_void>);
 
+impl_try!(AffList);
+impl_try!(AffListRef);
+
 impl AffList {
   #[inline(always)]
   pub fn read(&self) -> AffList { unsafe { ptr::read(self) } }
@@ -90,7 +96,7 @@ impl AsRef<AffListRef> for AffList {
   fn as_ref(&self) -> &AffListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for AffList {
+impl Deref for AffList {
   type Target = AffListRef;
   #[inline(always)]
   fn deref(&self) -> &AffListRef { self.as_ref() }
@@ -109,6 +115,9 @@ pub struct PwAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwAffRef(pub NonNull<c_void>);
 
+impl_try!(PwAff);
+impl_try!(PwAffRef);
+
 impl PwAff {
   #[inline(always)]
   pub fn read(&self) -> PwAff { unsafe { ptr::read(self) } }
@@ -121,7 +130,7 @@ impl AsRef<PwAffRef> for PwAff {
   fn as_ref(&self) -> &PwAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for PwAff {
+impl Deref for PwAff {
   type Target = PwAffRef;
   #[inline(always)]
   fn deref(&self) -> &PwAffRef { self.as_ref() }
@@ -140,6 +149,9 @@ pub struct PwAffList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwAffListRef(pub NonNull<c_void>);
 
+impl_try!(PwAffList);
+impl_try!(PwAffListRef);
+
 impl PwAffList {
   #[inline(always)]
   pub fn read(&self) -> PwAffList { unsafe { ptr::read(self) } }
@@ -152,7 +164,7 @@ impl AsRef<PwAffListRef> for PwAffList {
   fn as_ref(&self) -> &PwAffListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for PwAffList {
+impl Deref for PwAffList {
   type Target = PwAffListRef;
   #[inline(always)]
   fn deref(&self) -> &PwAffListRef { self.as_ref() }
@@ -171,6 +183,9 @@ pub struct UnionPwAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwAffRef(pub NonNull<c_void>);
 
+impl_try!(UnionPwAff);
+impl_try!(UnionPwAffRef);
+
 impl UnionPwAff {
   #[inline(always)]
   pub fn read(&self) -> UnionPwAff { unsafe { ptr::read(self) } }
@@ -183,7 +198,7 @@ impl AsRef<UnionPwAffRef> for UnionPwAff {
   fn as_ref(&self) -> &UnionPwAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionPwAff {
+impl Deref for UnionPwAff {
   type Target = UnionPwAffRef;
   #[inline(always)]
   fn deref(&self) -> &UnionPwAffRef { self.as_ref() }
@@ -202,6 +217,9 @@ pub struct UnionPwAffList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwAffListRef(pub NonNull<c_void>);
 
+impl_try!(UnionPwAffList);
+impl_try!(UnionPwAffListRef);
+
 impl UnionPwAffList {
   #[inline(always)]
   pub fn read(&self) -> UnionPwAffList { unsafe { ptr::read(self) } }
@@ -214,7 +232,7 @@ impl AsRef<UnionPwAffListRef> for UnionPwAffList {
   fn as_ref(&self) -> &UnionPwAffListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionPwAffList {
+impl Deref for UnionPwAffList {
   type Target = UnionPwAffListRef;
   #[inline(always)]
   fn deref(&self) -> &UnionPwAffListRef { self.as_ref() }
@@ -233,6 +251,9 @@ pub struct MultiAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiAffRef(pub NonNull<c_void>);
 
+impl_try!(MultiAff);
+impl_try!(MultiAffRef);
+
 impl MultiAff {
   #[inline(always)]
   pub fn read(&self) -> MultiAff { unsafe { ptr::read(self) } }
@@ -245,7 +266,7 @@ impl AsRef<MultiAffRef> for MultiAff {
   fn as_ref(&self) -> &MultiAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MultiAff {
+impl Deref for MultiAff {
   type Target = MultiAffRef;
   #[inline(always)]
   fn deref(&self) -> &MultiAffRef { self.as_ref() }
@@ -264,6 +285,9 @@ pub struct PwMultiAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PwMultiAffRef(pub NonNull<c_void>);
 
+impl_try!(PwMultiAff);
+impl_try!(PwMultiAffRef);
+
 impl PwMultiAff {
   #[inline(always)]
   pub fn read(&self) -> PwMultiAff { unsafe { ptr::read(self) } }
@@ -276,7 +300,7 @@ impl AsRef<PwMultiAffRef> for PwMultiAff {
   fn as_ref(&self) -> &PwMultiAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for PwMultiAff {
+impl Deref for PwMultiAff {
   type Target = PwMultiAffRef;
   #[inline(always)]
   fn deref(&self) -> &PwMultiAffRef { self.as_ref() }
@@ -295,6 +319,9 @@ pub struct UnionPwMultiAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwMultiAffRef(pub NonNull<c_void>);
 
+impl_try!(UnionPwMultiAff);
+impl_try!(UnionPwMultiAffRef);
+
 impl UnionPwMultiAff {
   #[inline(always)]
   pub fn read(&self) -> UnionPwMultiAff { unsafe { ptr::read(self) } }
@@ -307,7 +334,7 @@ impl AsRef<UnionPwMultiAffRef> for UnionPwMultiAff {
   fn as_ref(&self) -> &UnionPwMultiAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionPwMultiAff {
+impl Deref for UnionPwMultiAff {
   type Target = UnionPwMultiAffRef;
   #[inline(always)]
   fn deref(&self) -> &UnionPwMultiAffRef { self.as_ref() }
@@ -326,6 +353,9 @@ pub struct UnionPwMultiAffList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct UnionPwMultiAffListRef(pub NonNull<c_void>);
 
+impl_try!(UnionPwMultiAffList);
+impl_try!(UnionPwMultiAffListRef);
+
 impl UnionPwMultiAffList {
   #[inline(always)]
   pub fn read(&self) -> UnionPwMultiAffList { unsafe { ptr::read(self) } }
@@ -338,7 +368,7 @@ impl AsRef<UnionPwMultiAffListRef> for UnionPwMultiAffList {
   fn as_ref(&self) -> &UnionPwMultiAffListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for UnionPwMultiAffList {
+impl Deref for UnionPwMultiAffList {
   type Target = UnionPwMultiAffListRef;
   #[inline(always)]
   fn deref(&self) -> &UnionPwMultiAffListRef { self.as_ref() }
@@ -357,6 +387,9 @@ pub struct MultiPwAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiPwAffRef(pub NonNull<c_void>);
 
+impl_try!(MultiPwAff);
+impl_try!(MultiPwAffRef);
+
 impl MultiPwAff {
   #[inline(always)]
   pub fn read(&self) -> MultiPwAff { unsafe { ptr::read(self) } }
@@ -369,7 +402,7 @@ impl AsRef<MultiPwAffRef> for MultiPwAff {
   fn as_ref(&self) -> &MultiPwAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MultiPwAff {
+impl Deref for MultiPwAff {
   type Target = MultiPwAffRef;
   #[inline(always)]
   fn deref(&self) -> &MultiPwAffRef { self.as_ref() }
@@ -388,6 +421,9 @@ pub struct MultiUnionPwAff(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MultiUnionPwAffRef(pub NonNull<c_void>);
 
+impl_try!(MultiUnionPwAff);
+impl_try!(MultiUnionPwAffRef);
+
 impl MultiUnionPwAff {
   #[inline(always)]
   pub fn read(&self) -> MultiUnionPwAff { unsafe { ptr::read(self) } }
@@ -400,7 +436,7 @@ impl AsRef<MultiUnionPwAffRef> for MultiUnionPwAff {
   fn as_ref(&self) -> &MultiUnionPwAffRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MultiUnionPwAff {
+impl Deref for MultiUnionPwAff {
   type Target = MultiUnionPwAffRef;
   #[inline(always)]
   fn deref(&self) -> &MultiUnionPwAffRef { self.as_ref() }
@@ -466,7 +502,7 @@ impl AffList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(Aff) -> Option<Aff>>(self, fn_: &mut F1) -> Option<AffList> {
-    unsafe extern "C" fn fn1<F: FnMut(Aff) -> Option<Aff>>(el: Aff, user: *mut c_void) -> Option<Aff> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Aff) -> Option<Aff>>(el: Aff, user: *mut c_void) -> Option<Aff> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_aff_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -474,7 +510,7 @@ impl AffList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(AffRef, AffRef) -> c_int>(self, cmp: &mut F1) -> Option<AffList> {
-    unsafe extern "C" fn fn1<F: FnMut(AffRef, AffRef) -> c_int>(a: AffRef, b: AffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(AffRef, AffRef) -> c_int>(a: AffRef, b: AffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_aff_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -512,17 +548,17 @@ impl AffListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Aff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Aff) -> Option<()>>(el: Aff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(Aff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Aff) -> Stat>(el: Aff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_aff_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(AffRef, AffRef) -> Option<bool>, F2: FnMut(AffList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(AffRef, AffRef) -> Option<bool>>(a: AffRef, b: AffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(AffList) -> Option<()>>(scc: AffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(AffRef, AffRef) -> Bool, F2: FnMut(AffList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(AffRef, AffRef) -> Bool>(a: AffRef, b: AffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(AffList) -> Stat>(scc: AffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_aff_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -626,7 +662,7 @@ impl PwAffList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(PwAff) -> Option<PwAff>>(self, fn_: &mut F1) -> Option<PwAffList> {
-    unsafe extern "C" fn fn1<F: FnMut(PwAff) -> Option<PwAff>>(el: PwAff, user: *mut c_void) -> Option<PwAff> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(PwAff) -> Option<PwAff>>(el: PwAff, user: *mut c_void) -> Option<PwAff> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_pw_aff_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -634,7 +670,7 @@ impl PwAffList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(PwAffRef, PwAffRef) -> c_int>(self, cmp: &mut F1) -> Option<PwAffList> {
-    unsafe extern "C" fn fn1<F: FnMut(PwAffRef, PwAffRef) -> c_int>(a: PwAffRef, b: PwAffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(PwAffRef, PwAffRef) -> c_int>(a: PwAffRef, b: PwAffRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_pw_aff_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -672,17 +708,17 @@ impl PwAffListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(PwAff) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(PwAff) -> Option<()>>(el: PwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(PwAff) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(PwAff) -> Stat>(el: PwAff, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_pw_aff_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(PwAffRef, PwAffRef) -> Option<bool>, F2: FnMut(PwAffList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(PwAffRef, PwAffRef) -> Option<bool>>(a: PwAffRef, b: PwAffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(PwAffList) -> Option<()>>(scc: PwAffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(PwAffRef, PwAffRef) -> Bool, F2: FnMut(PwAffList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(PwAffRef, PwAffRef) -> Bool>(a: PwAffRef, b: PwAffRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(PwAffList) -> Stat>(scc: PwAffList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_pw_aff_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()

@@ -812,14 +812,14 @@ impl PwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_fold_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, pwf2: PwQpolynomialFoldRef) -> Option<bool> {
+  pub fn plain_is_equal(self, pwf2: PwQpolynomialFoldRef) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_fold_plain_is_equal(self.to(), pwf2.to());
       (ret).to()
@@ -833,7 +833,7 @@ impl PwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn is_zero(self) -> Option<bool> {
+  pub fn is_zero(self) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_fold_is_zero(self.to());
       (ret).to()
@@ -861,7 +861,7 @@ impl PwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn has_equal_space(self, pwf2: PwQpolynomialFoldRef) -> Option<bool> {
+  pub fn has_equal_space(self, pwf2: PwQpolynomialFoldRef) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_fold_has_equal_space(self.to(), pwf2.to());
       (ret).to()
@@ -889,16 +889,16 @@ impl PwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_piece<F1: FnMut(Set, QpolynomialFold) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set, QpolynomialFold) -> Option<()>>(set: Set, fold: QpolynomialFold, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), fold.to()).to() }
+  pub fn foreach_piece<F1: FnMut(Set, QpolynomialFold) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set, QpolynomialFold) -> Stat>(set: Set, fold: QpolynomialFold, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), fold.to()) }
     unsafe {
       let ret = isl_pw_qpolynomial_fold_foreach_piece(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_lifted_piece<F1: FnMut(Set, QpolynomialFold) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set, QpolynomialFold) -> Option<()>>(set: Set, fold: QpolynomialFold, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), fold.to()).to() }
+  pub fn foreach_lifted_piece<F1: FnMut(Set, QpolynomialFold) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set, QpolynomialFold) -> Stat>(set: Set, fold: QpolynomialFold, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), fold.to()) }
     unsafe {
       let ret = isl_pw_qpolynomial_fold_foreach_lifted_piece(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -929,14 +929,14 @@ impl PwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, pwqp2: PwQpolynomialRef) -> Option<bool> {
+  pub fn plain_is_equal(self, pwqp2: PwQpolynomialRef) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_plain_is_equal(self.to(), pwqp2.to());
       (ret).to()
@@ -950,7 +950,7 @@ impl PwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn is_zero(self) -> Option<bool> {
+  pub fn is_zero(self) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_is_zero(self.to());
       (ret).to()
@@ -978,14 +978,14 @@ impl PwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_equal_space(self, pwqp2: PwQpolynomialRef) -> Option<bool> {
+  pub fn has_equal_space(self, pwqp2: PwQpolynomialRef) -> Bool {
     unsafe {
       let ret = isl_pw_qpolynomial_has_equal_space(self.to(), pwqp2.to());
       (ret).to()
@@ -1006,16 +1006,16 @@ impl PwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_piece<F1: FnMut(Set, Qpolynomial) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set, Qpolynomial) -> Option<()>>(set: Set, qp: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), qp.to()).to() }
+  pub fn foreach_piece<F1: FnMut(Set, Qpolynomial) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set, Qpolynomial) -> Stat>(set: Set, qp: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), qp.to()) }
     unsafe {
       let ret = isl_pw_qpolynomial_foreach_piece(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_lifted_piece<F1: FnMut(Set, Qpolynomial) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Set, Qpolynomial) -> Option<()>>(set: Set, qp: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), qp.to()).to() }
+  pub fn foreach_lifted_piece<F1: FnMut(Set, Qpolynomial) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Set, Qpolynomial) -> Stat>(set: Set, qp: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(set.to(), qp.to()) }
     unsafe {
       let ret = isl_pw_qpolynomial_foreach_lifted_piece(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -1297,7 +1297,7 @@ impl QpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn is_nan(self) -> Option<bool> {
+  pub fn is_nan(self) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_fold_is_nan(self.to());
       (ret).to()
@@ -1325,8 +1325,8 @@ impl QpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_qpolynomial<F1: FnMut(Qpolynomial) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Qpolynomial) -> Option<()>>(qp: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(qp.to()).to() }
+  pub fn foreach_qpolynomial<F1: FnMut(Qpolynomial) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Qpolynomial) -> Stat>(qp: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(qp.to()) }
     unsafe {
       let ret = isl_qpolynomial_fold_foreach_qpolynomial(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -1378,7 +1378,7 @@ impl QpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -1399,35 +1399,35 @@ impl QpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, qp2: QpolynomialRef) -> Option<bool> {
+  pub fn plain_is_equal(self, qp2: QpolynomialRef) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_plain_is_equal(self.to(), qp2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_zero(self) -> Option<bool> {
+  pub fn is_zero(self) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_is_zero(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_nan(self) -> Option<bool> {
+  pub fn is_nan(self) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_is_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_infty(self) -> Option<bool> {
+  pub fn is_infty(self) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_is_infty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_neginfty(self) -> Option<bool> {
+  pub fn is_neginfty(self) -> Bool {
     unsafe {
       let ret = isl_qpolynomial_is_neginfty(self.to());
       (ret).to()
@@ -1441,16 +1441,16 @@ impl QpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn as_polynomial_on_domain<F1: FnMut(BasicSet, Qpolynomial) -> Option<()>>(self, bset: BasicSetRef, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicSet, Qpolynomial) -> Option<()>>(bset: BasicSet, poly: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(bset.to(), poly.to()).to() }
+  pub fn as_polynomial_on_domain<F1: FnMut(BasicSet, Qpolynomial) -> Stat>(self, bset: BasicSetRef, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicSet, Qpolynomial) -> Stat>(bset: BasicSet, poly: Qpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(bset.to(), poly.to()) }
     unsafe {
       let ret = isl_qpolynomial_as_polynomial_on_domain(self.to(), bset.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_term<F1: FnMut(Term) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Term) -> Option<()>>(term: Term, user: *mut c_void) -> Stat { (*(user as *mut F))(term.to()).to() }
+  pub fn foreach_term<F1: FnMut(Term) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Term) -> Stat>(term: Term, user: *mut c_void) -> Stat { (*(user as *mut F))(term.to()) }
     unsafe {
       let ret = isl_qpolynomial_foreach_term(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -1943,14 +1943,14 @@ impl UnionPwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_union_pw_qpolynomial_fold_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, upwf2: UnionPwQpolynomialFoldRef) -> Option<bool> {
+  pub fn plain_is_equal(self, upwf2: UnionPwQpolynomialFoldRef) -> Bool {
     unsafe {
       let ret = isl_union_pw_qpolynomial_fold_plain_is_equal(self.to(), upwf2.to());
       (ret).to()
@@ -1992,8 +1992,8 @@ impl UnionPwQpolynomialFoldRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_pw_qpolynomial_fold<F1: FnMut(PwQpolynomialFold) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(PwQpolynomialFold) -> Option<()>>(pwf: PwQpolynomialFold, user: *mut c_void) -> Stat { (*(user as *mut F))(pwf.to()).to() }
+  pub fn foreach_pw_qpolynomial_fold<F1: FnMut(PwQpolynomialFold) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(PwQpolynomialFold) -> Stat>(pwf: PwQpolynomialFold, user: *mut c_void) -> Stat { (*(user as *mut F))(pwf.to()) }
     unsafe {
       let ret = isl_union_pw_qpolynomial_fold_foreach_pw_qpolynomial_fold(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -2024,14 +2024,14 @@ impl UnionPwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn involves_nan(self) -> Option<bool> {
+  pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_union_pw_qpolynomial_involves_nan(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, upwqp2: UnionPwQpolynomialRef) -> Option<bool> {
+  pub fn plain_is_equal(self, upwqp2: UnionPwQpolynomialRef) -> Bool {
     unsafe {
       let ret = isl_union_pw_qpolynomial_plain_is_equal(self.to(), upwqp2.to());
       (ret).to()
@@ -2073,8 +2073,8 @@ impl UnionPwQpolynomialRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_pw_qpolynomial<F1: FnMut(PwQpolynomial) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(PwQpolynomial) -> Option<()>>(pwqp: PwQpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(pwqp.to()).to() }
+  pub fn foreach_pw_qpolynomial<F1: FnMut(PwQpolynomial) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(PwQpolynomial) -> Stat>(pwqp: PwQpolynomial, user: *mut c_void) -> Stat { (*(user as *mut F))(pwqp.to()) }
     unsafe {
       let ret = isl_union_pw_qpolynomial_foreach_pw_qpolynomial(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -2109,7 +2109,7 @@ impl Drop for PwQpolynomialFold {
 
 impl fmt::Display for PwQpolynomialRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for PwQpolynomial {
@@ -2139,7 +2139,7 @@ impl Drop for UnionPwQpolynomialFold {
 
 impl fmt::Display for UnionPwQpolynomialRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for UnionPwQpolynomial {

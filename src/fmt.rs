@@ -1,10 +1,9 @@
-use std::fmt::{Display, Formatter, Result};
 use crate::{*, UnOp::*, BinOp::*};
 
-pub fn fn2display(f: impl Fn(&mut Formatter) -> Result) -> impl Display {
+pub fn fn2display(f: impl Fn(&mut Formatter) -> FmtResult) -> impl Display {
   struct S<F>(F);
-  impl<F: Fn(&mut Formatter) -> Result> Display for S<F> {
-    fn fmt(&self, f: &mut Formatter) -> Result { (self.0)(f) }
+  impl<F: Fn(&mut Formatter) -> FmtResult> Display for S<F> {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult { (self.0)(f) }
   }
   S(f)
 }
@@ -52,20 +51,20 @@ impl BinOp {
 }
 
 impl Display for Type {
-  fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { f.write_str(self.as_str()) }
 }
 
 impl Display for UnOp {
-  fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { f.write_str(self.as_str()) }
 }
 
 impl Display for BinOp {
-  fn fmt(&self, f: &mut Formatter) -> Result { f.write_str(self.as_str()) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { f.write_str(self.as_str()) }
 }
 
 // 在Func::comp，Func::set_constraint，access_to_load，Comp::store中将表达式传递给ISL，但其中很多写法ISL并不支持，用户自己负责
 impl Display for Expr {
-  fn fmt(&self, f: &mut Formatter) -> Result {
+  fn fmt(&self, f: &mut Formatter) -> FmtResult {
     match self {
       &Val(ty, x) => match ty {
         I8 => write!(f, "{}", x as i8),

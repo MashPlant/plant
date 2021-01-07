@@ -11,6 +11,9 @@ pub struct Printer(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct PrinterRef(pub NonNull<c_void>);
 
+impl_try!(Printer);
+impl_try!(PrinterRef);
+
 impl Printer {
   #[inline(always)]
   pub fn read(&self) -> Printer { unsafe { ptr::read(self) } }
@@ -23,7 +26,7 @@ impl AsRef<PrinterRef> for Printer {
   fn as_ref(&self) -> &PrinterRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Printer {
+impl Deref for Printer {
   type Target = PrinterRef;
   #[inline(always)]
   fn deref(&self) -> &PrinterRef { self.as_ref() }

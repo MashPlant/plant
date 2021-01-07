@@ -245,6 +245,9 @@ pub struct StrideInfo(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct StrideInfoRef(pub NonNull<c_void>);
 
+impl_try!(StrideInfo);
+impl_try!(StrideInfoRef);
+
 impl StrideInfo {
   #[inline(always)]
   pub fn read(&self) -> StrideInfo { unsafe { ptr::read(self) } }
@@ -257,7 +260,7 @@ impl AsRef<StrideInfoRef> for StrideInfo {
   fn as_ref(&self) -> &StrideInfoRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for StrideInfo {
+impl Deref for StrideInfo {
   type Target = StrideInfoRef;
   #[inline(always)]
   fn deref(&self) -> &StrideInfoRef { self.as_ref() }
@@ -721,14 +724,14 @@ impl BasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, bset2: BasicSetRef) -> Option<bool> {
+  pub fn is_equal(self, bset2: BasicSetRef) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_equal(self.to(), bset2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_disjoint(self, bset2: BasicSetRef) -> Option<bool> {
+  pub fn is_disjoint(self, bset2: BasicSetRef) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_disjoint(self.to(), bset2.to());
       (ret).to()
@@ -742,63 +745,63 @@ impl BasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn dims_get_sign(self, type_: DimType, pos: c_uint, n: c_uint, signs: &mut c_int) -> Option<()> {
+  pub fn dims_get_sign(self, type_: DimType, pos: c_uint, n: c_uint, signs: &mut c_int) -> Stat {
     unsafe {
       let ret = isl_basic_set_dims_get_sign(self.to(), type_.to(), pos.to(), n.to(), signs.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_universe(self) -> Option<bool> {
+  pub fn plain_is_universe(self) -> Bool {
     unsafe {
       let ret = isl_basic_set_plain_is_universe(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_universe(self) -> Option<bool> {
+  pub fn is_universe(self) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_universe(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_empty(self) -> Option<bool> {
+  pub fn plain_is_empty(self) -> Bool {
     unsafe {
       let ret = isl_basic_set_plain_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_bounded(self) -> Option<bool> {
+  pub fn is_bounded(self) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_bounded(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_subset(self, bset2: BasicSetRef) -> Option<bool> {
+  pub fn is_subset(self, bset2: BasicSetRef) -> Bool {
     unsafe {
       let ret = isl_basic_set_is_subset(self.to(), bset2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, bset2: BasicSetRef) -> Option<bool> {
+  pub fn plain_is_equal(self, bset2: BasicSetRef) -> Bool {
     unsafe {
       let ret = isl_basic_set_plain_is_equal(self.to(), bset2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_basic_set_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -1532,7 +1535,7 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_name(self) -> Option<bool> {
+  pub fn has_tuple_name(self) -> Bool {
     unsafe {
       let ret = isl_set_has_tuple_name(self.to());
       (ret).to()
@@ -1546,7 +1549,7 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_name(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_has_dim_name(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -1560,7 +1563,7 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn has_dim_id(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_has_dim_id(self.to(), type_.to(), pos.to());
       (ret).to()
@@ -1574,7 +1577,7 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn has_tuple_id(self) -> Option<bool> {
+  pub fn has_tuple_id(self) -> Bool {
     unsafe {
       let ret = isl_set_has_tuple_id(self.to());
       (ret).to()
@@ -1623,7 +1626,7 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<bool> {
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_involves_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
@@ -1637,84 +1640,84 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_empty(self) -> Option<bool> {
+  pub fn plain_is_empty(self) -> Bool {
     unsafe {
       let ret = isl_set_plain_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_universe(self) -> Option<bool> {
+  pub fn plain_is_universe(self) -> Bool {
     unsafe {
       let ret = isl_set_plain_is_universe(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_params(self) -> Option<bool> {
+  pub fn is_params(self) -> Bool {
     unsafe {
       let ret = isl_set_is_params(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_empty(self) -> Option<bool> {
+  pub fn is_empty(self) -> Bool {
     unsafe {
       let ret = isl_set_is_empty(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_bounded(self) -> Option<bool> {
+  pub fn is_bounded(self) -> Bool {
     unsafe {
       let ret = isl_set_is_bounded(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_subset(self, set2: SetRef) -> Option<bool> {
+  pub fn is_subset(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_is_subset(self.to(), set2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_strict_subset(self, set2: SetRef) -> Option<bool> {
+  pub fn is_strict_subset(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_is_strict_subset(self.to(), set2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, set2: SetRef) -> Option<bool> {
+  pub fn is_equal(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_is_equal(self.to(), set2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_disjoint(self, set2: SetRef) -> Option<bool> {
+  pub fn is_disjoint(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_is_disjoint(self.to(), set2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_singleton(self) -> Option<bool> {
+  pub fn is_singleton(self) -> Bool {
     unsafe {
       let ret = isl_set_is_singleton(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn is_box(self) -> Option<bool> {
+  pub fn is_box(self) -> Bool {
     unsafe {
       let ret = isl_set_is_box(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_equal_space(self, set2: SetRef) -> Option<bool> {
+  pub fn has_equal_space(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_has_equal_space(self.to(), set2.to());
       (ret).to()
@@ -1728,42 +1731,42 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn dim_is_bounded(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn dim_is_bounded(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_dim_is_bounded(self.to(), type_.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim_has_lower_bound(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn dim_has_lower_bound(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_dim_has_lower_bound(self.to(), type_.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim_has_upper_bound(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn dim_has_upper_bound(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_dim_has_upper_bound(self.to(), type_.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim_has_any_lower_bound(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn dim_has_any_lower_bound(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_dim_has_any_lower_bound(self.to(), type_.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim_has_any_upper_bound(self, type_: DimType, pos: c_uint) -> Option<bool> {
+  pub fn dim_has_any_upper_bound(self, type_: DimType, pos: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_dim_has_any_upper_bound(self.to(), type_.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim_residue_class_val(self, pos: c_int) -> Option<(Val, Val)> {
+  pub fn dim_residue_class_val(self, pos: c_int) -> Option<(Stat, Val, Val)> {
     unsafe {
       let ref mut modulo = 0 as *mut c_void;
       let ref mut residue = 0 as *mut c_void;
@@ -1793,14 +1796,14 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, set2: SetRef) -> Option<bool> {
+  pub fn plain_is_equal(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_plain_is_equal(self.to(), set2.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn plain_is_disjoint(self, set2: SetRef) -> Option<bool> {
+  pub fn plain_is_disjoint(self, set2: SetRef) -> Bool {
     unsafe {
       let ret = isl_set_plain_is_disjoint(self.to(), set2.to());
       (ret).to()
@@ -1821,8 +1824,8 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_basic_set<F1: FnMut(BasicSet) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(BasicSet) -> Option<()>>(bset: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(bset.to()).to() }
+  pub fn foreach_basic_set<F1: FnMut(BasicSet) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(BasicSet) -> Stat>(bset: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(bset.to()) }
     unsafe {
       let ret = isl_set_foreach_basic_set(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -1836,8 +1839,8 @@ impl SetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_point<F1: FnMut(Point) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Point) -> Option<()>>(pnt: Point, user: *mut c_void) -> Stat { (*(user as *mut F))(pnt.to()).to() }
+  pub fn foreach_point<F1: FnMut(Point) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Point) -> Stat>(pnt: Point, user: *mut c_void) -> Stat { (*(user as *mut F))(pnt.to()) }
     unsafe {
       let ret = isl_set_foreach_point(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -1958,7 +1961,7 @@ impl Drop for BasicSet {
 
 impl fmt::Display for BasicSetRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for BasicSet {
@@ -1972,7 +1975,7 @@ impl Drop for Set {
 
 impl fmt::Display for SetRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Set {

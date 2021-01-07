@@ -23,6 +23,9 @@ pub struct MaybeIslBasicSet(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslBasicSetRef(pub NonNull<c_void>);
 
+impl_try!(MaybeIslBasicSet);
+impl_try!(MaybeIslBasicSetRef);
+
 impl MaybeIslBasicSet {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslBasicSet { unsafe { ptr::read(self) } }
@@ -35,7 +38,7 @@ impl AsRef<MaybeIslBasicSetRef> for MaybeIslBasicSet {
   fn as_ref(&self) -> &MaybeIslBasicSetRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MaybeIslBasicSet {
+impl Deref for MaybeIslBasicSet {
   type Target = MaybeIslBasicSetRef;
   #[inline(always)]
   fn deref(&self) -> &MaybeIslBasicSetRef { self.as_ref() }
@@ -54,6 +57,9 @@ pub struct MapToBasicSet(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MapToBasicSetRef(pub NonNull<c_void>);
 
+impl_try!(MapToBasicSet);
+impl_try!(MapToBasicSetRef);
+
 impl MapToBasicSet {
   #[inline(always)]
   pub fn read(&self) -> MapToBasicSet { unsafe { ptr::read(self) } }
@@ -66,7 +72,7 @@ impl AsRef<MapToBasicSetRef> for MapToBasicSet {
   fn as_ref(&self) -> &MapToBasicSetRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MapToBasicSet {
+impl Deref for MapToBasicSet {
   type Target = MapToBasicSetRef;
   #[inline(always)]
   fn deref(&self) -> &MapToBasicSetRef { self.as_ref() }
@@ -134,7 +140,7 @@ impl MapToBasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn has(self, key: MapRef) -> Option<bool> {
+  pub fn has(self, key: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_to_basic_set_has(self.to(), key.to());
       (ret).to()
@@ -148,8 +154,8 @@ impl MapToBasicSetRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Map, BasicSet) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Map, BasicSet) -> Option<()>>(key: Map, val: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()).to() }
+  pub fn foreach<F1: FnMut(Map, BasicSet) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Map, BasicSet) -> Stat>(key: Map, val: BasicSet, user: *mut c_void) -> Stat { (*(user as *mut F))(key.to(), val.to()) }
     unsafe {
       let ret = isl_map_to_basic_set_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()

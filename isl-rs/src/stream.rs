@@ -45,6 +45,9 @@ pub struct Token(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct TokenRef(pub NonNull<c_void>);
 
+impl_try!(Token);
+impl_try!(TokenRef);
+
 impl Token {
   #[inline(always)]
   pub fn read(&self) -> Token { unsafe { ptr::read(self) } }
@@ -57,7 +60,7 @@ impl AsRef<TokenRef> for Token {
   fn as_ref(&self) -> &TokenRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Token {
+impl Deref for Token {
   type Target = TokenRef;
   #[inline(always)]
   fn deref(&self) -> &TokenRef { self.as_ref() }
@@ -76,6 +79,9 @@ pub struct Stream(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct StreamRef(pub NonNull<c_void>);
 
+impl_try!(Stream);
+impl_try!(StreamRef);
+
 impl Stream {
   #[inline(always)]
   pub fn read(&self) -> Stream { unsafe { ptr::read(self) } }
@@ -88,7 +94,7 @@ impl AsRef<StreamRef> for Stream {
   fn as_ref(&self) -> &StreamRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Stream {
+impl Deref for Stream {
   type Target = StreamRef;
   #[inline(always)]
   fn deref(&self) -> &StreamRef { self.as_ref() }

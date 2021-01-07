@@ -100,7 +100,7 @@ extern "C" {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn options_set_tile_scale_tile_loops(self, val: c_int) -> Option<()> {
+  pub fn options_set_tile_scale_tile_loops(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_tile_scale_tile_loops(self.to(), val.to());
       (ret).to()
@@ -114,7 +114,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_tile_shift_point_loops(self, val: c_int) -> Option<()> {
+  pub fn options_set_tile_shift_point_loops(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_tile_shift_point_loops(self.to(), val.to());
       (ret).to()
@@ -149,7 +149,7 @@ impl ScheduleNode {
   }
   #[inline(always)]
   pub fn map_descendant_bottom_up<F1: FnMut(ScheduleNode) -> Option<ScheduleNode>>(self, fn_: &mut F1) -> Option<ScheduleNode> {
-    unsafe extern "C" fn fn1<F: FnMut(ScheduleNode) -> Option<ScheduleNode>>(node: ScheduleNode, user: *mut c_void) -> Option<ScheduleNode> { (*(user as *mut F))(node.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(ScheduleNode) -> Option<ScheduleNode>>(node: ScheduleNode, user: *mut c_void) -> Option<ScheduleNode> { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_schedule_node_map_descendant_bottom_up(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -418,7 +418,7 @@ impl ScheduleNodeRef {
     }
   }
   #[inline(always)]
-  pub fn is_equal(self, node2: ScheduleNodeRef) -> Option<bool> {
+  pub fn is_equal(self, node2: ScheduleNodeRef) -> Bool {
     unsafe {
       let ret = isl_schedule_node_is_equal(self.to(), node2.to());
       (ret).to()
@@ -453,24 +453,24 @@ impl ScheduleNodeRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_descendant_top_down<F1: FnMut(ScheduleNodeRef) -> Option<bool>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Option<bool>>(node: ScheduleNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()).to() }
+  pub fn foreach_descendant_top_down<F1: FnMut(ScheduleNodeRef) -> Bool>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Bool>(node: ScheduleNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_schedule_node_foreach_descendant_top_down(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn every_descendant<F1: FnMut(ScheduleNodeRef) -> Option<bool>>(self, test: &mut F1) -> Option<bool> {
-    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Option<bool>>(node: ScheduleNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()).to() }
+  pub fn every_descendant<F1: FnMut(ScheduleNodeRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Bool>(node: ScheduleNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_schedule_node_every_descendant(self.to(), fn1::<F1>, test as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_ancestor_top_down<F1: FnMut(ScheduleNodeRef) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Option<()>>(node: ScheduleNodeRef, user: *mut c_void) -> Stat { (*(user as *mut F))(node.to()).to() }
+  pub fn foreach_ancestor_top_down<F1: FnMut(ScheduleNodeRef) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Stat>(node: ScheduleNodeRef, user: *mut c_void) -> Stat { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_schedule_node_foreach_ancestor_top_down(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -484,28 +484,28 @@ impl ScheduleNodeRef {
     }
   }
   #[inline(always)]
-  pub fn has_parent(self) -> Option<bool> {
+  pub fn has_parent(self) -> Bool {
     unsafe {
       let ret = isl_schedule_node_has_parent(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_children(self) -> Option<bool> {
+  pub fn has_children(self) -> Bool {
     unsafe {
       let ret = isl_schedule_node_has_children(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_previous_sibling(self) -> Option<bool> {
+  pub fn has_previous_sibling(self) -> Bool {
     unsafe {
       let ret = isl_schedule_node_has_previous_sibling(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn has_next_sibling(self) -> Option<bool> {
+  pub fn has_next_sibling(self) -> Bool {
     unsafe {
       let ret = isl_schedule_node_has_next_sibling(self.to());
       (ret).to()
@@ -547,7 +547,7 @@ impl ScheduleNodeRef {
     }
   }
   #[inline(always)]
-  pub fn is_subtree_anchored(self) -> Option<bool> {
+  pub fn is_subtree_anchored(self) -> Bool {
     unsafe {
       let ret = isl_schedule_node_is_subtree_anchored(self.to());
       (ret).to()
@@ -610,14 +610,14 @@ impl ScheduleNodeRef {
     }
   }
   #[inline(always)]
-  pub fn band_member_get_coincident(self, pos: c_int) -> Option<bool> {
+  pub fn band_member_get_coincident(self, pos: c_int) -> Bool {
     unsafe {
       let ret = isl_schedule_node_band_member_get_coincident(self.to(), pos.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn band_get_permutable(self) -> Option<bool> {
+  pub fn band_get_permutable(self) -> Bool {
     unsafe {
       let ret = isl_schedule_node_band_get_permutable(self.to());
       (ret).to()
@@ -791,7 +791,7 @@ impl Drop for ScheduleNode {
 
 impl fmt::Display for ScheduleNodeRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for ScheduleNode {

@@ -40,6 +40,9 @@ pub struct Id(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdRef(pub NonNull<c_void>);
 
+impl_try!(Id);
+impl_try!(IdRef);
+
 impl Id {
   #[inline(always)]
   pub fn read(&self) -> Id { unsafe { ptr::read(self) } }
@@ -52,7 +55,7 @@ impl AsRef<IdRef> for Id {
   fn as_ref(&self) -> &IdRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Id {
+impl Deref for Id {
   type Target = IdRef;
   #[inline(always)]
   fn deref(&self) -> &IdRef { self.as_ref() }
@@ -71,6 +74,9 @@ pub struct IdList(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct IdListRef(pub NonNull<c_void>);
 
+impl_try!(IdList);
+impl_try!(IdListRef);
+
 impl IdList {
   #[inline(always)]
   pub fn read(&self) -> IdList { unsafe { ptr::read(self) } }
@@ -83,7 +89,7 @@ impl AsRef<IdListRef> for IdList {
   fn as_ref(&self) -> &IdListRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for IdList {
+impl Deref for IdList {
   type Target = IdListRef;
   #[inline(always)]
   fn deref(&self) -> &IdListRef { self.as_ref() }
@@ -180,7 +186,7 @@ impl IdList {
   }
   #[inline(always)]
   pub fn map<F1: FnMut(Id) -> Option<Id>>(self, fn_: &mut F1) -> Option<IdList> {
-    unsafe extern "C" fn fn1<F: FnMut(Id) -> Option<Id>>(el: Id, user: *mut c_void) -> Option<Id> { (*(user as *mut F))(el.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(Id) -> Option<Id>>(el: Id, user: *mut c_void) -> Option<Id> { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_id_list_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -188,7 +194,7 @@ impl IdList {
   }
   #[inline(always)]
   pub fn sort<F1: FnMut(IdRef, IdRef) -> c_int>(self, cmp: &mut F1) -> Option<IdList> {
-    unsafe extern "C" fn fn1<F: FnMut(IdRef, IdRef) -> c_int>(a: IdRef, b: IdRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(IdRef, IdRef) -> c_int>(a: IdRef, b: IdRef, user: *mut c_void) -> c_int { (*(user as *mut F))(a.to(), b.to()) }
     unsafe {
       let ret = isl_id_list_sort(self.to(), fn1::<F1>, cmp as *mut _ as _);
       (ret).to()
@@ -226,17 +232,17 @@ impl IdListRef {
     }
   }
   #[inline(always)]
-  pub fn foreach<F1: FnMut(Id) -> Option<()>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(Id) -> Option<()>>(el: Id, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()).to() }
+  pub fn foreach<F1: FnMut(Id) -> Stat>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(Id) -> Stat>(el: Id, user: *mut c_void) -> Stat { (*(user as *mut F))(el.to()) }
     unsafe {
       let ret = isl_id_list_foreach(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn foreach_scc<F1: FnMut(IdRef, IdRef) -> Option<bool>, F2: FnMut(IdList) -> Option<()>>(self, follows: &mut F1, fn_: &mut F2) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(IdRef, IdRef) -> Option<bool>>(a: IdRef, b: IdRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()).to() }
-    unsafe extern "C" fn fn2<F: FnMut(IdList) -> Option<()>>(scc: IdList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()).to() }
+  pub fn foreach_scc<F1: FnMut(IdRef, IdRef) -> Bool, F2: FnMut(IdList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(IdRef, IdRef) -> Bool>(a: IdRef, b: IdRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
+    unsafe extern "C" fn fn2<F: FnMut(IdList) -> Stat>(scc: IdList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_id_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
       (ret).to()
@@ -330,7 +336,7 @@ impl Drop for IdList {
 
 impl fmt::Display for IdRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Id {

@@ -1,4 +1,4 @@
-use std::{ptr::NonNull, alloc::*, mem::*, ops::*, slice, fmt::*};
+use std::{ptr::*, alloc::*, mem::*, ops::*, slice};
 use crate::*;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -47,7 +47,7 @@ impl<T, D: Dims> Array<T, D> {
   pub fn new(dim: D) -> Array<T, D> {
     unsafe {
       let ptr = alloc(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 32));
-      Array { ptr: NonNull::new(ptr as _).unwrap(), dim }
+      Array { ptr: NonNull::new(ptr as _).expect("failed to alloc"), dim }
     }
   }
 
@@ -55,7 +55,8 @@ impl<T, D: Dims> Array<T, D> {
   pub fn zeroed(dim: D) -> Array<T, D> {
     unsafe {
       let ptr = alloc_zeroed(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 32));
-      Array { ptr: NonNull::new(ptr as _).unwrap(), dim }
+      debug_assert!(!ptr.is_null());
+      Array { ptr: NonNull::new(ptr as _).expect("failed to alloc"), dim }
     }
   }
 }
@@ -107,19 +108,19 @@ impl<T, D: Dims> IndexMut<D> for Slice<T, D> {
 }
 
 impl<T: Debug, D: Dims> Display for Array<T, D> {
-  fn fmt(&self, f: &mut Formatter) -> Result { write!(f, "{:?}", &**self) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { write!(f, "{:?}", &**self) }
 }
 
 impl<T: Debug, D: Dims> Debug for Array<T, D> {
-  fn fmt(&self, f: &mut Formatter) -> Result { write!(f, "{:?}", &**self) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { write!(f, "{:?}", &**self) }
 }
 
 impl<T: Debug, D: Dims> Display for Slice<T, D> {
-  fn fmt(&self, f: &mut Formatter) -> Result { write!(f, "{:?}", self) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { write!(f, "{:?}", self) }
 }
 
 impl<T: Debug, D: Dims> Debug for Slice<T, D> {
-  fn fmt(&self, f: &mut Formatter) -> Result {
+  fn fmt(&self, f: &mut Formatter) -> FmtResult {
     // 一维Dims的Sub大小和自身相等
     if size_of::<D::Sub>() == size_of::<D>() {
       write!(f, "{:?}", self.flat())

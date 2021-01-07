@@ -84,6 +84,9 @@ pub struct ScheduleConstraints(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ScheduleConstraintsRef(pub NonNull<c_void>);
 
+impl_try!(ScheduleConstraints);
+impl_try!(ScheduleConstraintsRef);
+
 impl ScheduleConstraints {
   #[inline(always)]
   pub fn read(&self) -> ScheduleConstraints { unsafe { ptr::read(self) } }
@@ -96,7 +99,7 @@ impl AsRef<ScheduleConstraintsRef> for ScheduleConstraints {
   fn as_ref(&self) -> &ScheduleConstraintsRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for ScheduleConstraints {
+impl Deref for ScheduleConstraints {
   type Target = ScheduleConstraintsRef;
   #[inline(always)]
   fn deref(&self) -> &ScheduleConstraintsRef { self.as_ref() }
@@ -109,7 +112,7 @@ impl To<Option<ScheduleConstraints>> for *mut c_void {
 
 impl CtxRef {
   #[inline(always)]
-  pub fn options_set_schedule_max_coefficient(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_max_coefficient(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_max_coefficient(self.to(), val.to());
       (ret).to()
@@ -123,7 +126,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_max_constant_term(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_max_constant_term(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_max_constant_term(self.to(), val.to());
       (ret).to()
@@ -137,7 +140,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_maximize_band_depth(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_maximize_band_depth(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_maximize_band_depth(self.to(), val.to());
       (ret).to()
@@ -151,7 +154,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_maximize_coincidence(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_maximize_coincidence(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_maximize_coincidence(self.to(), val.to());
       (ret).to()
@@ -165,7 +168,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_outer_coincidence(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_outer_coincidence(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_outer_coincidence(self.to(), val.to());
       (ret).to()
@@ -179,7 +182,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_split_scaled(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_split_scaled(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_split_scaled(self.to(), val.to());
       (ret).to()
@@ -193,7 +196,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_treat_coalescing(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_treat_coalescing(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_treat_coalescing(self.to(), val.to());
       (ret).to()
@@ -207,7 +210,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_separate_components(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_separate_components(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_separate_components(self.to(), val.to());
       (ret).to()
@@ -221,7 +224,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_serialize_sccs(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_serialize_sccs(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_serialize_sccs(self.to(), val.to());
       (ret).to()
@@ -235,7 +238,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_whole_component(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_whole_component(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_whole_component(self.to(), val.to());
       (ret).to()
@@ -249,7 +252,7 @@ impl CtxRef {
     }
   }
   #[inline(always)]
-  pub fn options_set_schedule_carry_self_first(self, val: c_int) -> Option<()> {
+  pub fn options_set_schedule_carry_self_first(self, val: c_int) -> Stat {
     unsafe {
       let ret = isl_options_set_schedule_carry_self_first(self.to(), val.to());
       (ret).to()
@@ -319,7 +322,7 @@ impl Schedule {
   }
   #[inline(always)]
   pub fn map_schedule_node_bottom_up<F1: FnMut(ScheduleNode) -> Option<ScheduleNode>>(self, fn_: &mut F1) -> Option<Schedule> {
-    unsafe extern "C" fn fn1<F: FnMut(ScheduleNode) -> Option<ScheduleNode>>(node: ScheduleNode, user: *mut c_void) -> Option<ScheduleNode> { (*(user as *mut F))(node.to()).to() }
+    unsafe extern "C" fn fn1<F: FnMut(ScheduleNode) -> Option<ScheduleNode>>(node: ScheduleNode, user: *mut c_void) -> Option<ScheduleNode> { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_schedule_map_schedule_node_bottom_up(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -566,7 +569,7 @@ impl ScheduleRef {
     }
   }
   #[inline(always)]
-  pub fn plain_is_equal(self, schedule2: ScheduleRef) -> Option<bool> {
+  pub fn plain_is_equal(self, schedule2: ScheduleRef) -> Bool {
     unsafe {
       let ret = isl_schedule_plain_is_equal(self.to(), schedule2.to());
       (ret).to()
@@ -587,8 +590,8 @@ impl ScheduleRef {
     }
   }
   #[inline(always)]
-  pub fn foreach_schedule_node_top_down<F1: FnMut(ScheduleNodeRef) -> Option<bool>>(self, fn_: &mut F1) -> Option<()> {
-    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Option<bool>>(node: ScheduleNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()).to() }
+  pub fn foreach_schedule_node_top_down<F1: FnMut(ScheduleNodeRef) -> Bool>(self, fn_: &mut F1) -> Stat {
+    unsafe extern "C" fn fn1<F: FnMut(ScheduleNodeRef) -> Bool>(node: ScheduleNodeRef, user: *mut c_void) -> Bool { (*(user as *mut F))(node.to()) }
     unsafe {
       let ret = isl_schedule_foreach_schedule_node_top_down(self.to(), fn1::<F1>, fn_ as *mut _ as _);
       (ret).to()
@@ -654,7 +657,7 @@ impl Drop for ScheduleConstraints {
 
 impl fmt::Display for ScheduleConstraintsRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for ScheduleConstraints {
@@ -664,7 +667,7 @@ impl fmt::Display for ScheduleConstraints {
 
 impl fmt::Display for ScheduleRef {
   #[inline(always)]
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().unwrap()) }
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
 }
 
 impl fmt::Display for Schedule {

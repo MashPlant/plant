@@ -11,6 +11,9 @@ pub struct MaybeIslBasicSet(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct MaybeIslBasicSetRef(pub NonNull<c_void>);
 
+impl_try!(MaybeIslBasicSet);
+impl_try!(MaybeIslBasicSetRef);
+
 impl MaybeIslBasicSet {
   #[inline(always)]
   pub fn read(&self) -> MaybeIslBasicSet { unsafe { ptr::read(self) } }
@@ -23,7 +26,7 @@ impl AsRef<MaybeIslBasicSetRef> for MaybeIslBasicSet {
   fn as_ref(&self) -> &MaybeIslBasicSetRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for MaybeIslBasicSet {
+impl Deref for MaybeIslBasicSet {
   type Target = MaybeIslBasicSetRef;
   #[inline(always)]
   fn deref(&self) -> &MaybeIslBasicSetRef { self.as_ref() }

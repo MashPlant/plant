@@ -11,6 +11,9 @@ pub struct ScheduleNode(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ScheduleNodeRef(pub NonNull<c_void>);
 
+impl_try!(ScheduleNode);
+impl_try!(ScheduleNodeRef);
+
 impl ScheduleNode {
   #[inline(always)]
   pub fn read(&self) -> ScheduleNode { unsafe { ptr::read(self) } }
@@ -23,7 +26,7 @@ impl AsRef<ScheduleNodeRef> for ScheduleNode {
   fn as_ref(&self) -> &ScheduleNodeRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for ScheduleNode {
+impl Deref for ScheduleNode {
   type Target = ScheduleNodeRef;
   #[inline(always)]
   fn deref(&self) -> &ScheduleNodeRef { self.as_ref() }
@@ -42,6 +45,9 @@ pub struct Schedule(pub NonNull<c_void>);
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ScheduleRef(pub NonNull<c_void>);
 
+impl_try!(Schedule);
+impl_try!(ScheduleRef);
+
 impl Schedule {
   #[inline(always)]
   pub fn read(&self) -> Schedule { unsafe { ptr::read(self) } }
@@ -54,7 +60,7 @@ impl AsRef<ScheduleRef> for Schedule {
   fn as_ref(&self) -> &ScheduleRef { unsafe { mem::transmute(self) } }
 }
 
-impl std::ops::Deref for Schedule {
+impl Deref for Schedule {
   type Target = ScheduleRef;
   #[inline(always)]
   fn deref(&self) -> &ScheduleRef { self.as_ref() }

@@ -1,5 +1,3 @@
-use isl::{CtxRef, Set, Map, DimType, CStr};
-use std::fmt::Display;
 use crate::*;
 
 #[derive(Debug)]
@@ -18,6 +16,8 @@ pub struct Comp {
   pub succ: HashMap<P<Comp>, u32>,
   pub dim_tags: Vec<Option<DimTag>>,
 }
+
+impl_try!(&Comp);
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum DimTag { Parallel, GPUBlockX, GPUBlockY, GPUBlockZ, GPUThreadX, GPUThreadY, GPUThreadZ }
@@ -46,14 +46,13 @@ impl Func {
       sep(ranges.iter().enumerate().map(|(i, (lb, ub))| fn2display(move |f|
         write!(f, "{} <= i{} < {}", lb, i, ub))), " and "));
     debug!("comp: domain = {}", s);
-    let domain = self.ctx.set_read_from_str(cstr(&s)).unwrap();
-    self.comp_raw(domain, expr)
+    self.comp_raw(self.ctx.set_read_from_str(cstr(&s))?, expr)
   }
 
   pub fn comp_raw(&self, domain: Set, expr: Expr) -> &Comp {
     // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
-    let domain = domain.coalesce().unwrap();
-    let schedule = identity_schedule(&domain).unwrap();
+    let domain = domain.coalesce()?;
+    let schedule = identity_schedule(&domain);
     debug!("comp_raw: initial identity schedule = {}", schedule);
     let comp = box Comp { ctx: *self.ctx, func: self.into(), domain, expr, schedule, store: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
     assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
@@ -122,7 +121,7 @@ impl Comp {
         }))),
       i0 = n, i1 = n + 1, i = i, f = factor);
     debug!("split: {}", s);
-    self.apply_sch_raw(&s).unwrap()
+    self.apply_sch_raw(&s)
   }
 
   // 交换循环层次i和j
@@ -140,7 +139,7 @@ impl Comp {
           .map(|&(_, new)| new * 2 + 1).unwrap_or(x))
       ))));
     debug!("reorder_n: {}", s);
-    self.apply_sch_raw(&s).unwrap()
+    self.apply_sch_raw(&s)
   }
 
   pub fn skew(&self, i: u32, j: u32, factor: u32) -> &Comp {
@@ -151,12 +150,12 @@ impl Comp {
         write!(f, "i{}", if x < j { x } else if x == j { n } else { x - 1 })))),
       j1 = n, f = factor, i = i, j = j);
     debug!("skew: {}", s);
-    self.apply_sch_raw(&s).unwrap()
+    self.apply_sch_raw(&s)
   }
 
   pub fn shift(&self, i: u32, n: i32) -> &Comp {
     // 设置i_out = i_in + n
-    self.schedule.write(map_set_eq(self.schedule.read(), i * 2 + 1, -1, n).unwrap());
+    self.schedule.write(map_set_eq(self.schedule.read(), i * 2 + 1, -1, n));
     debug!("shift: {}", self.schedule);
     self
   }
@@ -229,17 +228,17 @@ impl Comp {
     dup.after(self, i);
     self.schedule.write(self.schedule.read().intersect_range(i_aff.lt_set(sep).unwrap()
       .add_dims(DimType::Out, n - pos - 1).unwrap()).unwrap());
-    debug!("separate: created dup comp = {}", dup.name());
+    debug!("separate: created dup comp {}, sch = {}", dup.name(), dup.schedule);
     let ret = R::new(&*dup);
     P::new(self).func.comps.push(dup);
     Some(ret.get())
   }
 
-  pub fn apply_sch_raw(&self, s: &str) -> Option<&Comp> {
+  pub fn apply_sch_raw(&self, s: &str) -> &Comp {
     debug_assert!(s.ends_with('\0'));
     let t = self.ctx.map_read_from_str(cstr(&s))?.align_params(self.schedule.get_space()?)?;
     self.schedule.write(self.schedule.read().apply_range(t)?);
-    Some(self)
+    self
   }
 }
 
@@ -253,8 +252,7 @@ impl Comp {
   }
 
   pub fn store(&self, buf: &Buf) -> &Comp {
-    let mut store = identity_map(&self.domain).unwrap();
-    store = store.set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name))).unwrap();
+    let store = identity_map(&self.domain).set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
     debug!("store: {}", store);
     P::new(self).store = Some(store);
     self
@@ -264,7 +262,7 @@ impl Comp {
     let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.n_dim()),
       buf.name, comma_sep(idx.iter().map(|e| e.clone_expr())));
     debug!("store_at: {}", s);
-    P::new(self).store = Some(self.ctx.map_read_from_str(cstr(&s)).unwrap());
+    P::new(self).store = Some(self.ctx.map_read_from_str(cstr(&s))?);
     self
   }
 }
@@ -293,15 +291,33 @@ impl Comp {
   // 例如A.after(B, i); B.after(C, i); 最终会正确生成A在B后，B在C后
   // 但A.after_raw(B, i); B.after_raw(C, i); 假设一开始static dim都是0，则最终A和B的都是1，分不出先后
   // 此外还须保证事先调用`Func::align_schedule`
-  pub fn after_raw(&self, other: &Comp, at: u32) {
+  pub fn after_raw(&self, other: &Comp, at: u32) -> Unit {
     debug_assert_eq!(self.sch_dim(), other.sch_dim());
     // 理论上只需要将other.schedule中pos处的constraint + 1即可，但是ISL不提供这样的操作，必须重新构建
-    for i in (0..self.sch_dim()).step_by(2) {
+    for pos in (0..self.sch_dim()).step_by(2) {
+      // 获取map中对应位置的static dim
+      let mut order = None;
+      // Map由多个BasicMap的并集组成，理论上不同的BasicMap的同一个out dim处可以有不同的constraint
+      // 但在这里不会发生，这里获取的是static dim，应该保证所有BasicMap的static dim都是相同的
+      other.schedule.foreach_basic_map(&mut |m| {
+        let csts = m.get_constraint_list()?;
+        for i in 0..csts.n_constraint() {
+          let cst = csts.get_constraint(i)?;
+          let k = cst.get_coefficient_val(DimType::Out, pos as _)?;
+          if k.is_one()? {
+            let val = -cst.get_constant_val()?.get_num_si() as i32;
+            debug_assert!(order == None || order == Some(val));
+            order = Some(val);
+          }
+        }
+        Stat::Ok
+      })?;
       // 在other的对应位置上static dim上 + 1，其余不变
-      let order = get_static_dim(&other.schedule, i).unwrap() + (i == at * 2) as i32;
-      self.schedule.write(map_set_eq(self.schedule.read(), i, 0, order).unwrap());
+      let order = order? + (pos == at * 2) as i32;
+      self.schedule.write(map_set_eq(self.schedule.read(), pos, 0, order));
     }
     debug!("after_raw: {}", self.schedule);
+    Unit
   }
 }
 
@@ -313,20 +329,20 @@ pub(crate) fn i0_in(n: u32) -> impl Display {
 
 // 在pos处添加约束: k_in * i_in + i_out + val == 0; 如果k_in传0，就是设置out维度中pos处值为val
 // 如果已经存在对这个位置约束则不能使用它
-pub(crate) fn map_add_constraint(map: Map, pos: u32, k_in: i32, val: i32) -> Option<Map> {
-  let pos = pos as i32;
+pub(crate) fn map_add_constraint(map: Map, pos: u32, k_in: i32, val: i32) -> Map {
+  let pos = pos as _;
   let mut cst = map.get_space()?.local_space_from_space()?.constraint_alloc_equality()?;
   // 我的应用中out dim总是多于in dim，所以只需要检查pos是否在in dim范围内
   if pos < cst.dim(DimType::In) {
     cst = cst.set_coefficient_si(DimType::In, pos, k_in)?;
   }
   cst = cst.set_coefficient_si(DimType::Out, pos, 1)?.set_constant_si(-val)?;
-  map.add_constraint(cst)
+  map.add_constraint(cst)?
 }
 
 // k_in，val语义和map_add_constraint中相同
 // 可以处理已经存在对这个位置约束的情形，但比`map_add_constraint`开销更大
-pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Option<Map> {
+pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Map {
   let mut sp = map.get_space()?;
   let (n_in, n_out) = (sp.dim(DimType::In), sp.dim(DimType::Out));
   sp = sp.add_dims(DimType::In, n_out - n_in)?;
@@ -334,47 +350,25 @@ pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Option<Map>
   for i in 0..n_out {
     // 除pos外其他维度，包括static和dynamic dim，都是恒等映射
     let (k_in, val) = if i == pos { (k_in, val) } else { (-1, 0) };
-    trans = map_add_constraint(trans, i, k_in, val)?;
+    trans = map_add_constraint(trans, i, k_in, val);
   }
-  map.apply_range(trans)
+  map.apply_range(trans)?
 }
 
 // 从set生成一对一的map，map的in dim名字为set名字，out dim名字为空
 // 注意ISL中名字是空字符串和名字是空指针被认为是不一样的，用reset_tuple_id将名字赋成空指针，或set_tuple_name传None
-pub(crate) fn identity_map(set: &Set) -> Option<Map> {
-  let sp = set.get_space()?.add_dims(DimType::In, set.n_dim())?
-    .set_tuple_name(DimType::In, set.get_tuple_name())?
-    .reset_tuple_id(DimType::Out)?;
-  sp.map_identity()?.intersect_domain(set.copy()?)
+pub(crate) fn identity_map(set: &Set) -> Map {
+  set.get_space()?.add_dims(DimType::In, set.n_dim())?
+    .set_tuple_name(DimType::In, set.get_tuple_name())?.reset_tuple_id(DimType::Out)?
+    .map_identity()?.intersect_domain(set.copy()?)?
 }
 
-pub(crate) fn identity_schedule(domain: &Set) -> Option<Map> {
-  let mut sch = identity_map(domain)?;
+pub(crate) fn identity_schedule(domain: &Set) -> Map {
+  let mut sch = identity_map(domain);
   for i in 0..=domain.n_dim() { // 在0，2，4...，2 * n_dim下标处插入0
     let pos = 2 * i;
     sch = sch.insert_dims(DimType::Out, pos, 1)?;
-    sch = map_add_constraint(sch, pos, 0, 0)?;
+    sch = map_add_constraint(sch, pos, 0, 0);
   }
-  Some(sch)
-}
-
-// 获取map中对应位置的static dim
-fn get_static_dim(map: &Map, pos: u32) -> Option<i32> {
-  let mut ret = None;
-  // Map由多个BasicMap的并集组成，理论上不同的BasicMap的同一个out dim处可以有不同的constraint
-  // 但在这里不会发生，这里获取的是static dim，应该保证所有BasicMap的static dim都是相同的
-  map.foreach_basic_map(&mut |m| {
-    let csts = m.get_constraint_list()?;
-    for i in 0..csts.n_constraint() {
-      let cst = csts.get_constraint(i)?;
-      let k = cst.get_coefficient_val(DimType::Out, pos as _)?;
-      if k.is_one()? {
-        let val = -cst.get_constant_val()?.get_num_si() as _;
-        debug_assert!(ret == None || ret == Some(val));
-        ret = Some(val);
-      }
-    }
-    Some(())
-  })?;
-  ret
+  sch
 }
