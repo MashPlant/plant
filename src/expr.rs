@@ -110,7 +110,7 @@ impl Expr {
         }
       }
       AstExprType::Op => {
-        use AstOpType::*;
+        use AstExprOpType::*;
         let (n, op) = (e.get_op_n_arg(), e.get_op_type());
         match e.get_op_type() {
           Access => {

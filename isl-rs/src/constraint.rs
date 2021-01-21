@@ -9,14 +9,21 @@ extern "C" {
   pub fn isl_constraint_list_add(list: ConstraintList, el: Constraint) -> Option<ConstraintList>;
   pub fn isl_constraint_list_insert(list: ConstraintList, pos: c_uint, el: Constraint) -> Option<ConstraintList>;
   pub fn isl_constraint_list_drop(list: ConstraintList, first: c_uint, n: c_uint) -> Option<ConstraintList>;
+  pub fn isl_constraint_list_clear(list: ConstraintList) -> Option<ConstraintList>;
+  pub fn isl_constraint_list_swap(list: ConstraintList, pos1: c_uint, pos2: c_uint) -> Option<ConstraintList>;
+  pub fn isl_constraint_list_reverse(list: ConstraintList) -> Option<ConstraintList>;
   pub fn isl_constraint_list_concat(list1: ConstraintList, list2: ConstraintList) -> Option<ConstraintList>;
+  pub fn isl_constraint_list_size(list: ConstraintListRef) -> c_int;
   pub fn isl_constraint_list_n_constraint(list: ConstraintListRef) -> c_int;
+  pub fn isl_constraint_list_get_at(list: ConstraintListRef, index: c_int) -> Option<Constraint>;
   pub fn isl_constraint_list_get_constraint(list: ConstraintListRef, index: c_int) -> Option<Constraint>;
   pub fn isl_constraint_list_set_constraint(list: ConstraintList, index: c_int, el: Constraint) -> Option<ConstraintList>;
   pub fn isl_constraint_list_foreach(list: ConstraintListRef, fn_: unsafe extern "C" fn(el: Constraint, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_constraint_list_every(list: ConstraintListRef, test: unsafe extern "C" fn(el: ConstraintRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_constraint_list_map(list: ConstraintList, fn_: unsafe extern "C" fn(el: Constraint, user: *mut c_void) -> Option<Constraint>, user: *mut c_void) -> Option<ConstraintList>;
   pub fn isl_constraint_list_sort(list: ConstraintList, cmp: unsafe extern "C" fn(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<ConstraintList>;
   pub fn isl_constraint_list_foreach_scc(list: ConstraintListRef, follows: unsafe extern "C" fn(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: ConstraintList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
+  pub fn isl_constraint_list_to_str(list: ConstraintListRef) -> Option<CString>;
   pub fn isl_printer_print_constraint_list(p: Printer, list: ConstraintListRef) -> Option<Printer>;
   pub fn isl_constraint_list_dump(list: ConstraintListRef) -> ();
   pub fn isl_constraint_get_ctx(c: ConstraintRef) -> Option<CtxRef>;
@@ -55,7 +62,7 @@ extern "C" {
   pub fn isl_constraint_get_div(constraint: ConstraintRef, pos: c_int) -> Option<Aff>;
   pub fn isl_constraint_negate(constraint: Constraint) -> Option<Constraint>;
   pub fn isl_constraint_is_equality(constraint: ConstraintRef) -> Bool;
-  pub fn isl_constraint_is_div_constraint(constraint: ConstraintRef) -> c_int;
+  pub fn isl_constraint_is_div_constraint(constraint: ConstraintRef) -> Bool;
   pub fn isl_constraint_is_lower_bound(constraint: ConstraintRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_constraint_is_upper_bound(constraint: ConstraintRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_basic_map_from_constraint(constraint: Constraint) -> Option<BasicMap>;
@@ -354,6 +361,27 @@ impl ConstraintList {
     }
   }
   #[inline(always)]
+  pub fn clear(self) -> Option<ConstraintList> {
+    unsafe {
+      let ret = isl_constraint_list_clear(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn swap(self, pos1: c_uint, pos2: c_uint) -> Option<ConstraintList> {
+    unsafe {
+      let ret = isl_constraint_list_swap(self.to(), pos1.to(), pos2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reverse(self) -> Option<ConstraintList> {
+    unsafe {
+      let ret = isl_constraint_list_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn concat(self, list2: ConstraintList) -> Option<ConstraintList> {
     unsafe {
       let ret = isl_constraint_list_concat(self.to(), list2.to());
@@ -401,9 +429,23 @@ impl ConstraintListRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_constraint_list_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn n_constraint(self) -> c_int {
     unsafe {
       let ret = isl_constraint_list_n_constraint(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, index: c_int) -> Option<Constraint> {
+    unsafe {
+      let ret = isl_constraint_list_get_at(self.to(), index.to());
       (ret).to()
     }
   }
@@ -423,11 +465,26 @@ impl ConstraintListRef {
     }
   }
   #[inline(always)]
+  pub fn every<F1: FnMut(ConstraintRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(ConstraintRef) -> Bool>(el: ConstraintRef, user: *mut c_void) -> Bool { (*(user as *mut F))(el.to()) }
+    unsafe {
+      let ret = isl_constraint_list_every(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn foreach_scc<F1: FnMut(ConstraintRef, ConstraintRef) -> Bool, F2: FnMut(ConstraintList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
     unsafe extern "C" fn fn1<F: FnMut(ConstraintRef, ConstraintRef) -> Bool>(a: ConstraintRef, b: ConstraintRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
     unsafe extern "C" fn fn2<F: FnMut(ConstraintList) -> Stat>(scc: ConstraintList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_constraint_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn to_str(self) -> Option<CString> {
+    unsafe {
+      let ret = isl_constraint_list_to_str(self.to());
       (ret).to()
     }
   }
@@ -526,7 +583,7 @@ impl ConstraintRef {
     }
   }
   #[inline(always)]
-  pub fn is_div_constraint(self) -> c_int {
+  pub fn is_div_constraint(self) -> Bool {
     unsafe {
       let ret = isl_constraint_is_div_constraint(self.to());
       (ret).to()
@@ -667,5 +724,15 @@ impl Drop for Constraint {
 
 impl Drop for ConstraintList {
   fn drop(&mut self) { ConstraintList(self.0).free() }
+}
+
+impl fmt::Display for ConstraintListRef {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
+}
+
+impl fmt::Display for ConstraintList {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
 }
 

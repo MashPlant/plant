@@ -107,6 +107,40 @@ impl To<Option<PwQpolynomial>> for *mut c_void {
 
 #[repr(transparent)]
 #[derive(Debug)]
+pub struct PwQpolynomialList(pub NonNull<c_void>);
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct PwQpolynomialListRef(pub NonNull<c_void>);
+
+impl_try!(PwQpolynomialList);
+impl_try!(PwQpolynomialListRef);
+
+impl PwQpolynomialList {
+  #[inline(always)]
+  pub fn read(&self) -> PwQpolynomialList { unsafe { ptr::read(self) } }
+  #[inline(always)]
+  pub fn write(&self, x: PwQpolynomialList) { unsafe { ptr::write(self as *const _ as _, x) } }
+}
+
+impl AsRef<PwQpolynomialListRef> for PwQpolynomialList {
+  #[inline(always)]
+  fn as_ref(&self) -> &PwQpolynomialListRef { unsafe { mem::transmute(self) } }
+}
+
+impl Deref for PwQpolynomialList {
+  type Target = PwQpolynomialListRef;
+  #[inline(always)]
+  fn deref(&self) -> &PwQpolynomialListRef { self.as_ref() }
+}
+
+impl To<Option<PwQpolynomialList>> for *mut c_void {
+  #[inline(always)]
+  unsafe fn to(self) -> Option<PwQpolynomialList> { NonNull::new(self).map(PwQpolynomialList) }
+}
+
+#[repr(transparent)]
+#[derive(Debug)]
 pub struct QpolynomialFold(pub NonNull<c_void>);
 
 #[repr(transparent)]
@@ -171,6 +205,40 @@ impl Deref for PwQpolynomialFold {
 impl To<Option<PwQpolynomialFold>> for *mut c_void {
   #[inline(always)]
   unsafe fn to(self) -> Option<PwQpolynomialFold> { NonNull::new(self).map(PwQpolynomialFold) }
+}
+
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct PwQpolynomialFoldList(pub NonNull<c_void>);
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct PwQpolynomialFoldListRef(pub NonNull<c_void>);
+
+impl_try!(PwQpolynomialFoldList);
+impl_try!(PwQpolynomialFoldListRef);
+
+impl PwQpolynomialFoldList {
+  #[inline(always)]
+  pub fn read(&self) -> PwQpolynomialFoldList { unsafe { ptr::read(self) } }
+  #[inline(always)]
+  pub fn write(&self, x: PwQpolynomialFoldList) { unsafe { ptr::write(self as *const _ as _, x) } }
+}
+
+impl AsRef<PwQpolynomialFoldListRef> for PwQpolynomialFoldList {
+  #[inline(always)]
+  fn as_ref(&self) -> &PwQpolynomialFoldListRef { unsafe { mem::transmute(self) } }
+}
+
+impl Deref for PwQpolynomialFoldList {
+  type Target = PwQpolynomialFoldListRef;
+  #[inline(always)]
+  fn deref(&self) -> &PwQpolynomialFoldListRef { self.as_ref() }
+}
+
+impl To<Option<PwQpolynomialFoldList>> for *mut c_void {
+  #[inline(always)]
+  unsafe fn to(self) -> Option<PwQpolynomialFoldList> { NonNull::new(self).map(PwQpolynomialFoldList) }
 }
 
 #[repr(transparent)]

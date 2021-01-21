@@ -27,6 +27,7 @@ extern "C" {
   pub fn isl_vec_sort(vec: Vec) -> Option<Vec>;
   pub fn isl_vec_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<Vec>;
   pub fn isl_vec_drop_els(vec: Vec, pos: c_uint, n: c_uint) -> Option<Vec>;
+  pub fn isl_vec_add_els(vec: Vec, n: c_uint) -> Option<Vec>;
   pub fn isl_vec_insert_els(vec: Vec, pos: c_uint, n: c_uint) -> Option<Vec>;
   pub fn isl_vec_insert_zero_els(vec: Vec, pos: c_uint, n: c_uint) -> Option<Vec>;
   pub fn isl_vec_move_els(vec: Vec, dst_col: c_uint, src_col: c_uint, n: c_uint) -> Option<Vec>;
@@ -203,6 +204,13 @@ impl Vec {
   pub fn drop_els(self, pos: c_uint, n: c_uint) -> Option<Vec> {
     unsafe {
       let ret = isl_vec_drop_els(self.to(), pos.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn add_els(self, n: c_uint) -> Option<Vec> {
+    unsafe {
+      let ret = isl_vec_add_els(self.to(), n.to());
       (ret).to()
     }
   }

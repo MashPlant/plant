@@ -1,11 +1,13 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_union_map_dim(umap: UnionMapRef, type_: DimType) -> c_uint;
+  pub fn isl_union_map_dim(umap: UnionMapRef, type_: DimType) -> c_int;
   pub fn isl_union_map_involves_dims(umap: UnionMapRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
   pub fn isl_union_map_get_dim_id(umap: UnionMapRef, type_: DimType, pos: c_uint) -> Option<Id>;
   pub fn isl_union_map_from_basic_map(bmap: BasicMap) -> Option<UnionMap>;
   pub fn isl_union_map_from_map(map: Map) -> Option<UnionMap>;
+  pub fn isl_union_map_empty_ctx(ctx: CtxRef) -> Option<UnionMap>;
+  pub fn isl_union_map_empty_space(space: Space) -> Option<UnionMap>;
   pub fn isl_union_map_empty(space: Space) -> Option<UnionMap>;
   pub fn isl_union_map_copy(umap: UnionMapRef) -> Option<UnionMap>;
   pub fn isl_union_map_free(umap: UnionMap) -> *mut c_void;
@@ -51,8 +53,15 @@ extern "C" {
   pub fn isl_union_map_gist_params(umap: UnionMap, set: Set) -> Option<UnionMap>;
   pub fn isl_union_map_gist_domain(umap: UnionMap, uset: UnionSet) -> Option<UnionMap>;
   pub fn isl_union_map_gist_range(umap: UnionMap, uset: UnionSet) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_domain_union_set(umap: UnionMap, uset: UnionSet) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_domain_space(umap: UnionMap, space: Space) -> Option<UnionMap>;
   pub fn isl_union_map_intersect_domain(umap: UnionMap, uset: UnionSet) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_range_union_set(umap: UnionMap, uset: UnionSet) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_range_space(umap: UnionMap, space: Space) -> Option<UnionMap>;
   pub fn isl_union_map_intersect_range(umap: UnionMap, uset: UnionSet) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_domain_factor_domain(umap: UnionMap, factor: UnionMap) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_domain_factor_range(umap: UnionMap, factor: UnionMap) -> Option<UnionMap>;
+  pub fn isl_union_map_intersect_range_factor_domain(umap: UnionMap, factor: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_intersect_range_factor_range(umap: UnionMap, factor: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_subtract_domain(umap: UnionMap, dom: UnionSet) -> Option<UnionMap>;
   pub fn isl_union_map_subtract_range(umap: UnionMap, dom: UnionSet) -> Option<UnionMap>;
@@ -66,6 +75,7 @@ extern "C" {
   pub fn isl_union_map_preimage_domain_union_pw_multi_aff(umap: UnionMap, upma: UnionPwMultiAff) -> Option<UnionMap>;
   pub fn isl_union_map_preimage_range_union_pw_multi_aff(umap: UnionMap, upma: UnionPwMultiAff) -> Option<UnionMap>;
   pub fn isl_union_map_reverse(umap: UnionMap) -> Option<UnionMap>;
+  pub fn isl_union_map_range_reverse(umap: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_from_domain_and_range(domain: UnionSet, range: UnionSet) -> Option<UnionMap>;
   pub fn isl_union_map_detect_equalities(umap: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_deltas(umap: UnionMap) -> Option<UnionSet>;
@@ -74,6 +84,7 @@ extern "C" {
   pub fn isl_union_map_project_out(umap: UnionMap, type_: DimType, first: c_uint, n: c_uint) -> Option<UnionMap>;
   pub fn isl_union_map_project_out_all_params(umap: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_remove_divs(bmap: UnionMap) -> Option<UnionMap>;
+  pub fn isl_union_map_bind_range(umap: UnionMap, tuple: MultiId) -> Option<UnionSet>;
   pub fn isl_union_map_plain_is_empty(umap: UnionMapRef) -> Bool;
   pub fn isl_union_map_is_empty(umap: UnionMapRef) -> Bool;
   pub fn isl_union_map_is_single_valued(umap: UnionMapRef) -> Bool;
@@ -88,21 +99,25 @@ extern "C" {
   pub fn isl_union_map_get_hash(umap: UnionMapRef) -> c_uint;
   pub fn isl_union_map_n_map(umap: UnionMapRef) -> c_int;
   pub fn isl_union_map_foreach_map(umap: UnionMapRef, fn_: unsafe extern "C" fn(map: Map, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_union_map_get_map_list(umap: UnionMapRef) -> Option<MapList>;
   pub fn isl_union_map_every_map(umap: UnionMapRef, test: unsafe extern "C" fn(map: MapRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_union_map_remove_map_if(umap: UnionMap, fn_: unsafe extern "C" fn(map: MapRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Option<UnionMap>;
   pub fn isl_union_map_contains(umap: UnionMapRef, space: SpaceRef) -> Bool;
-  pub fn isl_union_map_extract_map(umap: UnionMapRef, dim: Space) -> Option<Map>;
+  pub fn isl_union_map_extract_map(umap: UnionMapRef, space: Space) -> Option<Map>;
+  pub fn isl_union_map_isa_map(umap: UnionMapRef) -> Bool;
   pub fn isl_map_from_union_map(umap: UnionMap) -> Option<Map>;
   pub fn isl_union_map_sample(umap: UnionMap) -> Option<BasicMap>;
   pub fn isl_union_map_fixed_power_val(umap: UnionMap, exp: Val) -> Option<UnionMap>;
-  pub fn isl_union_map_power(umap: UnionMap, exact: *mut c_int) -> Option<UnionMap>;
-  pub fn isl_union_map_transitive_closure(umap: UnionMap, exact: *mut c_int) -> Option<UnionMap>;
+  pub fn isl_union_map_power(umap: UnionMap, exact: *mut Bool) -> Option<UnionMap>;
+  pub fn isl_union_map_transitive_closure(umap: UnionMap, exact: *mut Bool) -> Option<UnionMap>;
   pub fn isl_union_map_lex_lt_union_map(umap1: UnionMap, umap2: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_lex_le_union_map(umap1: UnionMap, umap2: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_lex_gt_union_map(umap1: UnionMap, umap2: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_lex_ge_union_map(umap1: UnionMap, umap2: UnionMap) -> Option<UnionMap>;
   pub fn isl_union_map_eq_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
+  pub fn isl_union_map_lex_le_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
   pub fn isl_union_map_lex_lt_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
+  pub fn isl_union_map_lex_ge_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
   pub fn isl_union_map_lex_gt_at_multi_union_pw_aff(umap: UnionMap, mupa: MultiUnionPwAff) -> Option<UnionMap>;
   pub fn isl_union_map_read_from_file(ctx: CtxRef, input: *mut FILE) -> Option<UnionMap>;
   pub fn isl_union_map_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<UnionMap>;
@@ -125,14 +140,21 @@ extern "C" {
   pub fn isl_union_map_list_add(list: UnionMapList, el: UnionMap) -> Option<UnionMapList>;
   pub fn isl_union_map_list_insert(list: UnionMapList, pos: c_uint, el: UnionMap) -> Option<UnionMapList>;
   pub fn isl_union_map_list_drop(list: UnionMapList, first: c_uint, n: c_uint) -> Option<UnionMapList>;
+  pub fn isl_union_map_list_clear(list: UnionMapList) -> Option<UnionMapList>;
+  pub fn isl_union_map_list_swap(list: UnionMapList, pos1: c_uint, pos2: c_uint) -> Option<UnionMapList>;
+  pub fn isl_union_map_list_reverse(list: UnionMapList) -> Option<UnionMapList>;
   pub fn isl_union_map_list_concat(list1: UnionMapList, list2: UnionMapList) -> Option<UnionMapList>;
+  pub fn isl_union_map_list_size(list: UnionMapListRef) -> c_int;
   pub fn isl_union_map_list_n_union_map(list: UnionMapListRef) -> c_int;
+  pub fn isl_union_map_list_get_at(list: UnionMapListRef, index: c_int) -> Option<UnionMap>;
   pub fn isl_union_map_list_get_union_map(list: UnionMapListRef, index: c_int) -> Option<UnionMap>;
   pub fn isl_union_map_list_set_union_map(list: UnionMapList, index: c_int, el: UnionMap) -> Option<UnionMapList>;
   pub fn isl_union_map_list_foreach(list: UnionMapListRef, fn_: unsafe extern "C" fn(el: UnionMap, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_union_map_list_every(list: UnionMapListRef, test: unsafe extern "C" fn(el: UnionMapRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_union_map_list_map(list: UnionMapList, fn_: unsafe extern "C" fn(el: UnionMap, user: *mut c_void) -> Option<UnionMap>, user: *mut c_void) -> Option<UnionMapList>;
   pub fn isl_union_map_list_sort(list: UnionMapList, cmp: unsafe extern "C" fn(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<UnionMapList>;
   pub fn isl_union_map_list_foreach_scc(list: UnionMapListRef, follows: unsafe extern "C" fn(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: UnionMapList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
+  pub fn isl_union_map_list_to_str(list: UnionMapListRef) -> Option<CString>;
   pub fn isl_printer_print_union_map_list(p: Printer, list: UnionMapListRef) -> Option<Printer>;
   pub fn isl_union_map_list_dump(list: UnionMapListRef) -> ();
 }
@@ -148,6 +170,13 @@ impl BasicMap {
 }
 
 impl CtxRef {
+  #[inline(always)]
+  pub fn union_map_empty_ctx(self) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_empty_ctx(self.to());
+      (ret).to()
+    }
+  }
   #[inline(always)]
   pub fn union_map_read_from_file(self, input: *mut FILE) -> Option<UnionMap> {
     unsafe {
@@ -199,6 +228,13 @@ impl Printer {
 }
 
 impl Space {
+  #[inline(always)]
+  pub fn union_map_empty_space(self) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_empty_space(self.to());
+      (ret).to()
+    }
+  }
   #[inline(always)]
   pub fn union_map_empty(self) -> Option<UnionMap> {
     unsafe {
@@ -469,6 +505,20 @@ impl UnionMap {
     }
   }
   #[inline(always)]
+  pub fn intersect_domain_union_set(self, uset: UnionSet) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_domain_union_set(self.to(), uset.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_domain_space(self, space: Space) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_domain_space(self.to(), space.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn intersect_domain(self, uset: UnionSet) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_intersect_domain(self.to(), uset.to());
@@ -476,9 +526,44 @@ impl UnionMap {
     }
   }
   #[inline(always)]
+  pub fn intersect_range_union_set(self, uset: UnionSet) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_range_union_set(self.to(), uset.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_range_space(self, space: Space) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_range_space(self.to(), space.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn intersect_range(self, uset: UnionSet) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_intersect_range(self.to(), uset.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_domain_factor_domain(self, factor: UnionMap) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_domain_factor_domain(self.to(), factor.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_domain_factor_range(self, factor: UnionMap) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_domain_factor_range(self.to(), factor.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_range_factor_domain(self, factor: UnionMap) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_intersect_range_factor_domain(self.to(), factor.to());
       (ret).to()
     }
   }
@@ -574,6 +659,13 @@ impl UnionMap {
     }
   }
   #[inline(always)]
+  pub fn range_reverse(self) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_range_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn detect_equalities(self) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_detect_equalities(self.to());
@@ -616,6 +708,13 @@ impl UnionMap {
     }
   }
   #[inline(always)]
+  pub fn bind_range(self, tuple: MultiId) -> Option<UnionSet> {
+    unsafe {
+      let ret = isl_union_map_bind_range(self.to(), tuple.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn remove_map_if<F1: FnMut(MapRef) -> Bool>(self, fn_: &mut F1) -> Option<UnionMap> {
     unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Bool>(map: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(map.to()) }
     unsafe {
@@ -645,14 +744,14 @@ impl UnionMap {
     }
   }
   #[inline(always)]
-  pub fn power(self, exact: &mut c_int) -> Option<UnionMap> {
+  pub fn power(self, exact: &mut Bool) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_power(self.to(), exact.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn transitive_closure(self, exact: &mut c_int) -> Option<UnionMap> {
+  pub fn transitive_closure(self, exact: &mut Bool) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_transitive_closure(self.to(), exact.to());
       (ret).to()
@@ -694,9 +793,23 @@ impl UnionMap {
     }
   }
   #[inline(always)]
+  pub fn lex_le_at_multi_union_pw_aff(self, mupa: MultiUnionPwAff) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_lex_le_at_multi_union_pw_aff(self.to(), mupa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn lex_lt_at_multi_union_pw_aff(self, mupa: MultiUnionPwAff) -> Option<UnionMap> {
     unsafe {
       let ret = isl_union_map_lex_lt_at_multi_union_pw_aff(self.to(), mupa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn lex_ge_at_multi_union_pw_aff(self, mupa: MultiUnionPwAff) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_lex_ge_at_multi_union_pw_aff(self.to(), mupa.to());
       (ret).to()
     }
   }
@@ -788,6 +901,27 @@ impl UnionMapList {
     }
   }
   #[inline(always)]
+  pub fn clear(self) -> Option<UnionMapList> {
+    unsafe {
+      let ret = isl_union_map_list_clear(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn swap(self, pos1: c_uint, pos2: c_uint) -> Option<UnionMapList> {
+    unsafe {
+      let ret = isl_union_map_list_swap(self.to(), pos1.to(), pos2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reverse(self) -> Option<UnionMapList> {
+    unsafe {
+      let ret = isl_union_map_list_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn concat(self, list2: UnionMapList) -> Option<UnionMapList> {
     unsafe {
       let ret = isl_union_map_list_concat(self.to(), list2.to());
@@ -835,9 +969,23 @@ impl UnionMapListRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_union_map_list_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn n_union_map(self) -> c_int {
     unsafe {
       let ret = isl_union_map_list_n_union_map(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, index: c_int) -> Option<UnionMap> {
+    unsafe {
+      let ret = isl_union_map_list_get_at(self.to(), index.to());
       (ret).to()
     }
   }
@@ -857,11 +1005,26 @@ impl UnionMapListRef {
     }
   }
   #[inline(always)]
+  pub fn every<F1: FnMut(UnionMapRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(UnionMapRef) -> Bool>(el: UnionMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(el.to()) }
+    unsafe {
+      let ret = isl_union_map_list_every(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn foreach_scc<F1: FnMut(UnionMapRef, UnionMapRef) -> Bool, F2: FnMut(UnionMapList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
     unsafe extern "C" fn fn1<F: FnMut(UnionMapRef, UnionMapRef) -> Bool>(a: UnionMapRef, b: UnionMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
     unsafe extern "C" fn fn2<F: FnMut(UnionMapList) -> Stat>(scc: UnionMapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_union_map_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn to_str(self) -> Option<CString> {
+    unsafe {
+      let ret = isl_union_map_list_to_str(self.to());
       (ret).to()
     }
   }
@@ -876,7 +1039,7 @@ impl UnionMapListRef {
 
 impl UnionMapRef {
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_union_map_dim(self.to(), type_.to());
       (ret).to()
@@ -1024,6 +1187,13 @@ impl UnionMapRef {
     }
   }
   #[inline(always)]
+  pub fn get_map_list(self) -> Option<MapList> {
+    unsafe {
+      let ret = isl_union_map_get_map_list(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn every_map<F1: FnMut(MapRef) -> Bool>(self, test: &mut F1) -> Bool {
     unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Bool>(map: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(map.to()) }
     unsafe {
@@ -1039,9 +1209,16 @@ impl UnionMapRef {
     }
   }
   #[inline(always)]
-  pub fn extract_map(self, dim: Space) -> Option<Map> {
+  pub fn extract_map(self, space: Space) -> Option<Map> {
     unsafe {
-      let ret = isl_union_map_extract_map(self.to(), dim.to());
+      let ret = isl_union_map_extract_map(self.to(), space.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn isa_map(self) -> Bool {
+    unsafe {
+      let ret = isl_union_map_isa_map(self.to());
       (ret).to()
     }
   }
@@ -1119,6 +1296,16 @@ impl Drop for UnionMap {
 
 impl Drop for UnionMapList {
   fn drop(&mut self) { UnionMapList(self.0).free() }
+}
+
+impl fmt::Display for UnionMapListRef {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
+}
+
+impl fmt::Display for UnionMapList {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
 }
 
 impl fmt::Display for UnionMapRef {

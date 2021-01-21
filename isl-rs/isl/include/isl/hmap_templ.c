@@ -50,7 +50,7 @@ __isl_give ISL_HMAP *ISL_FN(ISL_HMAP,alloc)(__isl_keep isl_ctx *ctx, int min_siz
 	return hmap;
 }
 
-static isl_stat free_pair(void **entry, __isl_keep void *user)
+static isl_stat free_pair(__isl_keep void **entry, __isl_keep void *user)
 {
 	ISL_S(pair) *pair = *entry;
 	ISL_FN(ISL_KEY,free)(pair->key);
@@ -128,7 +128,7 @@ __isl_give ISL_HMAP *ISL_FN(ISL_HMAP,copy)(__isl_keep ISL_HMAP *hmap)
 	return hmap;
 }
 
-static int has_key(const void *entry, const void *c_key)
+static isl_bool has_key(__isl_keep const void *entry, __isl_keep const void *c_key)
 {
 	const ISL_S(pair) *pair = entry;
 	ISL_KEY *key = (ISL_KEY *) c_key;
@@ -159,6 +159,8 @@ __isl_give ISL_MAYBE(ISL_VAL) ISL_FN(ISL_HMAP,try_get)(
 					&has_key, key, 0);
 
 	if (!entry)
+		goto error;
+	if (entry == isl_hash_table_entry_none)
 		return res;
 
 	pair = entry->data;
@@ -221,7 +223,9 @@ __isl_give ISL_HMAP *ISL_FN(ISL_HMAP,drop)(__isl_take ISL_HMAP *hmap,
 	hash = ISL_FN(ISL_KEY,get_hash)(key);
 	entry = isl_hash_table_find(hmap->ctx, &hmap->table, hash,
 					&has_key, key, 0);
-	if (!entry) {
+	if (!entry)
+		goto error;
+	if (entry == isl_hash_table_entry_none) {
 		ISL_FN(ISL_KEY,free)(key);
 		return hmap;
 	}
@@ -234,8 +238,10 @@ __isl_give ISL_HMAP *ISL_FN(ISL_HMAP,drop)(__isl_take ISL_HMAP *hmap,
 	ISL_FN(ISL_KEY,free)(key);
 
 	if (!entry)
+		return ISL_FN(ISL_HMAP,free)(hmap);
+	if (entry == isl_hash_table_entry_none)
 		isl_die(hmap->ctx, isl_error_internal,
-			"missing entry" , goto error);
+			"missing entry" , return ISL_FN(ISL_HMAP,free)(hmap));
 
 	pair = entry->data;
 	isl_hash_table_remove(hmap->ctx, &hmap->table, entry);
@@ -269,8 +275,10 @@ __isl_give ISL_HMAP *ISL_FN(ISL_HMAP,set)(__isl_take ISL_HMAP *hmap,
 	hash = ISL_FN(ISL_KEY,get_hash)(key);
 	entry = isl_hash_table_find(hmap->ctx, &hmap->table, hash,
 					&has_key, key, 0);
-	if (entry) {
-		int equal;
+	if (!entry)
+		goto error;
+	if (entry != isl_hash_table_entry_none) {
+		isl_bool equal;
 		pair = entry->data;
 		equal = ISL_VAL_IS_EQUAL(pair->val, val);
 		if (equal < 0)
@@ -327,7 +335,7 @@ ISL_S(foreach_data) {
 
 /* Call data->fn on a copy of the key and value in *entry.
  */
-static isl_stat call_on_copy(void **entry, __isl_keep void *user)
+static isl_stat call_on_copy(__isl_keep void **entry, __isl_keep void *user)
 {
 	ISL_S(pair) *pair = *entry;
 	ISL_S(foreach_data) *data = (ISL_S(foreach_data) *) user;

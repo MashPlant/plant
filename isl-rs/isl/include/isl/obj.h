@@ -13,10 +13,10 @@ extern "C" {
 #endif
 
 struct isl_obj_vtable {
-	void *(*copy)(void *v1);
-	void *(*add)(void *v1, void *v2);
-	__isl_give isl_printer *(*print)(__isl_take isl_printer *p, void *v);
-	void (*free)(void *v);
+	__isl_keep void *(*copy)(__isl_keep void *v1);
+	__isl_keep void *(*add)(__isl_keep void *v1, __isl_keep void *v2);
+	__isl_give isl_printer *(*print)(__isl_take isl_printer *p, __isl_keep void *v);
+	void (*free)(__isl_keep void *v);
 };
 typedef struct isl_obj_vtable *isl_obj_type;
 extern struct isl_obj_vtable isl_obj_none_vtable;

@@ -3,14 +3,15 @@ use crate::*;
 extern "C" {
   pub fn isl_point_get_ctx(pnt: PointRef) -> Option<CtxRef>;
   pub fn isl_point_get_space(pnt: PointRef) -> Option<Space>;
-  pub fn isl_point_zero(dim: Space) -> Option<Point>;
+  pub fn isl_point_zero(space: Space) -> Option<Point>;
   pub fn isl_point_copy(pnt: PointRef) -> Option<Point>;
   pub fn isl_point_free(pnt: Point) -> *mut c_void;
   pub fn isl_point_get_coordinate_val(pnt: PointRef, type_: DimType, pos: c_int) -> Option<Val>;
   pub fn isl_point_set_coordinate_val(pnt: Point, type_: DimType, pos: c_int, v: Val) -> Option<Point>;
+  pub fn isl_point_get_multi_val(pnt: PointRef) -> Option<MultiVal>;
   pub fn isl_point_add_ui(pnt: Point, type_: DimType, pos: c_int, val: c_uint) -> Option<Point>;
   pub fn isl_point_sub_ui(pnt: Point, type_: DimType, pos: c_int, val: c_uint) -> Option<Point>;
-  pub fn isl_point_void(dim: Space) -> Option<Point>;
+  pub fn isl_point_void(space: Space) -> Option<Point>;
   pub fn isl_point_is_void(pnt: PointRef) -> Bool;
   pub fn isl_printer_print_point(printer: Printer, pnt: PointRef) -> Option<Printer>;
   pub fn isl_point_to_str(pnt: PointRef) -> Option<CString>;
@@ -108,6 +109,13 @@ impl PointRef {
   pub fn get_coordinate_val(self, type_: DimType, pos: c_int) -> Option<Val> {
     unsafe {
       let ret = isl_point_get_coordinate_val(self.to(), type_.to(), pos.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_multi_val(self) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_point_get_multi_val(self.to());
       (ret).to()
     }
   }

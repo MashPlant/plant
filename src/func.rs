@@ -57,7 +57,7 @@ impl Func {
     }
     for c in &self.comps {
       let mut sch = c.schedule.read();
-      let orig_dim = sch.dim(DimType::Out);
+      let orig_dim = sch.dim(DimType::Out) as u32;
       sch = sch.add_dims(DimType::Out, max_dim - orig_dim)?;
       for i in orig_dim..max_dim { sch = map_add_constraint(sch, i, 0, 0); }
       sch = sch.align_params(all_params.copy()?)?;
@@ -177,7 +177,7 @@ impl Func {
     // get_schedule_space返回的space形如{ [i0, ix, ...] }，每维的名字来源于build.set_iterators
     // 每维对应AST中的一个for层次，例如[i0, i2]是for (i0) { for(i2) {} }，得到dim_map是[Some(0), None, Some(1)]
     let sp = build.get_schedule_space()?;
-    for i in 0..sp.dim(DimType::Out) {
+    for i in 0..sp.dim(DimType::Out) as u32 {
       let it = sp.get_dim_name(DimType::Out, i)?.as_str();
       debug_assert!(it.starts_with("i"));
       dim_map[it.get(1..)?.parse::<usize>().ok()?] = Some(i);
@@ -244,8 +244,8 @@ impl Func {
               }
               let mut range = format!("{}-{}", cond.get_op_arg(1).ok_or(E)?.to_C_str().ok_or(E)?, init_s);
               let op = cond.get_op_type();
-              debug_assert!(op == AstOpType::Lt || op == AstOpType::Le);
-              if op == AstOpType::Le { range.push_str("+1"); }
+              debug_assert!(op == AstExprOpType::Lt || op == AstExprOpType::Le);
+              if op == AstExprOpType::Le { range.push_str("+1"); }
               let old_cfg = s.kernel_cfg[(gpu as usize - GPUBlockX as usize)].replace(range.into());
               debug_assert!(old_cfg.is_none()); // 嵌套中的多个循环标记了同一个gpu idx，不合法
               write!(f, "{} i{}={}+{};{{{}}}", self.iter_ty, level, gpu.gpu_idx(), init_s, self.gen(body, &*s))?;

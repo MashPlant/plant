@@ -85,12 +85,16 @@ typedef enum {
 	isl_stat_error = -1,
 	isl_stat_ok = 0
 } isl_stat;
+isl_stat isl_stat_non_null(__isl_keep void *obj);
 typedef enum {
 	isl_bool_error = -1,
 	isl_bool_false = 0,
 	isl_bool_true = 1
 } isl_bool;
 isl_bool isl_bool_not(isl_bool b);
+isl_bool isl_bool_ok(int b);
+typedef int	isl_size;
+#define isl_size_error	((int) -1)
 struct isl_ctx;
 typedef struct isl_ctx isl_ctx;
 
@@ -112,9 +116,9 @@ typedef struct isl_ctx isl_ctx;
 #define ISL_F_CLR(p, f)     ISL_FL_CLR((p)->flags, f)
 #define ISL_F_ISSET(p, f)   ISL_FL_ISSET((p)->flags, f)
 
-void *isl_malloc_or_die(__isl_keep isl_ctx *ctx, size_t size);
-void *isl_calloc_or_die(__isl_keep isl_ctx *ctx, size_t nmemb, size_t size);
-void *isl_realloc_or_die(__isl_keep isl_ctx *ctx, void *ptr, size_t size);
+__isl_keep void *isl_malloc_or_die(__isl_keep isl_ctx *ctx, size_t size);
+__isl_keep void *isl_calloc_or_die(__isl_keep isl_ctx *ctx, size_t nmemb, size_t size);
+__isl_keep void *isl_realloc_or_die(__isl_keep isl_ctx *ctx, __isl_keep void *ptr, size_t size);
 
 #define isl_alloc(ctx,type,size)	((type *)isl_malloc_or_die(ctx, size))
 #define isl_calloc(ctx,type,size)	((type *)isl_calloc_or_die(ctx,\
@@ -154,7 +158,7 @@ void isl_handle_error(__isl_keep isl_ctx *ctx, enum isl_error error, __isl_keep 
 
 struct isl_options *isl_ctx_options(__isl_keep isl_ctx *ctx);
 
-isl_ctx *isl_ctx_alloc_with_options(struct isl_args *args,
+__isl_keep isl_ctx *isl_ctx_alloc_with_options(struct isl_args *args,
 	__isl_take void *opt);
 __isl_give isl_ctx *isl_ctx_alloc(void);
 void *isl_ctx_peek_options(__isl_keep isl_ctx *ctx, struct isl_args *args);

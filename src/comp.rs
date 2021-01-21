@@ -89,13 +89,13 @@ impl Comp {
 
   pub fn name_cstr(&self) -> Option<CStr> { self.domain.get_tuple_name() }
 
-  pub fn n_dim(&self) -> u32 { self.domain.n_dim() }
+  pub fn n_dim(&self) -> u32 { self.domain.n_dim() as _ }
 
-  pub fn sch_dim(&self) -> u32 { self.schedule.dim(DimType::Out) }
+  pub fn sch_dim(&self) -> u32 { self.schedule.dim(DimType::Out) as _ }
 
   // 输出[逗号分隔的params列表]
   pub fn params<'a>(&'a self) -> impl Display + 'a {
-    fn2display(move |f| write!(f, "[{}]", comma_sep((0..self.domain.dim(DimType::Param))
+    fn2display(move |f| write!(f, "[{}]", comma_sep((0..self.domain.dim(DimType::Param) as u32)
       .map(|i| self.domain.get_dim_name(DimType::Param, i).unwrap()))))
   }
 
@@ -386,7 +386,7 @@ pub(crate) fn map_add_constraint(map: Map, pos: u32, k_in: i32, val: i32) -> Map
 // 可以处理已经存在对这个位置约束的情形，但比`map_add_constraint`开销更大
 pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Map {
   let mut sp = map.get_space()?;
-  let (n_in, n_out) = (sp.dim(DimType::In), sp.dim(DimType::Out));
+  let (n_in, n_out) = (sp.dim(DimType::In) as u32, sp.dim(DimType::Out) as u32);
   sp = sp.add_dims(DimType::In, n_out - n_in)?;
   let mut trans = sp.map_universe()?;
   for i in 0..n_out {
@@ -400,14 +400,14 @@ pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Map {
 // 从set生成一对一的map，map的in dim名字为set名字，out dim名字为空
 // 注意ISL中名字是空字符串和名字是空指针被认为是不一样的，用reset_tuple_id将名字赋成空指针，或set_tuple_name传None
 pub(crate) fn identity_map(set: &Set) -> Map {
-  set.get_space()?.add_dims(DimType::In, set.n_dim())?
+  set.get_space()?.add_dims(DimType::In, set.n_dim() as _)?
     .set_tuple_name(DimType::In, set.get_tuple_name())?.reset_tuple_id(DimType::Out)?
     .map_identity()?.intersect_domain(set.copy()?)?
 }
 
 pub(crate) fn identity_schedule(domain: &Set) -> Map {
   let mut sch = identity_map(domain);
-  for i in 0..=domain.n_dim() { // 在0，2，4...，2 * n_dim下标处插入0
+  for i in 0..=domain.n_dim() as u32 { // 在0，2，4...，2 * n_dim下标处插入0
     let pos = 2 * i;
     sch = sch.insert_dims(DimType::Out, pos, 1)?;
     sch = map_add_constraint(sch, pos, 0, 0);

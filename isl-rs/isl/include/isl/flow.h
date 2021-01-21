@@ -18,7 +18,7 @@ extern "C" {
  * If first precedes second textually return 2 * n + 1,
  * otherwise return 2 * n.
  */
-typedef int (*isl_access_level_before)(void *first, void *second);
+typedef int (*isl_access_level_before)(__isl_keep void *first, __isl_keep void *second);
 
 struct isl_restriction;
 typedef struct isl_restriction isl_restriction;
@@ -38,7 +38,7 @@ __isl_keep isl_ctx *isl_restriction_get_ctx(__isl_keep isl_restriction *restr);
 
 typedef __isl_give isl_restriction *(*isl_access_restrict)(
 	__isl_keep isl_map *source_map, __isl_keep isl_set *sink,
-	void *source_user, __isl_keep void *user);
+	__isl_keep void *source_user, __isl_keep void *user);
 
 struct isl_access_info;
 typedef struct isl_access_info isl_access_info;
@@ -65,7 +65,7 @@ isl_stat isl_flow_foreach(__isl_keep isl_flow *deps,
 		__isl_keep void *user),
 	__isl_keep void *user);
 __isl_give isl_map *isl_flow_get_no_source(__isl_keep isl_flow *deps, int must);
-void isl_flow_free(__isl_take isl_flow *deps);
+__isl_null isl_flow *isl_flow_free(__isl_take isl_flow *deps);
 
 __isl_keep isl_ctx *isl_flow_get_ctx(__isl_keep isl_flow *deps);
 

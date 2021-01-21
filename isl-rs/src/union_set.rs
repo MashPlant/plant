@@ -1,9 +1,11 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_union_set_dim(uset: UnionSetRef, type_: DimType) -> c_uint;
+  pub fn isl_union_set_dim(uset: UnionSetRef, type_: DimType) -> c_int;
   pub fn isl_union_set_from_basic_set(bset: BasicSet) -> Option<UnionSet>;
   pub fn isl_union_set_from_set(set: Set) -> Option<UnionSet>;
+  pub fn isl_union_set_empty_ctx(ctx: CtxRef) -> Option<UnionSet>;
+  pub fn isl_union_set_empty_space(space: Space) -> Option<UnionSet>;
   pub fn isl_union_set_empty(space: Space) -> Option<UnionSet>;
   pub fn isl_union_set_copy(uset: UnionSetRef) -> Option<UnionSet>;
   pub fn isl_union_set_free(uset: UnionSet) -> *mut c_void;
@@ -34,6 +36,7 @@ extern "C" {
   pub fn isl_union_set_preimage_pw_multi_aff(uset: UnionSet, pma: PwMultiAff) -> Option<UnionSet>;
   pub fn isl_union_set_preimage_union_pw_multi_aff(uset: UnionSet, upma: UnionPwMultiAff) -> Option<UnionSet>;
   pub fn isl_union_set_project_out(uset: UnionSet, type_: DimType, first: c_uint, n: c_uint) -> Option<UnionSet>;
+  pub fn isl_union_set_project_out_all_params(uset: UnionSet) -> Option<UnionSet>;
   pub fn isl_union_set_remove_divs(bset: UnionSet) -> Option<UnionSet>;
   pub fn isl_union_set_is_params(uset: UnionSetRef) -> Bool;
   pub fn isl_union_set_is_empty(uset: UnionSetRef) -> Bool;
@@ -44,9 +47,12 @@ extern "C" {
   pub fn isl_union_set_get_hash(uset: UnionSetRef) -> c_uint;
   pub fn isl_union_set_n_set(uset: UnionSetRef) -> c_int;
   pub fn isl_union_set_foreach_set(uset: UnionSetRef, fn_: unsafe extern "C" fn(set: Set, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_union_set_every_set(uset: UnionSetRef, test: unsafe extern "C" fn(set: SetRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_union_set_get_basic_set_list(uset: UnionSetRef) -> Option<BasicSetList>;
+  pub fn isl_union_set_get_set_list(uset: UnionSetRef) -> Option<SetList>;
   pub fn isl_union_set_contains(uset: UnionSetRef, space: SpaceRef) -> Bool;
-  pub fn isl_union_set_extract_set(uset: UnionSetRef, dim: Space) -> Option<Set>;
+  pub fn isl_union_set_extract_set(uset: UnionSetRef, space: Space) -> Option<Set>;
+  pub fn isl_union_set_isa_set(uset: UnionSetRef) -> Bool;
   pub fn isl_set_from_union_set(uset: UnionSet) -> Option<Set>;
   pub fn isl_union_set_foreach_point(uset: UnionSetRef, fn_: unsafe extern "C" fn(pnt: Point, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
   pub fn isl_union_set_sample(uset: UnionSet) -> Option<BasicSet>;
@@ -72,14 +78,21 @@ extern "C" {
   pub fn isl_union_set_list_add(list: UnionSetList, el: UnionSet) -> Option<UnionSetList>;
   pub fn isl_union_set_list_insert(list: UnionSetList, pos: c_uint, el: UnionSet) -> Option<UnionSetList>;
   pub fn isl_union_set_list_drop(list: UnionSetList, first: c_uint, n: c_uint) -> Option<UnionSetList>;
+  pub fn isl_union_set_list_clear(list: UnionSetList) -> Option<UnionSetList>;
+  pub fn isl_union_set_list_swap(list: UnionSetList, pos1: c_uint, pos2: c_uint) -> Option<UnionSetList>;
+  pub fn isl_union_set_list_reverse(list: UnionSetList) -> Option<UnionSetList>;
   pub fn isl_union_set_list_concat(list1: UnionSetList, list2: UnionSetList) -> Option<UnionSetList>;
+  pub fn isl_union_set_list_size(list: UnionSetListRef) -> c_int;
   pub fn isl_union_set_list_n_union_set(list: UnionSetListRef) -> c_int;
+  pub fn isl_union_set_list_get_at(list: UnionSetListRef, index: c_int) -> Option<UnionSet>;
   pub fn isl_union_set_list_get_union_set(list: UnionSetListRef, index: c_int) -> Option<UnionSet>;
   pub fn isl_union_set_list_set_union_set(list: UnionSetList, index: c_int, el: UnionSet) -> Option<UnionSetList>;
   pub fn isl_union_set_list_foreach(list: UnionSetListRef, fn_: unsafe extern "C" fn(el: UnionSet, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_union_set_list_every(list: UnionSetListRef, test: unsafe extern "C" fn(el: UnionSetRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_union_set_list_map(list: UnionSetList, fn_: unsafe extern "C" fn(el: UnionSet, user: *mut c_void) -> Option<UnionSet>, user: *mut c_void) -> Option<UnionSetList>;
   pub fn isl_union_set_list_sort(list: UnionSetList, cmp: unsafe extern "C" fn(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<UnionSetList>;
   pub fn isl_union_set_list_foreach_scc(list: UnionSetListRef, follows: unsafe extern "C" fn(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: UnionSetList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
+  pub fn isl_union_set_list_to_str(list: UnionSetListRef) -> Option<CString>;
   pub fn isl_printer_print_union_set_list(p: Printer, list: UnionSetListRef) -> Option<Printer>;
   pub fn isl_union_set_list_dump(list: UnionSetListRef) -> ();
   pub fn isl_union_set_list_union(list: UnionSetList) -> Option<UnionSet>;
@@ -96,6 +109,13 @@ impl BasicSet {
 }
 
 impl CtxRef {
+  #[inline(always)]
+  pub fn union_set_empty_ctx(self) -> Option<UnionSet> {
+    unsafe {
+      let ret = isl_union_set_empty_ctx(self.to());
+      (ret).to()
+    }
+  }
   #[inline(always)]
   pub fn union_set_read_from_file(self, input: *mut FILE) -> Option<UnionSet> {
     unsafe {
@@ -157,6 +177,13 @@ impl Set {
 }
 
 impl Space {
+  #[inline(always)]
+  pub fn union_set_empty_space(self) -> Option<UnionSet> {
+    unsafe {
+      let ret = isl_union_set_empty_space(self.to());
+      (ret).to()
+    }
+  }
   #[inline(always)]
   pub fn union_set_empty(self) -> Option<UnionSet> {
     unsafe {
@@ -350,6 +377,13 @@ impl UnionSet {
     }
   }
   #[inline(always)]
+  pub fn project_out_all_params(self) -> Option<UnionSet> {
+    unsafe {
+      let ret = isl_union_set_project_out_all_params(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn remove_divs(self) -> Option<UnionSet> {
     unsafe {
       let ret = isl_union_set_remove_divs(self.to());
@@ -465,6 +499,27 @@ impl UnionSetList {
     }
   }
   #[inline(always)]
+  pub fn clear(self) -> Option<UnionSetList> {
+    unsafe {
+      let ret = isl_union_set_list_clear(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn swap(self, pos1: c_uint, pos2: c_uint) -> Option<UnionSetList> {
+    unsafe {
+      let ret = isl_union_set_list_swap(self.to(), pos1.to(), pos2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reverse(self) -> Option<UnionSetList> {
+    unsafe {
+      let ret = isl_union_set_list_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn concat(self, list2: UnionSetList) -> Option<UnionSetList> {
     unsafe {
       let ret = isl_union_set_list_concat(self.to(), list2.to());
@@ -519,9 +574,23 @@ impl UnionSetListRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_union_set_list_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn n_union_set(self) -> c_int {
     unsafe {
       let ret = isl_union_set_list_n_union_set(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, index: c_int) -> Option<UnionSet> {
+    unsafe {
+      let ret = isl_union_set_list_get_at(self.to(), index.to());
       (ret).to()
     }
   }
@@ -541,11 +610,26 @@ impl UnionSetListRef {
     }
   }
   #[inline(always)]
+  pub fn every<F1: FnMut(UnionSetRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(UnionSetRef) -> Bool>(el: UnionSetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(el.to()) }
+    unsafe {
+      let ret = isl_union_set_list_every(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn foreach_scc<F1: FnMut(UnionSetRef, UnionSetRef) -> Bool, F2: FnMut(UnionSetList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
     unsafe extern "C" fn fn1<F: FnMut(UnionSetRef, UnionSetRef) -> Bool>(a: UnionSetRef, b: UnionSetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
     unsafe extern "C" fn fn2<F: FnMut(UnionSetList) -> Stat>(scc: UnionSetList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_union_set_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn to_str(self) -> Option<CString> {
+    unsafe {
+      let ret = isl_union_set_list_to_str(self.to());
       (ret).to()
     }
   }
@@ -560,7 +644,7 @@ impl UnionSetListRef {
 
 impl UnionSetRef {
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_union_set_dim(self.to(), type_.to());
       (ret).to()
@@ -652,9 +736,24 @@ impl UnionSetRef {
     }
   }
   #[inline(always)]
+  pub fn every_set<F1: FnMut(SetRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(SetRef) -> Bool>(set: SetRef, user: *mut c_void) -> Bool { (*(user as *mut F))(set.to()) }
+    unsafe {
+      let ret = isl_union_set_every_set(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn get_basic_set_list(self) -> Option<BasicSetList> {
     unsafe {
       let ret = isl_union_set_get_basic_set_list(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_set_list(self) -> Option<SetList> {
+    unsafe {
+      let ret = isl_union_set_get_set_list(self.to());
       (ret).to()
     }
   }
@@ -666,9 +765,16 @@ impl UnionSetRef {
     }
   }
   #[inline(always)]
-  pub fn extract_set(self, dim: Space) -> Option<Set> {
+  pub fn extract_set(self, space: Space) -> Option<Set> {
     unsafe {
-      let ret = isl_union_set_extract_set(self.to(), dim.to());
+      let ret = isl_union_set_extract_set(self.to(), space.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn isa_set(self) -> Bool {
+    unsafe {
+      let ret = isl_union_set_isa_set(self.to());
       (ret).to()
     }
   }
@@ -702,6 +808,16 @@ impl Drop for UnionSet {
 
 impl Drop for UnionSetList {
   fn drop(&mut self) { UnionSetList(self.0).free() }
+}
+
+impl fmt::Display for UnionSetListRef {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
+}
+
+impl fmt::Display for UnionSetList {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
 }
 
 impl fmt::Display for UnionSetRef {

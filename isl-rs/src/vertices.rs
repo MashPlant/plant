@@ -5,7 +5,7 @@ extern "C" {
   pub fn isl_vertex_get_id(vertex: VertexRef) -> c_int;
   pub fn isl_vertex_get_domain(vertex: VertexRef) -> Option<BasicSet>;
   pub fn isl_vertex_get_expr(vertex: VertexRef) -> Option<MultiAff>;
-  pub fn isl_vertex_free(vertex: Vertex) -> ();
+  pub fn isl_vertex_free(vertex: Vertex) -> *mut c_void;
   pub fn isl_basic_set_compute_vertices(bset: BasicSetRef) -> Option<Vertices>;
   pub fn isl_vertices_get_ctx(vertices: VerticesRef) -> Option<CtxRef>;
   pub fn isl_vertices_get_n_vertices(vertices: VerticesRef) -> c_int;
@@ -14,7 +14,7 @@ extern "C" {
   pub fn isl_cell_get_ctx(cell: CellRef) -> Option<CtxRef>;
   pub fn isl_cell_get_domain(cell: CellRef) -> Option<BasicSet>;
   pub fn isl_cell_foreach_vertex(cell: CellRef, fn_: unsafe extern "C" fn(vertex: Vertex, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
-  pub fn isl_cell_free(cell: Cell) -> ();
+  pub fn isl_cell_free(cell: Cell) -> *mut c_void;
   pub fn isl_vertices_foreach_cell(vertices: VerticesRef, fn_: unsafe extern "C" fn(cell: Cell, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
 }
 

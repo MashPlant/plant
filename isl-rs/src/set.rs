@@ -1,18 +1,18 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_basic_set_n_dim(bset: BasicSetRef) -> c_uint;
-  pub fn isl_basic_set_n_param(bset: BasicSetRef) -> c_uint;
-  pub fn isl_basic_set_total_dim(bset: BasicSetRef) -> c_uint;
-  pub fn isl_basic_set_dim(bset: BasicSetRef, type_: DimType) -> c_uint;
-  pub fn isl_set_n_dim(set: SetRef) -> c_uint;
-  pub fn isl_set_n_param(set: SetRef) -> c_uint;
-  pub fn isl_set_dim(set: SetRef, type_: DimType) -> c_uint;
+  pub fn isl_basic_set_n_dim(bset: BasicSetRef) -> c_int;
+  pub fn isl_basic_set_n_param(bset: BasicSetRef) -> c_int;
+  pub fn isl_basic_set_total_dim(bset: BasicSetRef) -> c_int;
+  pub fn isl_basic_set_dim(bset: BasicSetRef, type_: DimType) -> c_int;
+  pub fn isl_set_n_dim(set: SetRef) -> c_int;
+  pub fn isl_set_n_param(set: SetRef) -> c_int;
+  pub fn isl_set_dim(set: SetRef, type_: DimType) -> c_int;
   pub fn isl_basic_set_get_ctx(bset: BasicSetRef) -> Option<CtxRef>;
   pub fn isl_set_get_ctx(set: SetRef) -> Option<CtxRef>;
   pub fn isl_basic_set_get_space(bset: BasicSetRef) -> Option<Space>;
   pub fn isl_set_get_space(set: SetRef) -> Option<Space>;
-  pub fn isl_set_reset_space(set: Set, dim: Space) -> Option<Set>;
+  pub fn isl_set_reset_space(set: Set, space: Space) -> Option<Set>;
   pub fn isl_basic_set_get_div(bset: BasicSetRef, pos: c_int) -> Option<Aff>;
   pub fn isl_basic_set_get_local_space(bset: BasicSetRef) -> Option<LocalSpace>;
   pub fn isl_basic_set_get_tuple_name(bset: BasicSetRef) -> Option<CStr>;
@@ -42,7 +42,7 @@ extern "C" {
   pub fn isl_basic_set_copy(bset: BasicSetRef) -> Option<BasicSet>;
   pub fn isl_basic_set_empty(space: Space) -> Option<BasicSet>;
   pub fn isl_basic_set_universe(space: Space) -> Option<BasicSet>;
-  pub fn isl_basic_set_nat_universe(dim: Space) -> Option<BasicSet>;
+  pub fn isl_basic_set_nat_universe(space: Space) -> Option<BasicSet>;
   pub fn isl_basic_set_positive_orthant(space: Space) -> Option<BasicSet>;
   pub fn isl_basic_set_print_internal(bset: BasicSetRef, out: *mut FILE, indent: c_int) -> ();
   pub fn isl_basic_set_intersect(bset1: BasicSet, bset2: BasicSet) -> Option<BasicSet>;
@@ -74,6 +74,10 @@ extern "C" {
   pub fn isl_set_upper_bound_si(set: Set, type_: DimType, pos: c_uint, value: c_int) -> Option<Set>;
   pub fn isl_basic_set_upper_bound_val(bset: BasicSet, type_: DimType, pos: c_uint, value: Val) -> Option<BasicSet>;
   pub fn isl_set_upper_bound_val(set: Set, type_: DimType, pos: c_uint, value: Val) -> Option<Set>;
+  pub fn isl_set_lower_bound_multi_val(set: Set, lower: MultiVal) -> Option<Set>;
+  pub fn isl_set_upper_bound_multi_val(set: Set, upper: MultiVal) -> Option<Set>;
+  pub fn isl_set_lower_bound_multi_pw_aff(set: Set, lower: MultiPwAff) -> Option<Set>;
+  pub fn isl_set_upper_bound_multi_pw_aff(set: Set, upper: MultiPwAff) -> Option<Set>;
   pub fn isl_set_equate(set: Set, type1: DimType, pos1: c_int, type2: DimType, pos2: c_int) -> Option<Set>;
   pub fn isl_basic_set_is_equal(bset1: BasicSetRef, bset2: BasicSetRef) -> Bool;
   pub fn isl_basic_set_is_disjoint(bset1: BasicSetRef, bset2: BasicSetRef) -> Bool;
@@ -89,6 +93,8 @@ extern "C" {
   pub fn isl_basic_set_partial_lexmax_pw_multi_aff(bset: BasicSet, dom: BasicSet, empty: *mut Set) -> Option<PwMultiAff>;
   pub fn isl_set_lexmin_pw_multi_aff(set: Set) -> Option<PwMultiAff>;
   pub fn isl_set_lexmax_pw_multi_aff(set: Set) -> Option<PwMultiAff>;
+  pub fn isl_set_min_multi_pw_aff(set: Set) -> Option<MultiPwAff>;
+  pub fn isl_set_max_multi_pw_aff(set: Set) -> Option<MultiPwAff>;
   pub fn isl_basic_set_union(bset1: BasicSet, bset2: BasicSet) -> Option<Set>;
   pub fn isl_basic_set_compare_at(bset1: BasicSetRef, bset2: BasicSetRef, pos: c_int) -> c_int;
   pub fn isl_set_follows_at(set1: SetRef, set2: SetRef, pos: c_int) -> c_int;
@@ -96,6 +102,9 @@ extern "C" {
   pub fn isl_basic_set_from_params(bset: BasicSet) -> Option<BasicSet>;
   pub fn isl_set_params(set: Set) -> Option<Set>;
   pub fn isl_set_from_params(set: Set) -> Option<Set>;
+  pub fn isl_set_bind(set: Set, tuple: MultiId) -> Option<Set>;
+  pub fn isl_set_unbind_params(set: Set, tuple: MultiId) -> Option<Set>;
+  pub fn isl_set_unbind_params_insert_domain(set: Set, domain: MultiId) -> Option<Map>;
   pub fn isl_basic_set_dims_get_sign(bset: BasicSetRef, type_: DimType, pos: c_uint, n: c_uint, signs: *mut c_int) -> Stat;
   pub fn isl_basic_set_plain_is_universe(bset: BasicSetRef) -> Bool;
   pub fn isl_basic_set_is_universe(bset: BasicSetRef) -> Bool;
@@ -106,7 +115,7 @@ extern "C" {
   pub fn isl_basic_set_plain_is_equal(bset1: BasicSetRef, bset2: BasicSetRef) -> Bool;
   pub fn isl_set_empty(space: Space) -> Option<Set>;
   pub fn isl_set_universe(space: Space) -> Option<Set>;
-  pub fn isl_set_nat_universe(dim: Space) -> Option<Set>;
+  pub fn isl_set_nat_universe(space: Space) -> Option<Set>;
   pub fn isl_set_copy(set: SetRef) -> Option<Set>;
   pub fn isl_set_free(set: Set) -> *mut c_void;
   pub fn isl_set_from_basic_set(bset: BasicSet) -> Option<Set>;
@@ -129,6 +138,8 @@ extern "C" {
   pub fn isl_set_flat_product(set1: Set, set2: Set) -> Option<Set>;
   pub fn isl_set_intersect(set1: Set, set2: Set) -> Option<Set>;
   pub fn isl_set_intersect_params(set: Set, params: Set) -> Option<Set>;
+  pub fn isl_set_intersect_factor_domain(set: Set, domain: Set) -> Option<Set>;
+  pub fn isl_set_intersect_factor_range(set: Set, range: Set) -> Option<Set>;
   pub fn isl_set_subtract(set1: Set, set2: Set) -> Option<Set>;
   pub fn isl_set_complement(set: Set) -> Option<Set>;
   pub fn isl_set_apply(set: Set, map: Map) -> Option<Set>;
@@ -144,7 +155,10 @@ extern "C" {
   pub fn isl_basic_set_move_dims(bset: BasicSet, dst_type: DimType, dst_pos: c_uint, src_type: DimType, src_pos: c_uint, n: c_uint) -> Option<BasicSet>;
   pub fn isl_set_move_dims(set: Set, dst_type: DimType, dst_pos: c_uint, src_type: DimType, src_pos: c_uint, n: c_uint) -> Option<Set>;
   pub fn isl_basic_set_project_out(bset: BasicSet, type_: DimType, first: c_uint, n: c_uint) -> Option<BasicSet>;
+  pub fn isl_set_project_out_param_id(set: Set, id: Id) -> Option<Set>;
+  pub fn isl_set_project_out_param_id_list(set: Set, list: IdList) -> Option<Set>;
   pub fn isl_set_project_out(set: Set, type_: DimType, first: c_uint, n: c_uint) -> Option<Set>;
+  pub fn isl_set_project_out_all_params(set: Set) -> Option<Set>;
   pub fn isl_set_project_onto_map(set: Set, type_: DimType, first: c_uint, n: c_uint) -> Option<Map>;
   pub fn isl_basic_set_remove_divs(bset: BasicSet) -> Option<BasicSet>;
   pub fn isl_basic_set_eliminate(bset: BasicSet, type_: DimType, first: c_uint, n: c_uint) -> Option<BasicSet>;
@@ -161,6 +175,7 @@ extern "C" {
   pub fn isl_basic_set_drop_constraints_not_involving_dims(bset: BasicSet, type_: DimType, first: c_uint, n: c_uint) -> Option<BasicSet>;
   pub fn isl_set_drop_constraints_involving_dims(set: Set, type_: DimType, first: c_uint, n: c_uint) -> Option<Set>;
   pub fn isl_set_drop_constraints_not_involving_dims(set: Set, type_: DimType, first: c_uint, n: c_uint) -> Option<Set>;
+  pub fn isl_set_involves_locals(set: SetRef) -> Bool;
   pub fn isl_basic_set_involves_dims(bset: BasicSetRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
   pub fn isl_set_involves_dims(set: SetRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
   pub fn isl_set_print_internal(set: SetRef, out: *mut FILE, indent: c_int) -> ();
@@ -183,6 +198,7 @@ extern "C" {
   pub fn isl_basic_set_compute_divs(bset: BasicSet) -> Option<Set>;
   pub fn isl_set_compute_divs(set: Set) -> Option<Set>;
   pub fn isl_set_align_divs(set: Set) -> Option<Set>;
+  pub fn isl_set_get_plain_multi_val_if_fixed(set: SetRef) -> Option<MultiVal>;
   pub fn isl_set_plain_get_val_if_fixed(set: SetRef, type_: DimType, pos: c_uint) -> Option<Val>;
   pub fn isl_set_dim_is_bounded(set: SetRef, type_: DimType, pos: c_uint) -> Bool;
   pub fn isl_set_dim_has_lower_bound(set: SetRef, type_: DimType, pos: c_uint) -> Bool;
@@ -194,11 +210,9 @@ extern "C" {
   pub fn isl_set_gist(set: Set, context: Set) -> Option<Set>;
   pub fn isl_set_gist_params(set: Set, context: Set) -> Option<Set>;
   pub fn isl_set_dim_residue_class_val(set: SetRef, pos: c_int, modulo: *mut Val, residue: *mut Val) -> Stat;
-  pub fn isl_stride_info_get_stride(si: StrideInfoRef) -> Option<Val>;
-  pub fn isl_stride_info_get_offset(si: StrideInfoRef) -> Option<Aff>;
-  pub fn isl_stride_info_free(si: StrideInfo) -> *mut c_void;
   pub fn isl_set_get_stride_info(set: SetRef, pos: c_int) -> Option<StrideInfo>;
   pub fn isl_set_get_stride(set: SetRef, pos: c_int) -> Option<Val>;
+  pub fn isl_set_get_simple_fixed_box_hull(set: SetRef) -> Option<FixedBox>;
   pub fn isl_set_coalesce(set: Set) -> Option<Set>;
   pub fn isl_set_plain_cmp(set1: SetRef, set2: SetRef) -> c_int;
   pub fn isl_set_plain_is_equal(set1: SetRef, set2: SetRef) -> Bool;
@@ -222,9 +236,13 @@ extern "C" {
   pub fn isl_set_size(set: SetRef) -> c_int;
   pub fn isl_basic_set_align_params(bset: BasicSet, model: Space) -> Option<BasicSet>;
   pub fn isl_set_align_params(set: Set, model: Space) -> Option<Set>;
+  pub fn isl_basic_set_drop_unused_params(bset: BasicSet) -> Option<BasicSet>;
+  pub fn isl_set_drop_unused_params(set: Set) -> Option<Set>;
   pub fn isl_basic_set_equalities_matrix(bset: BasicSetRef, c1: DimType, c2: DimType, c3: DimType, c4: DimType) -> Option<Mat>;
   pub fn isl_basic_set_inequalities_matrix(bset: BasicSetRef, c1: DimType, c2: DimType, c3: DimType, c4: DimType) -> Option<Mat>;
-  pub fn isl_basic_set_from_constraint_matrices(dim: Space, eq: Mat, ineq: Mat, c1: DimType, c2: DimType, c3: DimType, c4: DimType) -> Option<BasicSet>;
+  pub fn isl_basic_set_from_constraint_matrices(space: Space, eq: Mat, ineq: Mat, c1: DimType, c2: DimType, c3: DimType, c4: DimType) -> Option<BasicSet>;
+  pub fn isl_basic_set_from_multi_aff(ma: MultiAff) -> Option<BasicSet>;
+  pub fn isl_set_from_multi_aff(ma: MultiAff) -> Option<Set>;
   pub fn isl_basic_set_reduced_basis(bset: BasicSetRef) -> Option<Mat>;
   pub fn isl_basic_set_coefficients(bset: BasicSet) -> Option<BasicSet>;
   pub fn isl_basic_set_list_coefficients(list: BasicSetList) -> Option<BasicSetList>;
@@ -235,40 +253,6 @@ extern "C" {
   pub fn isl_set_dim_min(set: Set, pos: c_int) -> Option<PwAff>;
   pub fn isl_basic_set_to_str(bset: BasicSetRef) -> Option<CString>;
   pub fn isl_set_to_str(set: SetRef) -> Option<CString>;
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct StrideInfo(pub NonNull<c_void>);
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct StrideInfoRef(pub NonNull<c_void>);
-
-impl_try!(StrideInfo);
-impl_try!(StrideInfoRef);
-
-impl StrideInfo {
-  #[inline(always)]
-  pub fn read(&self) -> StrideInfo { unsafe { ptr::read(self) } }
-  #[inline(always)]
-  pub fn write(&self, x: StrideInfo) { unsafe { ptr::write(self as *const _ as _, x) } }
-}
-
-impl AsRef<StrideInfoRef> for StrideInfo {
-  #[inline(always)]
-  fn as_ref(&self) -> &StrideInfoRef { unsafe { mem::transmute(self) } }
-}
-
-impl Deref for StrideInfo {
-  type Target = StrideInfoRef;
-  #[inline(always)]
-  fn deref(&self) -> &StrideInfoRef { self.as_ref() }
-}
-
-impl To<Option<StrideInfo>> for *mut c_void {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<StrideInfo> { NonNull::new(self).map(StrideInfo) }
 }
 
 impl BasicSet {
@@ -585,6 +569,13 @@ impl BasicSet {
     }
   }
   #[inline(always)]
+  pub fn drop_unused_params(self) -> Option<BasicSet> {
+    unsafe {
+      let ret = isl_basic_set_drop_unused_params(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn coefficients(self) -> Option<BasicSet> {
     unsafe {
       let ret = isl_basic_set_coefficients(self.to());
@@ -619,28 +610,28 @@ impl BasicSetList {
 
 impl BasicSetRef {
   #[inline(always)]
-  pub fn n_dim(self) -> c_uint {
+  pub fn n_dim(self) -> c_int {
     unsafe {
       let ret = isl_basic_set_n_dim(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn n_param(self) -> c_uint {
+  pub fn n_param(self) -> c_int {
     unsafe {
       let ret = isl_basic_set_n_param(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn total_dim(self) -> c_uint {
+  pub fn total_dim(self) -> c_int {
     unsafe {
       let ret = isl_basic_set_total_dim(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_basic_set_dim(self.to(), type_.to());
       (ret).to()
@@ -868,6 +859,23 @@ impl CtxRef {
   }
 }
 
+impl MultiAff {
+  #[inline(always)]
+  pub fn basic_set_from_multi_aff(self) -> Option<BasicSet> {
+    unsafe {
+      let ret = isl_basic_set_from_multi_aff(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn set_from_multi_aff(self) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_from_multi_aff(self.to());
+      (ret).to()
+    }
+  }
+}
+
 impl Point {
   #[inline(always)]
   pub fn basic_set_from_point(self) -> Option<BasicSet> {
@@ -918,9 +926,9 @@ impl Printer {
 
 impl Set {
   #[inline(always)]
-  pub fn reset_space(self, dim: Space) -> Option<Set> {
+  pub fn reset_space(self, space: Space) -> Option<Set> {
     unsafe {
-      let ret = isl_set_reset_space(self.to(), dim.to());
+      let ret = isl_set_reset_space(self.to(), space.to());
       (ret).to()
     }
   }
@@ -1009,6 +1017,34 @@ impl Set {
     }
   }
   #[inline(always)]
+  pub fn lower_bound_multi_val(self, lower: MultiVal) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_lower_bound_multi_val(self.to(), lower.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn upper_bound_multi_val(self, upper: MultiVal) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_upper_bound_multi_val(self.to(), upper.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn lower_bound_multi_pw_aff(self, lower: MultiPwAff) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_lower_bound_multi_pw_aff(self.to(), lower.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn upper_bound_multi_pw_aff(self, upper: MultiPwAff) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_upper_bound_multi_pw_aff(self.to(), upper.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn equate(self, type1: DimType, pos1: c_int, type2: DimType, pos2: c_int) -> Option<Set> {
     unsafe {
       let ret = isl_set_equate(self.to(), type1.to(), pos1.to(), type2.to(), pos2.to());
@@ -1060,6 +1096,20 @@ impl Set {
     }
   }
   #[inline(always)]
+  pub fn min_multi_pw_aff(self) -> Option<MultiPwAff> {
+    unsafe {
+      let ret = isl_set_min_multi_pw_aff(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn max_multi_pw_aff(self) -> Option<MultiPwAff> {
+    unsafe {
+      let ret = isl_set_max_multi_pw_aff(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn params(self) -> Option<Set> {
     unsafe {
       let ret = isl_set_params(self.to());
@@ -1070,6 +1120,27 @@ impl Set {
   pub fn from_params(self) -> Option<Set> {
     unsafe {
       let ret = isl_set_from_params(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn bind(self, tuple: MultiId) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_bind(self.to(), tuple.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn unbind_params(self, tuple: MultiId) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_unbind_params(self.to(), tuple.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn unbind_params_insert_domain(self, domain: MultiId) -> Option<Map> {
+    unsafe {
+      let ret = isl_set_unbind_params_insert_domain(self.to(), domain.to());
       (ret).to()
     }
   }
@@ -1200,6 +1271,20 @@ impl Set {
     }
   }
   #[inline(always)]
+  pub fn intersect_factor_domain(self, domain: Set) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_intersect_factor_domain(self.to(), domain.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_factor_range(self, range: Set) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_intersect_factor_range(self.to(), range.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn subtract(self, set2: Set) -> Option<Set> {
     unsafe {
       let ret = isl_set_subtract(self.to(), set2.to());
@@ -1277,9 +1362,30 @@ impl Set {
     }
   }
   #[inline(always)]
+  pub fn project_out_param_id(self, id: Id) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_project_out_param_id(self.to(), id.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn project_out_param_id_list(self, list: IdList) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_project_out_param_id_list(self.to(), list.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn project_out(self, type_: DimType, first: c_uint, n: c_uint) -> Option<Set> {
     unsafe {
       let ret = isl_set_project_out(self.to(), type_.to(), first.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn project_out_all_params(self) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_project_out_all_params(self.to());
       (ret).to()
     }
   }
@@ -1459,6 +1565,13 @@ impl Set {
     }
   }
   #[inline(always)]
+  pub fn drop_unused_params(self) -> Option<Set> {
+    unsafe {
+      let ret = isl_set_drop_unused_params(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn coefficients(self) -> Option<BasicSet> {
     unsafe {
       let ret = isl_set_coefficients(self.to());
@@ -1500,21 +1613,21 @@ impl SetList {
 
 impl SetRef {
   #[inline(always)]
-  pub fn n_dim(self) -> c_uint {
+  pub fn n_dim(self) -> c_int {
     unsafe {
       let ret = isl_set_n_dim(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn n_param(self) -> c_uint {
+  pub fn n_param(self) -> c_int {
     unsafe {
       let ret = isl_set_n_param(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_set_dim(self.to(), type_.to());
       (ret).to()
@@ -1626,6 +1739,13 @@ impl SetRef {
     }
   }
   #[inline(always)]
+  pub fn involves_locals(self) -> Bool {
+    unsafe {
+      let ret = isl_set_involves_locals(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
     unsafe {
       let ret = isl_set_involves_dims(self.to(), type_.to(), first.to(), n.to());
@@ -1724,6 +1844,13 @@ impl SetRef {
     }
   }
   #[inline(always)]
+  pub fn get_plain_multi_val_if_fixed(self) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_set_get_plain_multi_val_if_fixed(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn plain_get_val_if_fixed(self, type_: DimType, pos: c_uint) -> Option<Val> {
     unsafe {
       let ret = isl_set_plain_get_val_if_fixed(self.to(), type_.to(), pos.to());
@@ -1785,6 +1912,13 @@ impl SetRef {
   pub fn get_stride(self, pos: c_int) -> Option<Val> {
     unsafe {
       let ret = isl_set_get_stride(self.to(), pos.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_simple_fixed_box_hull(self) -> Option<FixedBox> {
+    unsafe {
+      let ret = isl_set_get_simple_fixed_box_hull(self.to());
       (ret).to()
     }
   }
@@ -1928,33 +2062,6 @@ impl Space {
   }
 }
 
-impl StrideInfo {
-  #[inline(always)]
-  pub fn free(self) -> () {
-    unsafe {
-      let ret = isl_stride_info_free(self.to());
-      (ret).to()
-    }
-  }
-}
-
-impl StrideInfoRef {
-  #[inline(always)]
-  pub fn get_stride(self) -> Option<Val> {
-    unsafe {
-      let ret = isl_stride_info_get_stride(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn get_offset(self) -> Option<Aff> {
-    unsafe {
-      let ret = isl_stride_info_get_offset(self.to());
-      (ret).to()
-    }
-  }
-}
-
 impl Drop for BasicSet {
   fn drop(&mut self) { BasicSet(self.0).free() }
 }
@@ -1981,9 +2088,5 @@ impl fmt::Display for SetRef {
 impl fmt::Display for Set {
   #[inline(always)]
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
-}
-
-impl Drop for StrideInfo {
-  fn drop(&mut self) { StrideInfo(self.0).free() }
 }
 

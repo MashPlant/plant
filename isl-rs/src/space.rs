@@ -1,36 +1,37 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_space_get_ctx(dim: SpaceRef) -> Option<CtxRef>;
+  pub fn isl_space_get_ctx(space: SpaceRef) -> Option<CtxRef>;
+  pub fn isl_space_unit(ctx: CtxRef) -> Option<Space>;
   pub fn isl_space_alloc(ctx: CtxRef, nparam: c_uint, n_in: c_uint, n_out: c_uint) -> Option<Space>;
   pub fn isl_space_set_alloc(ctx: CtxRef, nparam: c_uint, dim: c_uint) -> Option<Space>;
   pub fn isl_space_params_alloc(ctx: CtxRef, nparam: c_uint) -> Option<Space>;
-  pub fn isl_space_copy(dim: SpaceRef) -> Option<Space>;
+  pub fn isl_space_copy(space: SpaceRef) -> Option<Space>;
   pub fn isl_space_free(space: Space) -> *mut c_void;
   pub fn isl_space_is_params(space: SpaceRef) -> Bool;
   pub fn isl_space_is_set(space: SpaceRef) -> Bool;
   pub fn isl_space_is_map(space: SpaceRef) -> Bool;
   pub fn isl_space_add_param_id(space: Space, id: Id) -> Option<Space>;
-  pub fn isl_space_set_tuple_name(dim: Space, type_: DimType, s: Option<CStr>) -> Option<Space>;
+  pub fn isl_space_set_tuple_name(space: Space, type_: DimType, s: Option<CStr>) -> Option<Space>;
   pub fn isl_space_has_tuple_name(space: SpaceRef, type_: DimType) -> Bool;
-  pub fn isl_space_get_tuple_name(dim: SpaceRef, type_: DimType) -> Option<CStr>;
-  pub fn isl_space_set_tuple_id(dim: Space, type_: DimType, id: Id) -> Option<Space>;
-  pub fn isl_space_reset_tuple_id(dim: Space, type_: DimType) -> Option<Space>;
-  pub fn isl_space_has_tuple_id(dim: SpaceRef, type_: DimType) -> Bool;
-  pub fn isl_space_get_tuple_id(dim: SpaceRef, type_: DimType) -> Option<Id>;
+  pub fn isl_space_get_tuple_name(space: SpaceRef, type_: DimType) -> Option<CStr>;
+  pub fn isl_space_set_tuple_id(space: Space, type_: DimType, id: Id) -> Option<Space>;
+  pub fn isl_space_reset_tuple_id(space: Space, type_: DimType) -> Option<Space>;
+  pub fn isl_space_has_tuple_id(space: SpaceRef, type_: DimType) -> Bool;
+  pub fn isl_space_get_tuple_id(space: SpaceRef, type_: DimType) -> Option<Id>;
   pub fn isl_space_reset_user(space: Space) -> Option<Space>;
-  pub fn isl_space_set_dim_id(dim: Space, type_: DimType, pos: c_uint, id: Id) -> Option<Space>;
-  pub fn isl_space_has_dim_id(dim: SpaceRef, type_: DimType, pos: c_uint) -> Bool;
-  pub fn isl_space_get_dim_id(dim: SpaceRef, type_: DimType, pos: c_uint) -> Option<Id>;
-  pub fn isl_space_find_dim_by_id(dim: SpaceRef, type_: DimType, id: IdRef) -> c_int;
+  pub fn isl_space_set_dim_id(space: Space, type_: DimType, pos: c_uint, id: Id) -> Option<Space>;
+  pub fn isl_space_has_dim_id(space: SpaceRef, type_: DimType, pos: c_uint) -> Bool;
+  pub fn isl_space_get_dim_id(space: SpaceRef, type_: DimType, pos: c_uint) -> Option<Id>;
+  pub fn isl_space_find_dim_by_id(space: SpaceRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_space_find_dim_by_name(space: SpaceRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_space_has_dim_name(space: SpaceRef, type_: DimType, pos: c_uint) -> Bool;
-  pub fn isl_space_set_dim_name(dim: Space, type_: DimType, pos: c_uint, name: Option<CStr>) -> Option<Space>;
-  pub fn isl_space_get_dim_name(dim: SpaceRef, type_: DimType, pos: c_uint) -> Option<CStr>;
-  pub fn isl_space_extend(dim: Space, nparam: c_uint, n_in: c_uint, n_out: c_uint) -> Option<Space>;
+  pub fn isl_space_set_dim_name(space: Space, type_: DimType, pos: c_uint, name: Option<CStr>) -> Option<Space>;
+  pub fn isl_space_get_dim_name(space: SpaceRef, type_: DimType, pos: c_uint) -> Option<CStr>;
+  pub fn isl_space_extend(space: Space, nparam: c_uint, n_in: c_uint, n_out: c_uint) -> Option<Space>;
   pub fn isl_space_add_dims(space: Space, type_: DimType, n: c_uint) -> Option<Space>;
   pub fn isl_space_move_dims(space: Space, dst_type: DimType, dst_pos: c_uint, src_type: DimType, src_pos: c_uint, n: c_uint) -> Option<Space>;
-  pub fn isl_space_insert_dims(dim: Space, type_: DimType, pos: c_uint, n: c_uint) -> Option<Space>;
+  pub fn isl_space_insert_dims(space: Space, type_: DimType, pos: c_uint, n: c_uint) -> Option<Space>;
   pub fn isl_space_join(left: Space, right: Space) -> Option<Space>;
   pub fn isl_space_product(left: Space, right: Space) -> Option<Space>;
   pub fn isl_space_domain_product(left: Space, right: Space) -> Option<Space>;
@@ -43,27 +44,31 @@ extern "C" {
   pub fn isl_space_range_factor_range(space: Space) -> Option<Space>;
   pub fn isl_space_map_from_set(space: Space) -> Option<Space>;
   pub fn isl_space_map_from_domain_and_range(domain: Space, range: Space) -> Option<Space>;
-  pub fn isl_space_reverse(dim: Space) -> Option<Space>;
-  pub fn isl_space_drop_dims(dim: Space, type_: DimType, first: c_uint, num: c_uint) -> Option<Space>;
-  pub fn isl_space_drop_inputs(dim: Space, first: c_uint, n: c_uint) -> Option<Space>;
-  pub fn isl_space_drop_outputs(dim: Space, first: c_uint, n: c_uint) -> Option<Space>;
+  pub fn isl_space_reverse(space: Space) -> Option<Space>;
+  pub fn isl_space_range_reverse(space: Space) -> Option<Space>;
+  pub fn isl_space_drop_dims(space: Space, type_: DimType, first: c_uint, num: c_uint) -> Option<Space>;
+  pub fn isl_space_drop_inputs(space: Space, first: c_uint, n: c_uint) -> Option<Space>;
+  pub fn isl_space_drop_outputs(space: Space, first: c_uint, n: c_uint) -> Option<Space>;
+  pub fn isl_space_drop_all_params(space: Space) -> Option<Space>;
   pub fn isl_space_domain(space: Space) -> Option<Space>;
-  pub fn isl_space_from_domain(dim: Space) -> Option<Space>;
+  pub fn isl_space_from_domain(space: Space) -> Option<Space>;
   pub fn isl_space_range(space: Space) -> Option<Space>;
-  pub fn isl_space_from_range(dim: Space) -> Option<Space>;
+  pub fn isl_space_from_range(space: Space) -> Option<Space>;
   pub fn isl_space_domain_map(space: Space) -> Option<Space>;
   pub fn isl_space_range_map(space: Space) -> Option<Space>;
   pub fn isl_space_params(space: Space) -> Option<Space>;
+  pub fn isl_space_add_unnamed_tuple_ui(space: Space, dim: c_uint) -> Option<Space>;
+  pub fn isl_space_add_named_tuple_id_ui(space: Space, tuple_id: Id, dim: c_uint) -> Option<Space>;
   pub fn isl_space_set_from_params(space: Space) -> Option<Space>;
-  pub fn isl_space_align_params(dim1: Space, dim2: Space) -> Option<Space>;
-  pub fn isl_space_is_wrapping(dim: SpaceRef) -> Bool;
+  pub fn isl_space_align_params(space1: Space, space2: Space) -> Option<Space>;
+  pub fn isl_space_is_wrapping(space: SpaceRef) -> Bool;
   pub fn isl_space_domain_is_wrapping(space: SpaceRef) -> Bool;
   pub fn isl_space_range_is_wrapping(space: SpaceRef) -> Bool;
   pub fn isl_space_is_product(space: SpaceRef) -> Bool;
-  pub fn isl_space_wrap(dim: Space) -> Option<Space>;
-  pub fn isl_space_unwrap(dim: Space) -> Option<Space>;
+  pub fn isl_space_wrap(space: Space) -> Option<Space>;
+  pub fn isl_space_unwrap(space: Space) -> Option<Space>;
   pub fn isl_space_can_zip(space: SpaceRef) -> Bool;
-  pub fn isl_space_zip(dim: Space) -> Option<Space>;
+  pub fn isl_space_zip(space: Space) -> Option<Space>;
   pub fn isl_space_can_curry(space: SpaceRef) -> Bool;
   pub fn isl_space_curry(space: Space) -> Option<Space>;
   pub fn isl_space_can_range_curry(space: SpaceRef) -> Bool;
@@ -77,49 +82,22 @@ extern "C" {
   pub fn isl_space_has_equal_tuples(space1: SpaceRef, space2: SpaceRef) -> Bool;
   pub fn isl_space_tuple_is_equal(space1: SpaceRef, type1: DimType, space2: SpaceRef, type2: DimType) -> Bool;
   pub fn isl_space_match(space1: SpaceRef, type1: DimType, space2: SpaceRef, type2: DimType) -> Bool;
-  pub fn isl_space_dim(dim: SpaceRef, type_: DimType) -> c_uint;
+  pub fn isl_space_dim(space: SpaceRef, type_: DimType) -> c_int;
   pub fn isl_space_flatten_domain(space: Space) -> Option<Space>;
   pub fn isl_space_flatten_range(space: Space) -> Option<Space>;
   pub fn isl_space_to_str(space: SpaceRef) -> Option<CString>;
-  pub fn isl_printer_print_space(p: Printer, dim: SpaceRef) -> Option<Printer>;
-  pub fn isl_space_dump(dim: SpaceRef) -> ();
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct Space(pub NonNull<c_void>);
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct SpaceRef(pub NonNull<c_void>);
-
-impl_try!(Space);
-impl_try!(SpaceRef);
-
-impl Space {
-  #[inline(always)]
-  pub fn read(&self) -> Space { unsafe { ptr::read(self) } }
-  #[inline(always)]
-  pub fn write(&self, x: Space) { unsafe { ptr::write(self as *const _ as _, x) } }
-}
-
-impl AsRef<SpaceRef> for Space {
-  #[inline(always)]
-  fn as_ref(&self) -> &SpaceRef { unsafe { mem::transmute(self) } }
-}
-
-impl Deref for Space {
-  type Target = SpaceRef;
-  #[inline(always)]
-  fn deref(&self) -> &SpaceRef { self.as_ref() }
-}
-
-impl To<Option<Space>> for *mut c_void {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<Space> { NonNull::new(self).map(Space) }
+  pub fn isl_printer_print_space(p: Printer, space: SpaceRef) -> Option<Printer>;
+  pub fn isl_space_dump(space: SpaceRef) -> ();
 }
 
 impl CtxRef {
+  #[inline(always)]
+  pub fn space_unit(self) -> Option<Space> {
+    unsafe {
+      let ret = isl_space_unit(self.to());
+      (ret).to()
+    }
+  }
   #[inline(always)]
   pub fn space_alloc(self, nparam: c_uint, n_in: c_uint, n_out: c_uint) -> Option<Space> {
     unsafe {
@@ -145,9 +123,9 @@ impl CtxRef {
 
 impl Printer {
   #[inline(always)]
-  pub fn print_space(self, dim: SpaceRef) -> Option<Printer> {
+  pub fn print_space(self, space: SpaceRef) -> Option<Printer> {
     unsafe {
-      let ret = isl_printer_print_space(self.to(), dim.to());
+      let ret = isl_printer_print_space(self.to(), space.to());
       (ret).to()
     }
   }
@@ -330,6 +308,13 @@ impl Space {
     }
   }
   #[inline(always)]
+  pub fn range_reverse(self) -> Option<Space> {
+    unsafe {
+      let ret = isl_space_range_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn drop_dims(self, type_: DimType, first: c_uint, num: c_uint) -> Option<Space> {
     unsafe {
       let ret = isl_space_drop_dims(self.to(), type_.to(), first.to(), num.to());
@@ -347,6 +332,13 @@ impl Space {
   pub fn drop_outputs(self, first: c_uint, n: c_uint) -> Option<Space> {
     unsafe {
       let ret = isl_space_drop_outputs(self.to(), first.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn drop_all_params(self) -> Option<Space> {
+    unsafe {
+      let ret = isl_space_drop_all_params(self.to());
       (ret).to()
     }
   }
@@ -400,6 +392,20 @@ impl Space {
     }
   }
   #[inline(always)]
+  pub fn add_unnamed_tuple_ui(self, dim: c_uint) -> Option<Space> {
+    unsafe {
+      let ret = isl_space_add_unnamed_tuple_ui(self.to(), dim.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn add_named_tuple_id_ui(self, tuple_id: Id, dim: c_uint) -> Option<Space> {
+    unsafe {
+      let ret = isl_space_add_named_tuple_id_ui(self.to(), tuple_id.to(), dim.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn set_from_params(self) -> Option<Space> {
     unsafe {
       let ret = isl_space_set_from_params(self.to());
@@ -407,9 +413,9 @@ impl Space {
     }
   }
   #[inline(always)]
-  pub fn align_params(self, dim2: Space) -> Option<Space> {
+  pub fn align_params(self, space2: Space) -> Option<Space> {
     unsafe {
-      let ret = isl_space_align_params(self.to(), dim2.to());
+      let ret = isl_space_align_params(self.to(), space2.to());
       (ret).to()
     }
   }
@@ -683,7 +689,7 @@ impl SpaceRef {
     }
   }
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_space_dim(self.to(), type_.to());
       (ret).to()

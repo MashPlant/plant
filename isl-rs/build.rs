@@ -1,4 +1,4 @@
 fn main() {
-  println!("cargo:rustc-link-search=./isl/build/lib");
-  println!("cargo:rustc-link-lib=isl");
+  println!("cargo:rustc-link-search=./isl-rs/isl/build/lib");
+  println!("cargo:rustc-link-lib=static=isl");
 }

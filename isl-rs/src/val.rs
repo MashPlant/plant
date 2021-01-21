@@ -1,35 +1,49 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_val_list_get_ctx(list: ValListRef) -> Option<CtxRef>;
-  pub fn isl_val_list_from_val(el: Val) -> Option<ValList>;
-  pub fn isl_val_list_alloc(ctx: CtxRef, n: c_int) -> Option<ValList>;
-  pub fn isl_val_list_copy(list: ValListRef) -> Option<ValList>;
-  pub fn isl_val_list_free(list: ValList) -> *mut c_void;
-  pub fn isl_val_list_add(list: ValList, el: Val) -> Option<ValList>;
-  pub fn isl_val_list_insert(list: ValList, pos: c_uint, el: Val) -> Option<ValList>;
-  pub fn isl_val_list_drop(list: ValList, first: c_uint, n: c_uint) -> Option<ValList>;
-  pub fn isl_val_list_concat(list1: ValList, list2: ValList) -> Option<ValList>;
-  pub fn isl_val_list_n_val(list: ValListRef) -> c_int;
-  pub fn isl_val_list_get_val(list: ValListRef, index: c_int) -> Option<Val>;
-  pub fn isl_val_list_set_val(list: ValList, index: c_int, el: Val) -> Option<ValList>;
-  pub fn isl_val_list_foreach(list: ValListRef, fn_: unsafe extern "C" fn(el: Val, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
-  pub fn isl_val_list_map(list: ValList, fn_: unsafe extern "C" fn(el: Val, user: *mut c_void) -> Option<Val>, user: *mut c_void) -> Option<ValList>;
-  pub fn isl_val_list_sort(list: ValList, cmp: unsafe extern "C" fn(a: ValRef, b: ValRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<ValList>;
-  pub fn isl_val_list_foreach_scc(list: ValListRef, follows: unsafe extern "C" fn(a: ValRef, b: ValRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: ValList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
-  pub fn isl_printer_print_val_list(p: Printer, list: ValListRef) -> Option<Printer>;
-  pub fn isl_val_list_dump(list: ValListRef) -> ();
-  pub fn isl_multi_val_dim(multi: MultiValRef, type_: DimType) -> c_uint;
   pub fn isl_multi_val_get_ctx(multi: MultiValRef) -> Option<CtxRef>;
   pub fn isl_multi_val_get_space(multi: MultiValRef) -> Option<Space>;
   pub fn isl_multi_val_get_domain_space(multi: MultiValRef) -> Option<Space>;
-  pub fn isl_multi_val_find_dim_by_name(multi: MultiValRef, type_: DimType, name: Option<CStr>) -> c_int;
+  pub fn isl_multi_val_get_list(multi: MultiValRef) -> Option<ValList>;
   pub fn isl_multi_val_from_val_list(space: Space, list: ValList) -> Option<MultiVal>;
-  pub fn isl_multi_val_zero(space: Space) -> Option<MultiVal>;
   pub fn isl_multi_val_copy(multi: MultiValRef) -> Option<MultiVal>;
   pub fn isl_multi_val_free(multi: MultiVal) -> *mut c_void;
   pub fn isl_multi_val_plain_is_equal(multi1: MultiValRef, multi2: MultiValRef) -> Bool;
+  pub fn isl_multi_val_reset_user(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_size(multi: MultiValRef) -> c_int;
+  pub fn isl_multi_val_get_at(multi: MultiValRef, pos: c_int) -> Option<Val>;
+  pub fn isl_multi_val_get_val(multi: MultiValRef, pos: c_int) -> Option<Val>;
+  pub fn isl_multi_val_set_at(multi: MultiVal, pos: c_int, el: Val) -> Option<MultiVal>;
+  pub fn isl_multi_val_set_val(multi: MultiVal, pos: c_int, el: Val) -> Option<MultiVal>;
+  pub fn isl_multi_val_range_splice(multi1: MultiVal, pos: c_uint, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_flatten_range(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_flat_range_product(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_range_product(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_factor_range(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_range_is_wrapping(multi: MultiValRef) -> Bool;
+  pub fn isl_multi_val_range_factor_domain(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_range_factor_range(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_align_params(multi: MultiVal, model: Space) -> Option<MultiVal>;
+  pub fn isl_multi_val_from_range(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_scale_val(multi: MultiVal, v: Val) -> Option<MultiVal>;
+  pub fn isl_multi_val_scale_down_val(multi: MultiVal, v: Val) -> Option<MultiVal>;
+  pub fn isl_multi_val_scale_multi_val(multi: MultiVal, mv: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_scale_down_multi_val(multi: MultiVal, mv: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_mod_multi_val(multi: MultiVal, mv: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_add(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_sub(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_neg(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_min(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_max(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_zero(space: Space) -> Option<MultiVal>;
   pub fn isl_multi_val_involves_nan(multi: MultiValRef) -> Bool;
+  pub fn isl_multi_val_dim(multi: MultiValRef, type_: DimType) -> c_int;
+  pub fn isl_multi_val_drop_dims(multi: MultiVal, type_: DimType, first: c_uint, n: c_uint) -> Option<MultiVal>;
+  pub fn isl_multi_val_involves_dims(multi: MultiValRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
+  pub fn isl_multi_val_insert_dims(multi: MultiVal, type_: DimType, first: c_uint, n: c_uint) -> Option<MultiVal>;
+  pub fn isl_multi_val_add_dims(multi: MultiVal, type_: DimType, n: c_uint) -> Option<MultiVal>;
+  pub fn isl_multi_val_project_domain_on_params(multi: MultiVal) -> Option<MultiVal>;
+  pub fn isl_multi_val_find_dim_by_name(multi: MultiValRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_multi_val_find_dim_by_id(multi: MultiValRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_multi_val_get_dim_id(multi: MultiValRef, type_: DimType, pos: c_uint) -> Option<Id>;
   pub fn isl_multi_val_set_dim_name(multi: MultiVal, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiVal>;
@@ -40,32 +54,6 @@ extern "C" {
   pub fn isl_multi_val_set_tuple_name(multi: MultiVal, type_: DimType, s: Option<CStr>) -> Option<MultiVal>;
   pub fn isl_multi_val_set_tuple_id(multi: MultiVal, type_: DimType, id: Id) -> Option<MultiVal>;
   pub fn isl_multi_val_reset_tuple_id(multi: MultiVal, type_: DimType) -> Option<MultiVal>;
-  pub fn isl_multi_val_reset_user(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_drop_dims(multi: MultiVal, type_: DimType, first: c_uint, n: c_uint) -> Option<MultiVal>;
-  pub fn isl_multi_val_get_val(multi: MultiValRef, pos: c_int) -> Option<Val>;
-  pub fn isl_multi_val_set_val(multi: MultiVal, pos: c_int, el: Val) -> Option<MultiVal>;
-  pub fn isl_multi_val_range_splice(multi1: MultiVal, pos: c_uint, multi2: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_flatten_range(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_flat_range_product(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_range_product(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_factor_range(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_range_is_wrapping(multi: MultiValRef) -> Bool;
-  pub fn isl_multi_val_range_factor_domain(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_range_factor_range(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_scale_val(multi: MultiVal, v: Val) -> Option<MultiVal>;
-  pub fn isl_multi_val_scale_down_val(multi: MultiVal, v: Val) -> Option<MultiVal>;
-  pub fn isl_multi_val_scale_multi_val(multi: MultiVal, mv: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_scale_down_multi_val(multi: MultiVal, mv: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_mod_multi_val(multi: MultiVal, mv: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_add(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_sub(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_align_params(multi: MultiVal, model: Space) -> Option<MultiVal>;
-  pub fn isl_multi_val_from_range(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_neg(multi: MultiVal) -> Option<MultiVal>;
-  pub fn isl_multi_val_involves_dims(multi: MultiValRef, type_: DimType, first: c_uint, n: c_uint) -> Bool;
-  pub fn isl_multi_val_insert_dims(multi: MultiVal, type_: DimType, first: c_uint, n: c_uint) -> Option<MultiVal>;
-  pub fn isl_multi_val_add_dims(multi: MultiVal, type_: DimType, n: c_uint) -> Option<MultiVal>;
-  pub fn isl_multi_val_project_domain_on_params(multi: MultiVal) -> Option<MultiVal>;
   pub fn isl_multi_val_product(multi1: MultiVal, multi2: MultiVal) -> Option<MultiVal>;
   pub fn isl_multi_val_splice(multi1: MultiVal, in_pos: c_uint, out_pos: c_uint, multi2: MultiVal) -> Option<MultiVal>;
   pub fn isl_val_zero(ctx: CtxRef) -> Option<Val>;
@@ -86,7 +74,7 @@ extern "C" {
   pub fn isl_val_get_den_val(v: ValRef) -> Option<Val>;
   pub fn isl_val_get_d(v: ValRef) -> c_double;
   pub fn isl_val_n_abs_num_chunks(v: ValRef, size: c_int) -> c_int;
-  pub fn isl_val_get_abs_num_chunks(v: ValRef, size: c_int, chunks: *mut c_void) -> c_int;
+  pub fn isl_val_get_abs_num_chunks(v: ValRef, size: c_int, chunks: *mut c_void) -> Stat;
   pub fn isl_val_set_si(v: Val, i: c_long) -> Option<Val>;
   pub fn isl_val_abs(v: Val) -> Option<Val>;
   pub fn isl_val_neg(v: Val) -> Option<Val>;
@@ -95,6 +83,7 @@ extern "C" {
   pub fn isl_val_ceil(v: Val) -> Option<Val>;
   pub fn isl_val_trunc(v: Val) -> Option<Val>;
   pub fn isl_val_2exp(v: Val) -> Option<Val>;
+  pub fn isl_val_pow2(v: Val) -> Option<Val>;
   pub fn isl_val_min(v1: Val, v2: Val) -> Option<Val>;
   pub fn isl_val_max(v1: Val, v2: Val) -> Option<Val>;
   pub fn isl_val_add(v1: Val, v2: Val) -> Option<Val>;
@@ -125,8 +114,10 @@ extern "C" {
   pub fn isl_val_lt(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_le(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_gt(v1: ValRef, v2: ValRef) -> Bool;
+  pub fn isl_val_gt_si(v: ValRef, i: c_long) -> Bool;
   pub fn isl_val_ge(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_eq(v1: ValRef, v2: ValRef) -> Bool;
+  pub fn isl_val_eq_si(v: ValRef, i: c_long) -> Bool;
   pub fn isl_val_ne(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_abs_eq(v1: ValRef, v2: ValRef) -> Bool;
   pub fn isl_val_is_divisible_by(v1: ValRef, v2: ValRef) -> Bool;
@@ -134,124 +125,41 @@ extern "C" {
   pub fn isl_printer_print_val(p: Printer, v: ValRef) -> Option<Printer>;
   pub fn isl_val_dump(v: ValRef) -> ();
   pub fn isl_val_to_str(v: ValRef) -> Option<CString>;
+  pub fn isl_multi_val_is_zero(mv: MultiValRef) -> Bool;
   pub fn isl_multi_val_add_val(mv: MultiVal, v: Val) -> Option<MultiVal>;
   pub fn isl_multi_val_mod_val(mv: MultiVal, v: Val) -> Option<MultiVal>;
   pub fn isl_multi_val_read_from_str(ctx: CtxRef, str: Option<CStr>) -> Option<MultiVal>;
   pub fn isl_printer_print_multi_val(p: Printer, mv: MultiValRef) -> Option<Printer>;
   pub fn isl_multi_val_dump(mv: MultiValRef) -> ();
   pub fn isl_multi_val_to_str(mv: MultiValRef) -> Option<CString>;
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct Val(pub NonNull<c_void>);
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct ValRef(pub NonNull<c_void>);
-
-impl_try!(Val);
-impl_try!(ValRef);
-
-impl Val {
-  #[inline(always)]
-  pub fn read(&self) -> Val { unsafe { ptr::read(self) } }
-  #[inline(always)]
-  pub fn write(&self, x: Val) { unsafe { ptr::write(self as *const _ as _, x) } }
-}
-
-impl AsRef<ValRef> for Val {
-  #[inline(always)]
-  fn as_ref(&self) -> &ValRef { unsafe { mem::transmute(self) } }
-}
-
-impl Deref for Val {
-  type Target = ValRef;
-  #[inline(always)]
-  fn deref(&self) -> &ValRef { self.as_ref() }
-}
-
-impl To<Option<Val>> for *mut c_void {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<Val> { NonNull::new(self).map(Val) }
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct ValList(pub NonNull<c_void>);
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct ValListRef(pub NonNull<c_void>);
-
-impl_try!(ValList);
-impl_try!(ValListRef);
-
-impl ValList {
-  #[inline(always)]
-  pub fn read(&self) -> ValList { unsafe { ptr::read(self) } }
-  #[inline(always)]
-  pub fn write(&self, x: ValList) { unsafe { ptr::write(self as *const _ as _, x) } }
-}
-
-impl AsRef<ValListRef> for ValList {
-  #[inline(always)]
-  fn as_ref(&self) -> &ValListRef { unsafe { mem::transmute(self) } }
-}
-
-impl Deref for ValList {
-  type Target = ValListRef;
-  #[inline(always)]
-  fn deref(&self) -> &ValListRef { self.as_ref() }
-}
-
-impl To<Option<ValList>> for *mut c_void {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<ValList> { NonNull::new(self).map(ValList) }
-}
-
-#[repr(transparent)]
-#[derive(Debug)]
-pub struct MultiVal(pub NonNull<c_void>);
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct MultiValRef(pub NonNull<c_void>);
-
-impl_try!(MultiVal);
-impl_try!(MultiValRef);
-
-impl MultiVal {
-  #[inline(always)]
-  pub fn read(&self) -> MultiVal { unsafe { ptr::read(self) } }
-  #[inline(always)]
-  pub fn write(&self, x: MultiVal) { unsafe { ptr::write(self as *const _ as _, x) } }
-}
-
-impl AsRef<MultiValRef> for MultiVal {
-  #[inline(always)]
-  fn as_ref(&self) -> &MultiValRef { unsafe { mem::transmute(self) } }
-}
-
-impl Deref for MultiVal {
-  type Target = MultiValRef;
-  #[inline(always)]
-  fn deref(&self) -> &MultiValRef { self.as_ref() }
-}
-
-impl To<Option<MultiVal>> for *mut c_void {
-  #[inline(always)]
-  unsafe fn to(self) -> Option<MultiVal> { NonNull::new(self).map(MultiVal) }
+  pub fn isl_val_list_get_ctx(list: ValListRef) -> Option<CtxRef>;
+  pub fn isl_val_list_from_val(el: Val) -> Option<ValList>;
+  pub fn isl_val_list_alloc(ctx: CtxRef, n: c_int) -> Option<ValList>;
+  pub fn isl_val_list_copy(list: ValListRef) -> Option<ValList>;
+  pub fn isl_val_list_free(list: ValList) -> *mut c_void;
+  pub fn isl_val_list_add(list: ValList, el: Val) -> Option<ValList>;
+  pub fn isl_val_list_insert(list: ValList, pos: c_uint, el: Val) -> Option<ValList>;
+  pub fn isl_val_list_drop(list: ValList, first: c_uint, n: c_uint) -> Option<ValList>;
+  pub fn isl_val_list_clear(list: ValList) -> Option<ValList>;
+  pub fn isl_val_list_swap(list: ValList, pos1: c_uint, pos2: c_uint) -> Option<ValList>;
+  pub fn isl_val_list_reverse(list: ValList) -> Option<ValList>;
+  pub fn isl_val_list_concat(list1: ValList, list2: ValList) -> Option<ValList>;
+  pub fn isl_val_list_size(list: ValListRef) -> c_int;
+  pub fn isl_val_list_n_val(list: ValListRef) -> c_int;
+  pub fn isl_val_list_get_at(list: ValListRef, index: c_int) -> Option<Val>;
+  pub fn isl_val_list_get_val(list: ValListRef, index: c_int) -> Option<Val>;
+  pub fn isl_val_list_set_val(list: ValList, index: c_int, el: Val) -> Option<ValList>;
+  pub fn isl_val_list_foreach(list: ValListRef, fn_: unsafe extern "C" fn(el: Val, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_val_list_every(list: ValListRef, test: unsafe extern "C" fn(el: ValRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
+  pub fn isl_val_list_map(list: ValList, fn_: unsafe extern "C" fn(el: Val, user: *mut c_void) -> Option<Val>, user: *mut c_void) -> Option<ValList>;
+  pub fn isl_val_list_sort(list: ValList, cmp: unsafe extern "C" fn(a: ValRef, b: ValRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<ValList>;
+  pub fn isl_val_list_foreach_scc(list: ValListRef, follows: unsafe extern "C" fn(a: ValRef, b: ValRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: ValList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
+  pub fn isl_val_list_to_str(list: ValListRef) -> Option<CString>;
+  pub fn isl_printer_print_val_list(p: Printer, list: ValListRef) -> Option<Printer>;
+  pub fn isl_val_list_dump(list: ValListRef) -> ();
 }
 
 impl CtxRef {
-  #[inline(always)]
-  pub fn val_list_alloc(self, n: c_int) -> Option<ValList> {
-    unsafe {
-      let ret = isl_val_list_alloc(self.to(), n.to());
-      (ret).to()
-    }
-  }
   #[inline(always)]
   pub fn val_zero(self) -> Option<Val> {
     unsafe {
@@ -329,6 +237,13 @@ impl CtxRef {
       (ret).to()
     }
   }
+  #[inline(always)]
+  pub fn val_list_alloc(self, n: c_int) -> Option<ValList> {
+    unsafe {
+      let ret = isl_val_list_alloc(self.to(), n.to());
+      (ret).to()
+    }
+  }
 }
 
 impl MultiVal {
@@ -340,41 +255,6 @@ impl MultiVal {
     }
   }
   #[inline(always)]
-  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn set_dim_id(self, type_: DimType, pos: c_uint, id: Id) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_set_dim_id(self.to(), type_.to(), pos.to(), id.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_set_tuple_name(self.to(), type_.to(), s.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn set_tuple_id(self, type_: DimType, id: Id) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_set_tuple_id(self.to(), type_.to(), id.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn reset_tuple_id(self, type_: DimType) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_reset_tuple_id(self.to(), type_.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
   pub fn reset_user(self) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_reset_user(self.to());
@@ -382,9 +262,9 @@ impl MultiVal {
     }
   }
   #[inline(always)]
-  pub fn drop_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<MultiVal> {
+  pub fn set_at(self, pos: c_int, el: Val) -> Option<MultiVal> {
     unsafe {
-      let ret = isl_multi_val_drop_dims(self.to(), type_.to(), first.to(), n.to());
+      let ret = isl_multi_val_set_at(self.to(), pos.to(), el.to());
       (ret).to()
     }
   }
@@ -445,6 +325,20 @@ impl MultiVal {
     }
   }
   #[inline(always)]
+  pub fn align_params(self, model: Space) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_align_params(self.to(), model.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn from_range(self) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_from_range(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn scale_val(self, v: Val) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_scale_val(self.to(), v.to());
@@ -494,23 +388,30 @@ impl MultiVal {
     }
   }
   #[inline(always)]
-  pub fn align_params(self, model: Space) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_align_params(self.to(), model.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn from_range(self) -> Option<MultiVal> {
-    unsafe {
-      let ret = isl_multi_val_from_range(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
   pub fn neg(self) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_neg(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn min(self, multi2: MultiVal) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_min(self.to(), multi2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn max(self, multi2: MultiVal) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_max(self.to(), multi2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn drop_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_drop_dims(self.to(), type_.to(), first.to(), n.to());
       (ret).to()
     }
   }
@@ -532,6 +433,41 @@ impl MultiVal {
   pub fn project_domain_on_params(self) -> Option<MultiVal> {
     unsafe {
       let ret = isl_multi_val_project_domain_on_params(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn set_dim_name(self, type_: DimType, pos: c_uint, s: Option<CStr>) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_set_dim_name(self.to(), type_.to(), pos.to(), s.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn set_dim_id(self, type_: DimType, pos: c_uint, id: Id) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_set_dim_id(self.to(), type_.to(), pos.to(), id.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn set_tuple_name(self, type_: DimType, s: Option<CStr>) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_set_tuple_name(self.to(), type_.to(), s.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn set_tuple_id(self, type_: DimType, id: Id) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_set_tuple_id(self.to(), type_.to(), id.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reset_tuple_id(self, type_: DimType) -> Option<MultiVal> {
+    unsafe {
+      let ret = isl_multi_val_reset_tuple_id(self.to(), type_.to());
       (ret).to()
     }
   }
@@ -567,13 +503,6 @@ impl MultiVal {
 
 impl MultiValRef {
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
-    unsafe {
-      let ret = isl_multi_val_dim(self.to(), type_.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
   pub fn get_ctx(self) -> Option<CtxRef> {
     unsafe {
       let ret = isl_multi_val_get_ctx(self.to());
@@ -595,9 +524,9 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
-  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
+  pub fn get_list(self) -> Option<ValList> {
     unsafe {
-      let ret = isl_multi_val_find_dim_by_name(self.to(), type_.to(), name.to());
+      let ret = isl_multi_val_get_list(self.to());
       (ret).to()
     }
   }
@@ -616,9 +545,58 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_multi_val_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, pos: c_int) -> Option<Val> {
+    unsafe {
+      let ret = isl_multi_val_get_at(self.to(), pos.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_val(self, pos: c_int) -> Option<Val> {
+    unsafe {
+      let ret = isl_multi_val_get_val(self.to(), pos.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn range_is_wrapping(self) -> Bool {
+    unsafe {
+      let ret = isl_multi_val_range_is_wrapping(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn involves_nan(self) -> Bool {
     unsafe {
       let ret = isl_multi_val_involves_nan(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn dim(self, type_: DimType) -> c_int {
+    unsafe {
+      let ret = isl_multi_val_dim(self.to(), type_.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
+    unsafe {
+      let ret = isl_multi_val_involves_dims(self.to(), type_.to(), first.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn find_dim_by_name(self, type_: DimType, name: Option<CStr>) -> c_int {
+    unsafe {
+      let ret = isl_multi_val_find_dim_by_name(self.to(), type_.to(), name.to());
       (ret).to()
     }
   }
@@ -658,23 +636,9 @@ impl MultiValRef {
     }
   }
   #[inline(always)]
-  pub fn get_val(self, pos: c_int) -> Option<Val> {
+  pub fn is_zero(self) -> Bool {
     unsafe {
-      let ret = isl_multi_val_get_val(self.to(), pos.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn range_is_wrapping(self) -> Bool {
-    unsafe {
-      let ret = isl_multi_val_range_is_wrapping(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn involves_dims(self, type_: DimType, first: c_uint, n: c_uint) -> Bool {
-    unsafe {
-      let ret = isl_multi_val_involves_dims(self.to(), type_.to(), first.to(), n.to());
+      let ret = isl_multi_val_is_zero(self.to());
       (ret).to()
     }
   }
@@ -696,13 +660,6 @@ impl MultiValRef {
 
 impl Printer {
   #[inline(always)]
-  pub fn print_val_list(self, list: ValListRef) -> Option<Printer> {
-    unsafe {
-      let ret = isl_printer_print_val_list(self.to(), list.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
   pub fn print_val(self, v: ValRef) -> Option<Printer> {
     unsafe {
       let ret = isl_printer_print_val(self.to(), v.to());
@@ -713,6 +670,13 @@ impl Printer {
   pub fn print_multi_val(self, mv: MultiValRef) -> Option<Printer> {
     unsafe {
       let ret = isl_printer_print_multi_val(self.to(), mv.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn print_val_list(self, list: ValListRef) -> Option<Printer> {
+    unsafe {
+      let ret = isl_printer_print_val_list(self.to(), list.to());
       (ret).to()
     }
   }
@@ -736,13 +700,6 @@ impl Space {
 }
 
 impl Val {
-  #[inline(always)]
-  pub fn list_from_val(self) -> Option<ValList> {
-    unsafe {
-      let ret = isl_val_list_from_val(self.to());
-      (ret).to()
-    }
-  }
   #[inline(always)]
   pub fn free(self) -> () {
     unsafe {
@@ -803,6 +760,13 @@ impl Val {
   pub fn exp2(self) -> Option<Val> {
     unsafe {
       let ret = isl_val_2exp(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn pow2(self) -> Option<Val> {
+    unsafe {
+      let ret = isl_val_pow2(self.to());
       (ret).to()
     }
   }
@@ -899,6 +863,13 @@ impl Val {
       (ret, *x, *y).to()
     }
   }
+  #[inline(always)]
+  pub fn list_from_val(self) -> Option<ValList> {
+    unsafe {
+      let ret = isl_val_list_from_val(self.to());
+      (ret).to()
+    }
+  }
 }
 
 impl ValList {
@@ -927,6 +898,27 @@ impl ValList {
   pub fn drop(self, first: c_uint, n: c_uint) -> Option<ValList> {
     unsafe {
       let ret = isl_val_list_drop(self.to(), first.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn clear(self) -> Option<ValList> {
+    unsafe {
+      let ret = isl_val_list_clear(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn swap(self, pos1: c_uint, pos2: c_uint) -> Option<ValList> {
+    unsafe {
+      let ret = isl_val_list_swap(self.to(), pos1.to(), pos2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reverse(self) -> Option<ValList> {
+    unsafe {
+      let ret = isl_val_list_reverse(self.to());
       (ret).to()
     }
   }
@@ -978,9 +970,23 @@ impl ValListRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_val_list_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn n_val(self) -> c_int {
     unsafe {
       let ret = isl_val_list_n_val(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, index: c_int) -> Option<Val> {
+    unsafe {
+      let ret = isl_val_list_get_at(self.to(), index.to());
       (ret).to()
     }
   }
@@ -1000,11 +1006,26 @@ impl ValListRef {
     }
   }
   #[inline(always)]
+  pub fn every<F1: FnMut(ValRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(ValRef) -> Bool>(el: ValRef, user: *mut c_void) -> Bool { (*(user as *mut F))(el.to()) }
+    unsafe {
+      let ret = isl_val_list_every(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn foreach_scc<F1: FnMut(ValRef, ValRef) -> Bool, F2: FnMut(ValList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
     unsafe extern "C" fn fn1<F: FnMut(ValRef, ValRef) -> Bool>(a: ValRef, b: ValRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
     unsafe extern "C" fn fn2<F: FnMut(ValList) -> Stat>(scc: ValList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_val_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn to_str(self) -> Option<CString> {
+    unsafe {
+      let ret = isl_val_list_to_str(self.to());
       (ret).to()
     }
   }
@@ -1075,7 +1096,7 @@ impl ValRef {
     }
   }
   #[inline(always)]
-  pub fn get_abs_num_chunks(self, size: c_int, chunks: *mut c_void) -> c_int {
+  pub fn get_abs_num_chunks(self, size: c_int, chunks: *mut c_void) -> Stat {
     unsafe {
       let ret = isl_val_get_abs_num_chunks(self.to(), size.to(), chunks.to());
       (ret).to()
@@ -1201,6 +1222,13 @@ impl ValRef {
     }
   }
   #[inline(always)]
+  pub fn gt_si(self, i: c_long) -> Bool {
+    unsafe {
+      let ret = isl_val_gt_si(self.to(), i.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn ge(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_ge(self.to(), v2.to());
@@ -1211,6 +1239,13 @@ impl ValRef {
   pub fn eq(self, v2: ValRef) -> Bool {
     unsafe {
       let ret = isl_val_eq(self.to(), v2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn eq_si(self, i: c_long) -> Bool {
+    unsafe {
+      let ret = isl_val_eq_si(self.to(), i.to());
       (ret).to()
     }
   }
@@ -1271,6 +1306,16 @@ impl Drop for Val {
 
 impl Drop for ValList {
   fn drop(&mut self) { ValList(self.0).free() }
+}
+
+impl fmt::Display for ValListRef {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
+}
+
+impl fmt::Display for ValList {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
 }
 
 impl fmt::Display for ValRef {

@@ -44,7 +44,7 @@ extern "C" {
   pub fn isl_schedule_node_band_get_ast_build_options(node: ScheduleNodeRef) -> Option<UnionSet>;
   pub fn isl_schedule_node_band_set_ast_build_options(node: ScheduleNode, options: UnionSet) -> Option<ScheduleNode>;
   pub fn isl_schedule_node_band_get_ast_isolate_option(node: ScheduleNodeRef) -> Option<Set>;
-  pub fn isl_schedule_node_band_n_member(node: ScheduleNodeRef) -> c_uint;
+  pub fn isl_schedule_node_band_n_member(node: ScheduleNodeRef) -> c_int;
   pub fn isl_schedule_node_band_member_get_coincident(node: ScheduleNodeRef, pos: c_int) -> Bool;
   pub fn isl_schedule_node_band_member_set_coincident(node: ScheduleNode, pos: c_int, coincident: c_int) -> Option<ScheduleNode>;
   pub fn isl_schedule_node_band_get_permutable(node: ScheduleNodeRef) -> Bool;
@@ -603,7 +603,7 @@ impl ScheduleNodeRef {
     }
   }
   #[inline(always)]
-  pub fn band_n_member(self) -> c_uint {
+  pub fn band_n_member(self) -> c_int {
     unsafe {
       let ret = isl_schedule_node_band_n_member(self.to());
       (ret).to()

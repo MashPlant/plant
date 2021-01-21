@@ -1,7 +1,9 @@
 use crate::*;
 
 extern "C" {
+  pub fn isl_stat_non_null(obj: *mut c_void) -> Stat;
   pub fn isl_bool_not(b: Bool) -> Bool;
+  pub fn isl_bool_ok(b: c_int) -> Bool;
   pub fn isl_handle_error(ctx: CtxRef, error: Error, msg: Option<CStr>, file: Option<CStr>, line: c_int) -> ();
   pub fn isl_ctx_alloc() -> Option<Ctx>;
   pub fn isl_ctx_ref(ctx: CtxRef) -> ();
@@ -19,6 +21,40 @@ extern "C" {
   pub fn isl_ctx_last_error_line(ctx: CtxRef) -> c_int;
   pub fn isl_ctx_reset_error(ctx: CtxRef) -> ();
   pub fn isl_ctx_set_error(ctx: CtxRef, error: Error) -> ();
+}
+
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct Size(pub NonNull<c_void>);
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct SizeRef(pub NonNull<c_void>);
+
+impl_try!(Size);
+impl_try!(SizeRef);
+
+impl Size {
+  #[inline(always)]
+  pub fn read(&self) -> Size { unsafe { ptr::read(self) } }
+  #[inline(always)]
+  pub fn write(&self, x: Size) { unsafe { ptr::write(self as *const _ as _, x) } }
+}
+
+impl AsRef<SizeRef> for Size {
+  #[inline(always)]
+  fn as_ref(&self) -> &SizeRef { unsafe { mem::transmute(self) } }
+}
+
+impl Deref for Size {
+  type Target = SizeRef;
+  #[inline(always)]
+  fn deref(&self) -> &SizeRef { self.as_ref() }
+}
+
+impl To<Option<Size>> for *mut c_void {
+  #[inline(always)]
+  unsafe fn to(self) -> Option<Size> { NonNull::new(self).map(Size) }
 }
 
 #[repr(transparent)]

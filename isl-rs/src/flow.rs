@@ -15,7 +15,7 @@ extern "C" {
   pub fn isl_access_info_compute_flow(acc: AccessInfo) -> Option<Flow>;
   pub fn isl_flow_foreach(deps: FlowRef, fn_: unsafe extern "C" fn(dep: Map, must: c_int, dep_user: *mut c_void, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
   pub fn isl_flow_get_no_source(deps: FlowRef, must: c_int) -> Option<Map>;
-  pub fn isl_flow_free(deps: Flow) -> ();
+  pub fn isl_flow_free(deps: Flow) -> *mut c_void;
   pub fn isl_flow_get_ctx(deps: FlowRef) -> Option<CtxRef>;
   pub fn isl_union_access_info_from_sink(sink: UnionMap) -> Option<UnionAccessInfo>;
   pub fn isl_union_access_info_set_must_source(access: UnionAccessInfo, must_source: UnionMap) -> Option<UnionAccessInfo>;

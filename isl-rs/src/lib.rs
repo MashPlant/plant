@@ -39,11 +39,13 @@ pub mod ast;
 pub mod ast_type;
 pub mod constraint;
 pub mod ctx;
+pub mod fixed_box;
 pub mod flow;
 pub mod id;
 pub mod id_to_ast_expr;
 pub mod id_to_id;
 pub mod id_to_pw_aff;
+pub mod id_type;
 pub mod ilp;
 pub mod local_space;
 pub mod lp;
@@ -66,11 +68,14 @@ pub mod schedule;
 pub mod schedule_type;
 pub mod set;
 pub mod space;
+pub mod space_type;
 pub mod stream;
+pub mod stride_info;
 pub mod union_map;
 pub mod union_map_type;
 pub mod union_set;
 pub mod val;
+pub mod val_type;
 pub mod vec;
 pub mod version;
 pub mod vertices;
@@ -82,11 +87,13 @@ pub use ast::*;
 pub use ast_type::*;
 pub use constraint::*;
 pub use ctx::*;
+pub use fixed_box::*;
 pub use flow::*;
 pub use id::*;
 pub use id_to_ast_expr::*;
 pub use id_to_id::*;
 pub use id_to_pw_aff::*;
+pub use id_type::*;
 pub use ilp::*;
 pub use local_space::*;
 pub use lp::*;
@@ -109,12 +116,15 @@ pub use schedule::*;
 pub use schedule_type::*;
 pub use set::*;
 pub use space::*;
+pub use space_type::*;
 pub use stream::*;
+pub use stride_info::*;
 pub use union_map::*;
 pub use union_map_type::*;
 pub use union_set::*;
+pub use val::*;
 // Vec和Val会引起名字冲突，默认不导出它们
-use val::*;
+use val_type::*;
 use vec::*;
 pub use version::*;
 pub use vertices::*;
@@ -171,7 +181,7 @@ pub enum Fold { Min = 0, Max, List }
 
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum AstOpType { Error = -1, And, AndThen, Or, OrElse, Max, Min, Minus, Add, Sub, Mul, Div, FDivQ, PDivQ, PDivR, ZDivR, Cond, Select, Eq, Le, Lt, Ge, Gt, Call, Access, Member, AddressOf }
+pub enum AstExprOpType { Error = -1, And, AndThen, Or, OrElse, Max, Min, Minus, Add, Sub, Mul, Div, FDivQ, PDivQ, PDivR, ZDivR, Cond, Select, Eq, Le, Lt, Ge, Gt, Call, Access, Member, AddressOf }
 
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

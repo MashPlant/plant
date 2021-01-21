@@ -46,6 +46,9 @@ int isl_options_get_pip_symmetry(__isl_keep isl_ctx *ctx);
 isl_stat isl_options_set_coalesce_bounded_wrapping(__isl_keep isl_ctx *ctx, int val);
 int isl_options_get_coalesce_bounded_wrapping(__isl_keep isl_ctx *ctx);
 
+isl_stat isl_options_set_coalesce_preserve_locals(__isl_keep isl_ctx *ctx, int val);
+int isl_options_get_coalesce_preserve_locals(__isl_keep isl_ctx *ctx);
+
 #if defined(__cplusplus)
 }
 #endif

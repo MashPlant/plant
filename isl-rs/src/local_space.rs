@@ -2,7 +2,7 @@ use crate::*;
 
 extern "C" {
   pub fn isl_local_space_get_ctx(ls: LocalSpaceRef) -> Option<CtxRef>;
-  pub fn isl_local_space_from_space(dim: Space) -> Option<LocalSpace>;
+  pub fn isl_local_space_from_space(space: Space) -> Option<LocalSpace>;
   pub fn isl_local_space_copy(ls: LocalSpaceRef) -> Option<LocalSpace>;
   pub fn isl_local_space_free(ls: LocalSpace) -> *mut c_void;
   pub fn isl_local_space_is_params(ls: LocalSpaceRef) -> Bool;

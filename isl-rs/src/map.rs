@@ -1,16 +1,9 @@
 use crate::*;
 
 extern "C" {
-  pub fn isl_basic_map_n_in(bmap: BasicMapRef) -> c_uint;
-  pub fn isl_basic_map_n_out(bmap: BasicMapRef) -> c_uint;
-  pub fn isl_basic_map_n_param(bmap: BasicMapRef) -> c_uint;
-  pub fn isl_basic_map_n_div(bmap: BasicMapRef) -> c_uint;
-  pub fn isl_basic_map_total_dim(bmap: BasicMapRef) -> c_uint;
-  pub fn isl_basic_map_dim(bmap: BasicMapRef, type_: DimType) -> c_uint;
-  pub fn isl_map_n_in(map: MapRef) -> c_uint;
-  pub fn isl_map_n_out(map: MapRef) -> c_uint;
-  pub fn isl_map_n_param(map: MapRef) -> c_uint;
-  pub fn isl_map_dim(map: MapRef, type_: DimType) -> c_uint;
+  pub fn isl_basic_map_total_dim(bmap: BasicMapRef) -> c_int;
+  pub fn isl_basic_map_dim(bmap: BasicMapRef, type_: DimType) -> c_int;
+  pub fn isl_map_dim(map: MapRef, type_: DimType) -> c_int;
   pub fn isl_basic_map_get_ctx(bmap: BasicMapRef) -> Option<CtxRef>;
   pub fn isl_map_get_ctx(map: MapRef) -> Option<CtxRef>;
   pub fn isl_basic_map_get_space(bmap: BasicMapRef) -> Option<Space>;
@@ -41,15 +34,15 @@ extern "C" {
   pub fn isl_map_find_dim_by_id(map: MapRef, type_: DimType, id: IdRef) -> c_int;
   pub fn isl_map_find_dim_by_name(map: MapRef, type_: DimType, name: Option<CStr>) -> c_int;
   pub fn isl_basic_map_is_rational(bmap: BasicMapRef) -> Bool;
-  pub fn isl_basic_map_identity(dim: Space) -> Option<BasicMap>;
+  pub fn isl_basic_map_identity(space: Space) -> Option<BasicMap>;
   pub fn isl_basic_map_free(bmap: BasicMap) -> *mut c_void;
   pub fn isl_basic_map_copy(bmap: BasicMapRef) -> Option<BasicMap>;
-  pub fn isl_basic_map_equal(dim: Space, n_equal: c_uint) -> Option<BasicMap>;
-  pub fn isl_basic_map_less_at(dim: Space, pos: c_uint) -> Option<BasicMap>;
-  pub fn isl_basic_map_more_at(dim: Space, pos: c_uint) -> Option<BasicMap>;
+  pub fn isl_basic_map_equal(space: Space, n_equal: c_uint) -> Option<BasicMap>;
+  pub fn isl_basic_map_less_at(space: Space, pos: c_uint) -> Option<BasicMap>;
+  pub fn isl_basic_map_more_at(space: Space, pos: c_uint) -> Option<BasicMap>;
   pub fn isl_basic_map_empty(space: Space) -> Option<BasicMap>;
   pub fn isl_basic_map_universe(space: Space) -> Option<BasicMap>;
-  pub fn isl_basic_map_nat_universe(dim: Space) -> Option<BasicMap>;
+  pub fn isl_basic_map_nat_universe(space: Space) -> Option<BasicMap>;
   pub fn isl_basic_map_remove_redundancies(bmap: BasicMap) -> Option<BasicMap>;
   pub fn isl_map_remove_redundancies(map: Map) -> Option<Map>;
   pub fn isl_map_simple_hull(map: Map) -> Option<BasicMap>;
@@ -89,6 +82,8 @@ extern "C" {
   pub fn isl_basic_map_fix_val(bmap: BasicMap, type_: DimType, pos: c_uint, v: Val) -> Option<BasicMap>;
   pub fn isl_basic_map_lower_bound_si(bmap: BasicMap, type_: DimType, pos: c_uint, value: c_int) -> Option<BasicMap>;
   pub fn isl_basic_map_upper_bound_si(bmap: BasicMap, type_: DimType, pos: c_uint, value: c_int) -> Option<BasicMap>;
+  pub fn isl_map_lower_bound_multi_pw_aff(map: Map, lower: MultiPwAff) -> Option<Map>;
+  pub fn isl_map_upper_bound_multi_pw_aff(map: Map, upper: MultiPwAff) -> Option<Map>;
   pub fn isl_basic_map_sum(bmap1: BasicMap, bmap2: BasicMap) -> Option<BasicMap>;
   pub fn isl_basic_map_neg(bmap: BasicMap) -> Option<BasicMap>;
   pub fn isl_map_sum(map1: Map, map2: Map) -> Option<Map>;
@@ -109,6 +104,8 @@ extern "C" {
   pub fn isl_basic_map_lexmin_pw_multi_aff(bmap: BasicMap) -> Option<PwMultiAff>;
   pub fn isl_map_lexmin_pw_multi_aff(map: Map) -> Option<PwMultiAff>;
   pub fn isl_map_lexmax_pw_multi_aff(map: Map) -> Option<PwMultiAff>;
+  pub fn isl_map_min_multi_pw_aff(map: Map) -> Option<MultiPwAff>;
+  pub fn isl_map_max_multi_pw_aff(map: Map) -> Option<MultiPwAff>;
   pub fn isl_basic_map_print_internal(bmap: BasicMapRef, out: *mut FILE, indent: c_int) -> ();
   pub fn isl_basic_map_plain_get_val_if_fixed(bmap: BasicMapRef, type_: DimType, pos: c_uint) -> Option<Val>;
   pub fn isl_basic_map_image_is_bounded(bmap: BasicMapRef) -> Bool;
@@ -119,25 +116,28 @@ extern "C" {
   pub fn isl_basic_map_is_subset(bmap1: BasicMapRef, bmap2: BasicMapRef) -> Bool;
   pub fn isl_basic_map_is_strict_subset(bmap1: BasicMapRef, bmap2: BasicMapRef) -> Bool;
   pub fn isl_map_universe(space: Space) -> Option<Map>;
-  pub fn isl_map_nat_universe(dim: Space) -> Option<Map>;
+  pub fn isl_map_nat_universe(space: Space) -> Option<Map>;
   pub fn isl_map_empty(space: Space) -> Option<Map>;
-  pub fn isl_map_identity(dim: Space) -> Option<Map>;
-  pub fn isl_map_lex_lt_first(dim: Space, n: c_uint) -> Option<Map>;
-  pub fn isl_map_lex_le_first(dim: Space, n: c_uint) -> Option<Map>;
-  pub fn isl_map_lex_lt(set_dim: Space) -> Option<Map>;
-  pub fn isl_map_lex_le(set_dim: Space) -> Option<Map>;
-  pub fn isl_map_lex_gt_first(dim: Space, n: c_uint) -> Option<Map>;
-  pub fn isl_map_lex_ge_first(dim: Space, n: c_uint) -> Option<Map>;
-  pub fn isl_map_lex_gt(set_dim: Space) -> Option<Map>;
-  pub fn isl_map_lex_ge(set_dim: Space) -> Option<Map>;
+  pub fn isl_map_identity(space: Space) -> Option<Map>;
+  pub fn isl_map_lex_lt_first(space: Space, n: c_uint) -> Option<Map>;
+  pub fn isl_map_lex_le_first(space: Space, n: c_uint) -> Option<Map>;
+  pub fn isl_map_lex_lt(set_space: Space) -> Option<Map>;
+  pub fn isl_map_lex_le(set_space: Space) -> Option<Map>;
+  pub fn isl_map_lex_gt_first(space: Space, n: c_uint) -> Option<Map>;
+  pub fn isl_map_lex_ge_first(space: Space, n: c_uint) -> Option<Map>;
+  pub fn isl_map_lex_gt(set_space: Space) -> Option<Map>;
+  pub fn isl_map_lex_ge(set_space: Space) -> Option<Map>;
   pub fn isl_map_free(map: Map) -> *mut c_void;
   pub fn isl_map_copy(map: MapRef) -> Option<Map>;
   pub fn isl_map_reverse(map: Map) -> Option<Map>;
+  pub fn isl_map_range_reverse(map: Map) -> Option<Map>;
   pub fn isl_map_union(map1: Map, map2: Map) -> Option<Map>;
   pub fn isl_map_union_disjoint(map1: Map, map2: Map) -> Option<Map>;
   pub fn isl_map_intersect_domain(map: Map, set: Set) -> Option<Map>;
   pub fn isl_map_intersect_range(map: Map, set: Set) -> Option<Map>;
+  pub fn isl_map_intersect_domain_factor_domain(map: Map, factor: Map) -> Option<Map>;
   pub fn isl_map_intersect_domain_factor_range(map: Map, factor: Map) -> Option<Map>;
+  pub fn isl_map_intersect_range_factor_domain(map: Map, factor: Map) -> Option<Map>;
   pub fn isl_map_intersect_range_factor_range(map: Map, factor: Map) -> Option<Map>;
   pub fn isl_map_apply_domain(map1: Map, map2: Map) -> Option<Map>;
   pub fn isl_map_apply_range(map1: Map, map2: Map) -> Option<Map>;
@@ -176,7 +176,9 @@ extern "C" {
   pub fn isl_map_fix_si(map: Map, type_: DimType, pos: c_uint, value: c_int) -> Option<Map>;
   pub fn isl_map_fix_val(map: Map, type_: DimType, pos: c_uint, v: Val) -> Option<Map>;
   pub fn isl_map_lower_bound_si(map: Map, type_: DimType, pos: c_uint, value: c_int) -> Option<Map>;
+  pub fn isl_map_lower_bound_val(map: Map, type_: DimType, pos: c_uint, value: Val) -> Option<Map>;
   pub fn isl_map_upper_bound_si(map: Map, type_: DimType, pos: c_uint, value: c_int) -> Option<Map>;
+  pub fn isl_map_upper_bound_val(map: Map, type_: DimType, pos: c_uint, value: Val) -> Option<Map>;
   pub fn isl_basic_map_deltas(bmap: BasicMap) -> Option<BasicSet>;
   pub fn isl_map_deltas(map: Map) -> Option<Set>;
   pub fn isl_basic_map_deltas_map(bmap: BasicMap) -> Option<BasicMap>;
@@ -193,6 +195,7 @@ extern "C" {
   pub fn isl_map_move_dims(map: Map, dst_type: DimType, dst_pos: c_uint, src_type: DimType, src_pos: c_uint, n: c_uint) -> Option<Map>;
   pub fn isl_basic_map_project_out(bmap: BasicMap, type_: DimType, first: c_uint, n: c_uint) -> Option<BasicMap>;
   pub fn isl_map_project_out(map: Map, type_: DimType, first: c_uint, n: c_uint) -> Option<Map>;
+  pub fn isl_map_project_out_all_params(map: Map) -> Option<Map>;
   pub fn isl_basic_map_remove_divs(bmap: BasicMap) -> Option<BasicMap>;
   pub fn isl_map_remove_unknown_divs(map: Map) -> Option<Map>;
   pub fn isl_map_remove_divs(map: Map) -> Option<Map>;
@@ -210,6 +213,7 @@ extern "C" {
   pub fn isl_map_order_lt(map: Map, type1: DimType, pos1: c_int, type2: DimType, pos2: c_int) -> Option<Map>;
   pub fn isl_basic_map_order_gt(bmap: BasicMap, type1: DimType, pos1: c_int, type2: DimType, pos2: c_int) -> Option<BasicMap>;
   pub fn isl_map_order_gt(map: Map, type1: DimType, pos1: c_int, type2: DimType, pos2: c_int) -> Option<Map>;
+  pub fn isl_set_translation(deltas: Set) -> Option<Map>;
   pub fn isl_set_identity(set: Set) -> Option<Map>;
   pub fn isl_basic_set_is_wrapping(bset: BasicSetRef) -> Bool;
   pub fn isl_set_is_wrapping(set: SetRef) -> Bool;
@@ -229,6 +233,7 @@ extern "C" {
   pub fn isl_map_params(map: Map) -> Option<Set>;
   pub fn isl_map_domain(bmap: Map) -> Option<Set>;
   pub fn isl_map_range(map: Map) -> Option<Set>;
+  pub fn isl_set_insert_domain(set: Set, domain: Space) -> Option<Map>;
   pub fn isl_map_domain_map(map: Map) -> Option<Map>;
   pub fn isl_map_range_map(map: Map) -> Option<Map>;
   pub fn isl_set_wrapped_domain_map(set: Set) -> Option<Map>;
@@ -240,6 +245,8 @@ extern "C" {
   pub fn isl_basic_map_from_domain_and_range(domain: BasicSet, range: BasicSet) -> Option<BasicMap>;
   pub fn isl_map_from_domain_and_range(domain: Set, range: Set) -> Option<Map>;
   pub fn isl_map_sample(map: Map) -> Option<BasicMap>;
+  pub fn isl_map_bind_domain(map: Map, tuple: MultiId) -> Option<Set>;
+  pub fn isl_map_bind_range(map: Map, tuple: MultiId) -> Option<Set>;
   pub fn isl_map_plain_is_empty(map: MapRef) -> Bool;
   pub fn isl_map_plain_is_universe(map: MapRef) -> Bool;
   pub fn isl_map_is_empty(map: MapRef) -> Bool;
@@ -289,27 +296,37 @@ extern "C" {
   pub fn isl_map_gist_range(map: Map, context: Set) -> Option<Map>;
   pub fn isl_map_gist_params(map: Map, context: Set) -> Option<Map>;
   pub fn isl_map_gist_basic_map(map: Map, context: BasicMap) -> Option<Map>;
+  pub fn isl_map_get_range_stride_info(map: MapRef, pos: c_int) -> Option<StrideInfo>;
+  pub fn isl_map_get_range_simple_fixed_box_hull(map: MapRef) -> Option<FixedBox>;
   pub fn isl_map_coalesce(map: Map) -> Option<Map>;
   pub fn isl_map_plain_is_equal(map1: MapRef, map2: MapRef) -> Bool;
   pub fn isl_map_get_hash(map: MapRef) -> c_uint;
   pub fn isl_map_n_basic_map(map: MapRef) -> c_int;
   pub fn isl_map_foreach_basic_map(map: MapRef, fn_: unsafe extern "C" fn(bmap: BasicMap, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_map_get_basic_map_list(map: MapRef) -> Option<BasicMapList>;
   pub fn isl_map_fixed_power_val(map: Map, exp: Val) -> Option<Map>;
-  pub fn isl_map_power(map: Map, exact: *mut c_int) -> Option<Map>;
-  pub fn isl_map_reaching_path_lengths(map: Map, exact: *mut c_int) -> Option<Map>;
-  pub fn isl_map_transitive_closure(map: Map, exact: *mut c_int) -> Option<Map>;
+  pub fn isl_map_power(map: Map, exact: *mut Bool) -> Option<Map>;
+  pub fn isl_map_reaching_path_lengths(map: Map, exact: *mut Bool) -> Option<Map>;
+  pub fn isl_map_transitive_closure(map: Map, exact: *mut Bool) -> Option<Map>;
   pub fn isl_map_lex_le_map(map1: Map, map2: Map) -> Option<Map>;
   pub fn isl_map_lex_lt_map(map1: Map, map2: Map) -> Option<Map>;
   pub fn isl_map_lex_ge_map(map1: Map, map2: Map) -> Option<Map>;
   pub fn isl_map_lex_gt_map(map1: Map, map2: Map) -> Option<Map>;
+  pub fn isl_map_eq_at_multi_pw_aff(map: Map, mpa: MultiPwAff) -> Option<Map>;
+  pub fn isl_map_lex_lt_at_multi_pw_aff(map: Map, mpa: MultiPwAff) -> Option<Map>;
+  pub fn isl_map_lex_le_at_multi_pw_aff(map: Map, mpa: MultiPwAff) -> Option<Map>;
+  pub fn isl_map_lex_gt_at_multi_pw_aff(map: Map, mpa: MultiPwAff) -> Option<Map>;
+  pub fn isl_map_lex_ge_at_multi_pw_aff(map: Map, mpa: MultiPwAff) -> Option<Map>;
   pub fn isl_basic_map_align_params(bmap: BasicMap, model: Space) -> Option<BasicMap>;
   pub fn isl_map_align_params(map: Map, model: Space) -> Option<Map>;
+  pub fn isl_basic_map_drop_unused_params(bmap: BasicMap) -> Option<BasicMap>;
+  pub fn isl_map_drop_unused_params(map: Map) -> Option<Map>;
   pub fn isl_basic_map_equalities_matrix(bmap: BasicMapRef, c1: DimType, c2: DimType, c3: DimType, c4: DimType, c5: DimType) -> Option<Mat>;
   pub fn isl_basic_map_inequalities_matrix(bmap: BasicMapRef, c1: DimType, c2: DimType, c3: DimType, c4: DimType, c5: DimType) -> Option<Mat>;
-  pub fn isl_basic_map_from_constraint_matrices(dim: Space, eq: Mat, ineq: Mat, c1: DimType, c2: DimType, c3: DimType, c4: DimType, c5: DimType) -> Option<BasicMap>;
+  pub fn isl_basic_map_from_constraint_matrices(space: Space, eq: Mat, ineq: Mat, c1: DimType, c2: DimType, c3: DimType, c4: DimType, c5: DimType) -> Option<BasicMap>;
   pub fn isl_basic_map_from_aff(aff: Aff) -> Option<BasicMap>;
   pub fn isl_basic_map_from_multi_aff(maff: MultiAff) -> Option<BasicMap>;
-  pub fn isl_basic_map_from_aff_list(domain_dim: Space, list: AffList) -> Option<BasicMap>;
+  pub fn isl_basic_map_from_aff_list(domain_space: Space, list: AffList) -> Option<BasicMap>;
   pub fn isl_map_from_aff(aff: Aff) -> Option<Map>;
   pub fn isl_map_from_multi_aff(maff: MultiAff) -> Option<Map>;
   pub fn isl_map_dim_min(map: Map, pos: c_int) -> Option<PwAff>;
@@ -322,14 +339,21 @@ extern "C" {
   pub fn isl_basic_map_list_add(list: BasicMapList, el: BasicMap) -> Option<BasicMapList>;
   pub fn isl_basic_map_list_insert(list: BasicMapList, pos: c_uint, el: BasicMap) -> Option<BasicMapList>;
   pub fn isl_basic_map_list_drop(list: BasicMapList, first: c_uint, n: c_uint) -> Option<BasicMapList>;
+  pub fn isl_basic_map_list_clear(list: BasicMapList) -> Option<BasicMapList>;
+  pub fn isl_basic_map_list_swap(list: BasicMapList, pos1: c_uint, pos2: c_uint) -> Option<BasicMapList>;
+  pub fn isl_basic_map_list_reverse(list: BasicMapList) -> Option<BasicMapList>;
   pub fn isl_basic_map_list_concat(list1: BasicMapList, list2: BasicMapList) -> Option<BasicMapList>;
+  pub fn isl_basic_map_list_size(list: BasicMapListRef) -> c_int;
   pub fn isl_basic_map_list_n_basic_map(list: BasicMapListRef) -> c_int;
+  pub fn isl_basic_map_list_get_at(list: BasicMapListRef, index: c_int) -> Option<BasicMap>;
   pub fn isl_basic_map_list_get_basic_map(list: BasicMapListRef, index: c_int) -> Option<BasicMap>;
   pub fn isl_basic_map_list_set_basic_map(list: BasicMapList, index: c_int, el: BasicMap) -> Option<BasicMapList>;
   pub fn isl_basic_map_list_foreach(list: BasicMapListRef, fn_: unsafe extern "C" fn(el: BasicMap, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_basic_map_list_every(list: BasicMapListRef, test: unsafe extern "C" fn(el: BasicMapRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_basic_map_list_map(list: BasicMapList, fn_: unsafe extern "C" fn(el: BasicMap, user: *mut c_void) -> Option<BasicMap>, user: *mut c_void) -> Option<BasicMapList>;
   pub fn isl_basic_map_list_sort(list: BasicMapList, cmp: unsafe extern "C" fn(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<BasicMapList>;
   pub fn isl_basic_map_list_foreach_scc(list: BasicMapListRef, follows: unsafe extern "C" fn(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: BasicMapList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
+  pub fn isl_basic_map_list_to_str(list: BasicMapListRef) -> Option<CString>;
   pub fn isl_printer_print_basic_map_list(p: Printer, list: BasicMapListRef) -> Option<Printer>;
   pub fn isl_basic_map_list_dump(list: BasicMapListRef) -> ();
   pub fn isl_map_list_get_ctx(list: MapListRef) -> Option<CtxRef>;
@@ -340,14 +364,21 @@ extern "C" {
   pub fn isl_map_list_add(list: MapList, el: Map) -> Option<MapList>;
   pub fn isl_map_list_insert(list: MapList, pos: c_uint, el: Map) -> Option<MapList>;
   pub fn isl_map_list_drop(list: MapList, first: c_uint, n: c_uint) -> Option<MapList>;
+  pub fn isl_map_list_clear(list: MapList) -> Option<MapList>;
+  pub fn isl_map_list_swap(list: MapList, pos1: c_uint, pos2: c_uint) -> Option<MapList>;
+  pub fn isl_map_list_reverse(list: MapList) -> Option<MapList>;
   pub fn isl_map_list_concat(list1: MapList, list2: MapList) -> Option<MapList>;
+  pub fn isl_map_list_size(list: MapListRef) -> c_int;
   pub fn isl_map_list_n_map(list: MapListRef) -> c_int;
+  pub fn isl_map_list_get_at(list: MapListRef, index: c_int) -> Option<Map>;
   pub fn isl_map_list_get_map(list: MapListRef, index: c_int) -> Option<Map>;
   pub fn isl_map_list_set_map(list: MapList, index: c_int, el: Map) -> Option<MapList>;
   pub fn isl_map_list_foreach(list: MapListRef, fn_: unsafe extern "C" fn(el: Map, user: *mut c_void) -> Stat, user: *mut c_void) -> Stat;
+  pub fn isl_map_list_every(list: MapListRef, test: unsafe extern "C" fn(el: MapRef, user: *mut c_void) -> Bool, user: *mut c_void) -> Bool;
   pub fn isl_map_list_map(list: MapList, fn_: unsafe extern "C" fn(el: Map, user: *mut c_void) -> Option<Map>, user: *mut c_void) -> Option<MapList>;
   pub fn isl_map_list_sort(list: MapList, cmp: unsafe extern "C" fn(a: MapRef, b: MapRef, user: *mut c_void) -> c_int, user: *mut c_void) -> Option<MapList>;
   pub fn isl_map_list_foreach_scc(list: MapListRef, follows: unsafe extern "C" fn(a: MapRef, b: MapRef, user: *mut c_void) -> Bool, follows_user: *mut c_void, fn_: unsafe extern "C" fn(scc: MapList, user: *mut c_void) -> Stat, fn_user: *mut c_void) -> Stat;
+  pub fn isl_map_list_to_str(list: MapListRef) -> Option<CString>;
   pub fn isl_printer_print_map_list(p: Printer, list: MapListRef) -> Option<Printer>;
   pub fn isl_map_list_dump(list: MapListRef) -> ();
 }
@@ -837,6 +868,13 @@ impl BasicMap {
     }
   }
   #[inline(always)]
+  pub fn drop_unused_params(self) -> Option<BasicMap> {
+    unsafe {
+      let ret = isl_basic_map_drop_unused_params(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn list_from_basic_map(self) -> Option<BasicMapList> {
     unsafe {
       let ret = isl_basic_map_list_from_basic_map(self.to());
@@ -878,6 +916,27 @@ impl BasicMapList {
   pub fn drop(self, first: c_uint, n: c_uint) -> Option<BasicMapList> {
     unsafe {
       let ret = isl_basic_map_list_drop(self.to(), first.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn clear(self) -> Option<BasicMapList> {
+    unsafe {
+      let ret = isl_basic_map_list_clear(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn swap(self, pos1: c_uint, pos2: c_uint) -> Option<BasicMapList> {
+    unsafe {
+      let ret = isl_basic_map_list_swap(self.to(), pos1.to(), pos2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reverse(self) -> Option<BasicMapList> {
+    unsafe {
+      let ret = isl_basic_map_list_reverse(self.to());
       (ret).to()
     }
   }
@@ -929,9 +988,23 @@ impl BasicMapListRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_basic_map_list_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn n_basic_map(self) -> c_int {
     unsafe {
       let ret = isl_basic_map_list_n_basic_map(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, index: c_int) -> Option<BasicMap> {
+    unsafe {
+      let ret = isl_basic_map_list_get_at(self.to(), index.to());
       (ret).to()
     }
   }
@@ -951,11 +1024,26 @@ impl BasicMapListRef {
     }
   }
   #[inline(always)]
+  pub fn every<F1: FnMut(BasicMapRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(BasicMapRef) -> Bool>(el: BasicMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(el.to()) }
+    unsafe {
+      let ret = isl_basic_map_list_every(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn foreach_scc<F1: FnMut(BasicMapRef, BasicMapRef) -> Bool, F2: FnMut(BasicMapList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
     unsafe extern "C" fn fn1<F: FnMut(BasicMapRef, BasicMapRef) -> Bool>(a: BasicMapRef, b: BasicMapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
     unsafe extern "C" fn fn2<F: FnMut(BasicMapList) -> Stat>(scc: BasicMapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_basic_map_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn to_str(self) -> Option<CString> {
+    unsafe {
+      let ret = isl_basic_map_list_to_str(self.to());
       (ret).to()
     }
   }
@@ -970,42 +1058,14 @@ impl BasicMapListRef {
 
 impl BasicMapRef {
   #[inline(always)]
-  pub fn n_in(self) -> c_uint {
-    unsafe {
-      let ret = isl_basic_map_n_in(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn n_out(self) -> c_uint {
-    unsafe {
-      let ret = isl_basic_map_n_out(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn n_param(self) -> c_uint {
-    unsafe {
-      let ret = isl_basic_map_n_param(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn n_div(self) -> c_uint {
-    unsafe {
-      let ret = isl_basic_map_n_div(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn total_dim(self) -> c_uint {
+  pub fn total_dim(self) -> c_int {
     unsafe {
       let ret = isl_basic_map_total_dim(self.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_basic_map_dim(self.to(), type_.to());
       (ret).to()
@@ -1395,6 +1455,20 @@ impl Map {
     }
   }
   #[inline(always)]
+  pub fn lower_bound_multi_pw_aff(self, lower: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_lower_bound_multi_pw_aff(self.to(), lower.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn upper_bound_multi_pw_aff(self, upper: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_upper_bound_multi_pw_aff(self.to(), upper.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn sum(self, map2: Map) -> Option<Map> {
     unsafe {
       let ret = isl_map_sum(self.to(), map2.to());
@@ -1460,6 +1534,20 @@ impl Map {
     }
   }
   #[inline(always)]
+  pub fn min_multi_pw_aff(self) -> Option<MultiPwAff> {
+    unsafe {
+      let ret = isl_map_min_multi_pw_aff(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn max_multi_pw_aff(self) -> Option<MultiPwAff> {
+    unsafe {
+      let ret = isl_map_max_multi_pw_aff(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn free(self) -> () {
     unsafe {
       let ret = isl_map_free(self.to());
@@ -1470,6 +1558,13 @@ impl Map {
   pub fn reverse(self) -> Option<Map> {
     unsafe {
       let ret = isl_map_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn range_reverse(self) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_range_reverse(self.to());
       (ret).to()
     }
   }
@@ -1502,9 +1597,23 @@ impl Map {
     }
   }
   #[inline(always)]
+  pub fn intersect_domain_factor_domain(self, factor: Map) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_intersect_domain_factor_domain(self.to(), factor.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn intersect_domain_factor_range(self, factor: Map) -> Option<Map> {
     unsafe {
       let ret = isl_map_intersect_domain_factor_range(self.to(), factor.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn intersect_range_factor_domain(self, factor: Map) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_intersect_range_factor_domain(self.to(), factor.to());
       (ret).to()
     }
   }
@@ -1719,9 +1828,23 @@ impl Map {
     }
   }
   #[inline(always)]
+  pub fn lower_bound_val(self, type_: DimType, pos: c_uint, value: Val) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_lower_bound_val(self.to(), type_.to(), pos.to(), value.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn upper_bound_si(self, type_: DimType, pos: c_uint, value: c_int) -> Option<Map> {
     unsafe {
       let ret = isl_map_upper_bound_si(self.to(), type_.to(), pos.to(), value.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn upper_bound_val(self, type_: DimType, pos: c_uint, value: Val) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_upper_bound_val(self.to(), type_.to(), pos.to(), value.to());
       (ret).to()
     }
   }
@@ -1792,6 +1915,13 @@ impl Map {
   pub fn project_out(self, type_: DimType, first: c_uint, n: c_uint) -> Option<Map> {
     unsafe {
       let ret = isl_map_project_out(self.to(), type_.to(), first.to(), n.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn project_out_all_params(self) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_project_out_all_params(self.to());
       (ret).to()
     }
   }
@@ -1950,6 +2080,20 @@ impl Map {
     }
   }
   #[inline(always)]
+  pub fn bind_domain(self, tuple: MultiId) -> Option<Set> {
+    unsafe {
+      let ret = isl_map_bind_domain(self.to(), tuple.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn bind_range(self, tuple: MultiId) -> Option<Set> {
+    unsafe {
+      let ret = isl_map_bind_range(self.to(), tuple.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn zip(self) -> Option<Map> {
     unsafe {
       let ret = isl_map_zip(self.to());
@@ -2062,21 +2206,21 @@ impl Map {
     }
   }
   #[inline(always)]
-  pub fn power(self, exact: &mut c_int) -> Option<Map> {
+  pub fn power(self, exact: &mut Bool) -> Option<Map> {
     unsafe {
       let ret = isl_map_power(self.to(), exact.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn reaching_path_lengths(self, exact: &mut c_int) -> Option<Map> {
+  pub fn reaching_path_lengths(self, exact: &mut Bool) -> Option<Map> {
     unsafe {
       let ret = isl_map_reaching_path_lengths(self.to(), exact.to());
       (ret).to()
     }
   }
   #[inline(always)]
-  pub fn transitive_closure(self, exact: &mut c_int) -> Option<Map> {
+  pub fn transitive_closure(self, exact: &mut Bool) -> Option<Map> {
     unsafe {
       let ret = isl_map_transitive_closure(self.to(), exact.to());
       (ret).to()
@@ -2111,9 +2255,51 @@ impl Map {
     }
   }
   #[inline(always)]
+  pub fn eq_at_multi_pw_aff(self, mpa: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_eq_at_multi_pw_aff(self.to(), mpa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn lex_lt_at_multi_pw_aff(self, mpa: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_lex_lt_at_multi_pw_aff(self.to(), mpa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn lex_le_at_multi_pw_aff(self, mpa: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_lex_le_at_multi_pw_aff(self.to(), mpa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn lex_gt_at_multi_pw_aff(self, mpa: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_lex_gt_at_multi_pw_aff(self.to(), mpa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn lex_ge_at_multi_pw_aff(self, mpa: MultiPwAff) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_lex_ge_at_multi_pw_aff(self.to(), mpa.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn align_params(self, model: Space) -> Option<Map> {
     unsafe {
       let ret = isl_map_align_params(self.to(), model.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn drop_unused_params(self) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_drop_unused_params(self.to());
       (ret).to()
     }
   }
@@ -2170,6 +2356,27 @@ impl MapList {
     }
   }
   #[inline(always)]
+  pub fn clear(self) -> Option<MapList> {
+    unsafe {
+      let ret = isl_map_list_clear(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn swap(self, pos1: c_uint, pos2: c_uint) -> Option<MapList> {
+    unsafe {
+      let ret = isl_map_list_swap(self.to(), pos1.to(), pos2.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn reverse(self) -> Option<MapList> {
+    unsafe {
+      let ret = isl_map_list_reverse(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn concat(self, list2: MapList) -> Option<MapList> {
     unsafe {
       let ret = isl_map_list_concat(self.to(), list2.to());
@@ -2217,9 +2424,23 @@ impl MapListRef {
     }
   }
   #[inline(always)]
+  pub fn size(self) -> c_int {
+    unsafe {
+      let ret = isl_map_list_size(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn n_map(self) -> c_int {
     unsafe {
       let ret = isl_map_list_n_map(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_at(self, index: c_int) -> Option<Map> {
+    unsafe {
+      let ret = isl_map_list_get_at(self.to(), index.to());
       (ret).to()
     }
   }
@@ -2239,11 +2460,26 @@ impl MapListRef {
     }
   }
   #[inline(always)]
+  pub fn every<F1: FnMut(MapRef) -> Bool>(self, test: &mut F1) -> Bool {
+    unsafe extern "C" fn fn1<F: FnMut(MapRef) -> Bool>(el: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(el.to()) }
+    unsafe {
+      let ret = isl_map_list_every(self.to(), fn1::<F1>, test as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn foreach_scc<F1: FnMut(MapRef, MapRef) -> Bool, F2: FnMut(MapList) -> Stat>(self, follows: &mut F1, fn_: &mut F2) -> Stat {
     unsafe extern "C" fn fn1<F: FnMut(MapRef, MapRef) -> Bool>(a: MapRef, b: MapRef, user: *mut c_void) -> Bool { (*(user as *mut F))(a.to(), b.to()) }
     unsafe extern "C" fn fn2<F: FnMut(MapList) -> Stat>(scc: MapList, user: *mut c_void) -> Stat { (*(user as *mut F))(scc.to()) }
     unsafe {
       let ret = isl_map_list_foreach_scc(self.to(), fn1::<F1>, follows as *mut _ as _, fn2::<F2>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn to_str(self) -> Option<CString> {
+    unsafe {
+      let ret = isl_map_list_to_str(self.to());
       (ret).to()
     }
   }
@@ -2258,28 +2494,7 @@ impl MapListRef {
 
 impl MapRef {
   #[inline(always)]
-  pub fn n_in(self) -> c_uint {
-    unsafe {
-      let ret = isl_map_n_in(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn n_out(self) -> c_uint {
-    unsafe {
-      let ret = isl_map_n_out(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn n_param(self) -> c_uint {
-    unsafe {
-      let ret = isl_map_n_param(self.to());
-      (ret).to()
-    }
-  }
-  #[inline(always)]
-  pub fn dim(self, type_: DimType) -> c_uint {
+  pub fn dim(self, type_: DimType) -> c_int {
     unsafe {
       let ret = isl_map_dim(self.to(), type_.to());
       (ret).to()
@@ -2566,6 +2781,20 @@ impl MapRef {
     }
   }
   #[inline(always)]
+  pub fn get_range_stride_info(self, pos: c_int) -> Option<StrideInfo> {
+    unsafe {
+      let ret = isl_map_get_range_stride_info(self.to(), pos.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_range_simple_fixed_box_hull(self) -> Option<FixedBox> {
+    unsafe {
+      let ret = isl_map_get_range_simple_fixed_box_hull(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn plain_is_equal(self, map2: MapRef) -> Bool {
     unsafe {
       let ret = isl_map_plain_is_equal(self.to(), map2.to());
@@ -2591,6 +2820,13 @@ impl MapRef {
     unsafe extern "C" fn fn1<F: FnMut(BasicMap) -> Stat>(bmap: BasicMap, user: *mut c_void) -> Stat { (*(user as *mut F))(bmap.to()) }
     unsafe {
       let ret = isl_map_foreach_basic_map(self.to(), fn1::<F1>, fn_ as *mut _ as _);
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn get_basic_map_list(self) -> Option<BasicMapList> {
+    unsafe {
+      let ret = isl_map_get_basic_map_list(self.to());
       (ret).to()
     }
   }
@@ -2646,6 +2882,13 @@ impl Printer {
 
 impl Set {
   #[inline(always)]
+  pub fn translation(self) -> Option<Map> {
+    unsafe {
+      let ret = isl_set_translation(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
   pub fn identity(self) -> Option<Map> {
     unsafe {
       let ret = isl_set_identity(self.to());
@@ -2670,6 +2913,13 @@ impl Set {
   pub fn flatten_map(self) -> Option<Map> {
     unsafe {
       let ret = isl_set_flatten_map(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn insert_domain(self, domain: Space) -> Option<Map> {
+    unsafe {
+      let ret = isl_set_insert_domain(self.to(), domain.to());
       (ret).to()
     }
   }
@@ -2871,6 +3121,16 @@ impl Drop for BasicMapList {
   fn drop(&mut self) { BasicMapList(self.0).free() }
 }
 
+impl fmt::Display for BasicMapListRef {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
+}
+
+impl fmt::Display for BasicMapList {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
+}
+
 impl fmt::Display for BasicMapRef {
   #[inline(always)]
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
@@ -2887,6 +3147,16 @@ impl Drop for Map {
 
 impl Drop for MapList {
   fn drop(&mut self) { MapList(self.0).free() }
+}
+
+impl fmt::Display for MapListRef {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.pad(&*self.to_str().ok_or(fmt::Error)?) }
+}
+
+impl fmt::Display for MapList {
+  #[inline(always)]
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", &**self) }
 }
 
 impl fmt::Display for MapRef {
