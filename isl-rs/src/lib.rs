@@ -4,10 +4,18 @@
 #[inline(never)]
 #[cold]
 #[track_caller]
-pub fn try_failed() -> ! { panic!("try failed") }
+pub fn try_failed() -> ! { debug_panic!("try failed") }
 
 #[macro_use]
 mod macros {
+  // 在debug模式下panic，在release模式下执行到它是未定义行为
+  #[macro_export] macro_rules! debug_panic {
+    ($($arg:tt)*) => (if cfg!(debug_assertions) {
+      panic!($($arg)*);
+    } else {
+      unsafe { std::hint::unreachable_unchecked()}
+    })
+  }
   // 为一个非Option/Result类型实现Try，效果是在?失败时直接panic，即?相当于unwrap()
   #[macro_export] macro_rules! impl_try {
     ($ty: ty) => {

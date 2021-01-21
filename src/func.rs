@@ -1,5 +1,6 @@
 use std::{io::{self, Write, BufWriter}, fs::File};
 use crate::*;
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct Func {
@@ -11,35 +12,37 @@ pub struct Func {
   pub iter_ty: Type,
   // 用于命名自动生成的Comp
   pub comp_cnt: u32,
+  // 用于命名自动生成的Buf
+  pub buf_cnt: u32,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
 }
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<P<Comp>> {
-    self.comps.iter().find(|c| c.name() == name).map(|c| P::new(&**c))
+    self.comps.iter().find(|c| c.name() == name).map(|c| c.deref().p())
   }
 
   pub fn find_buf(&self, name: &str) -> Option<P<Buf>> {
-    self.bufs.iter().find(|c| &*c.name == name).map(|c| P::new(&**c))
+    self.bufs.iter().find(|c| &*c.name == name).map(|c| c.deref().p())
   }
 
   pub fn iter(&self, level: u32) -> Expr { Iter(self.iter_ty, level) }
 
-  pub(crate) fn new_comp_name(&self) -> String {
-    format!("_C{}\0", (self.comp_cnt, P::new(self).comp_cnt += 1).0)
-  }
+  pub fn new_comp_id(&self) -> u32 { (self.comp_cnt, self.p().comp_cnt += 1).0 }
+
+  pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
 
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: &[Expr]) -> Unit {
     self.align_schedule();
     let s = format!("{} -> {{: {}}}\0", self.comps.first().expect("no comp").params(), sep(csts.iter(), " and "));
     debug!("set_constraint: {}", s);
-    P::new(self).func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s))?);
+    self.p().func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s))?);
     Unit
   }
 
@@ -70,7 +73,7 @@ impl Func {
   }
 
   pub fn codegen(&self, args: &[&Buf], path: &str) -> io::Result<()> {
-    for b in args { assert_ne!(b.kind, BufKind::Temp); }
+    for b in args { debug_assert_ne!(b.kind, BufKind::Temp); }
     self.align_schedule();
     let mut vis = HashSet::default();
     let mut prev = None;
@@ -81,7 +84,7 @@ impl Func {
         // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
         if let Some(x) = prev { c.after_raw(x, 0); }
         prev = Some(c);
-        self.sch_graph_dfs(P::new(c.as_ref()), &mut vis);
+        self.sch_graph_dfs(c.deref().p(), &mut vis);
       }
     }
     let mut info = Vec::new();
@@ -91,9 +94,9 @@ impl Func {
     let mut w = BufWriter::new(File::create(path)?);
     debug!("codegen: ast = {}", ast);
     w.write_all(include_bytes!("inc.h"))?;
-    write!(w, "void {}({}){{{}}}", self.name,
-      comma_sep(args.iter().map(|&x| fn2display(move |f| write!(f, "{} *restrict {}", x.ty, x.name)))),
-      self.gen(ast, &tags))?;
+    write!(w, "void {}({}){{{}}}\n", self.name,
+      comma_sep(args.iter().map(|&x| fn2display(move |f| write!(f, "{}*__restrict__ {}", x.ty, x.name)))),
+      self.gen(ast, &CodegenState { tags, ..Default::default() }))?;
     Ok(())
   }
 }
@@ -111,9 +114,19 @@ struct CompInfo {
   comp: P<Comp>,
 }
 
+#[derive(Default)]
+struct CodegenState {
+  // tags保存AST中的for循环的信息
+  // V中的u32是它对应schedule中的哪个dynamic dim，Option<DimTag>是这个dim上可能有的tag
+  tags: HashMap<AstNodeRef, (u32, Option<DimTag>)>,
+  in_kernel: bool,
+  // kernel的启动参数，6对应<<<dim3(...), dim3(...)>>>中的6个参数，如果是None就填1
+  kernel_cfg: [Option<Box<str>>; 6],
+}
+
 impl Func {
   fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) {
-    if !vis.insert(c) { panic!("cyclic schedule graph"); }
+    if !vis.insert(c) { debug_panic!("cyclic schedule graph"); }
     for (&s, &at) in &c.succ {
       s.get().after_raw(c.get(), at);
       self.sch_graph_dfs(s, vis);
@@ -166,7 +179,7 @@ impl Func {
     let sp = build.get_schedule_space()?;
     for i in 0..sp.dim(DimType::Out) {
       let it = sp.get_dim_name(DimType::Out, i)?.as_str();
-      assert!(it.starts_with("i"));
+      debug_assert!(it.starts_with("i"));
       dim_map[it.get(1..)?.parse::<usize>().ok()?] = Some(i);
     }
     let store = if let Some(store) = comp.store.as_ref() {
@@ -204,29 +217,59 @@ impl Func {
     node
   }
 
-  fn gen<'a>(&'a self, node: AstNode, tags: &'a HashMap<AstNodeRef, DimTag>) -> impl Display + 'a {
+  fn gen<'a>(&'a self, node: AstNode, s: &'a CodegenState) -> impl Display + 'a {
+    // 实际上会修改s中的内容，为了规避借用检查，使用不可变引用
     use std::fmt::Error as E;
     fn2display(move |f| {
+      // if let Some(x) = last_kernel_iter { write!(f, "if({}==0){{", x.gpu_idx()); }
       match node.get_type() {
         AstNodeType::For => {
-          let it = node.for_get_iterator().ok_or(E)?.get_id().ok_or(E)?.get_name().ok_or(E)?.as_str();
-          let init = node.for_get_init().ok_or(E)?.to_C_str().ok_or(E)?;
-          let cond = node.for_get_cond().ok_or(E)?.to_C_str().ok_or(E)?;
-          let inc = node.for_get_inc().ok_or(E)?.to_C_str().ok_or(E)?;
+          let it = node.for_get_iterator().ok_or(E)?.get_id().ok_or(E)?.get_name().ok_or(E)?;
+          let init = node.for_get_init().ok_or(E)?;
+          let cond = node.for_get_cond().ok_or(E)?;
+          let inc = node.for_get_inc().ok_or(E)?;
+          let (init_s, cond_s, inc_s) = (init.to_C_str().ok_or(E)?, cond.to_C_str().ok_or(E)?, inc.to_C_str().ok_or(E)?);
           let body = node.for_get_body().ok_or(E)?;
-          match tags.get(&*node) {
+          match s.tags.get(&*node) {
             // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
-            Some(Parallel) => f.write_str("\n#pragma omp parallel for\n")?,
+            Some((_, Some(Parallel))) => f.write_str("\n#pragma omp parallel for\n")?,
+            // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kernel和kernel调用
+            // kernel将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
+            // 这导致了Comp::tag_dim的注释中描述的问题
+            Some(&(level, Some(gpu))) => {
+              let mut s = s.p();
+              let old_in_kernel = std::mem::replace(&mut s.in_kernel, true);
+              if !old_in_kernel { // 第一个进入GPU的for，在这里生成代码
+                f.write_str("{auto _kernel=[=]__device__{")?;
+              }
+              let mut range = format!("{}-{}", cond.get_op_arg(1).ok_or(E)?.to_C_str().ok_or(E)?, init_s);
+              let op = cond.get_op_type();
+              debug_assert!(op == AstOpType::Lt || op == AstOpType::Le);
+              if op == AstOpType::Le { range.push_str("+1"); }
+              let old_cfg = s.kernel_cfg[(gpu as usize - GPUBlockX as usize)].replace(range.into());
+              debug_assert!(old_cfg.is_none()); // 嵌套中的多个循环标记了同一个gpu idx，不合法
+              write!(f, "{} i{}={}+{};{{{}}}", self.iter_ty, level, gpu.gpu_idx(), init_s, self.gen(body, &*s))?;
+              s.in_kernel = old_in_kernel;
+              if !old_in_kernel {
+                fn fmt<'a>(c: &'a [Option<Box<str>>]) -> impl Display + 'a {
+                  // 用lambda表达式会报声明周期错误，所以用函数定义
+                  comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
+                }
+                write!(f, "}};exec_kernel<<<dim3({}),dim3({})>>>(_kernel);}}", fmt(&s.kernel_cfg[..3]), fmt(&s.kernel_cfg[3..]))?;
+                s.kernel_cfg = Default::default();
+              }
+              return Ok(()); // 跳过下面的for生成
+            }
             _ => {}
           }
-          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init, cond, inc, self.gen(body, tags), it = it)?;
+          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init_s, cond_s, inc_s, self.gen(body, s), it = it)?;
         }
         AstNodeType::If => {
           let cond = node.if_get_cond().ok_or(E)?.to_C_str().ok_or(E)?;
           let t = node.if_get_then().ok_or(E)?;
-          write!(f, "if({}){{{}}}", cond, self.gen(t, tags))?;
+          write!(f, "if({}){{{}}}", cond, self.gen(t, s))?;
           if let Some(e) = node.if_get_else() {
-            write!(f, "else{{{}}}", self.gen(e, tags))?;
+            write!(f, "else{{{}}}", self.gen(e, s))?;
           }
         }
         AstNodeType::Block => {
@@ -234,7 +277,7 @@ impl Func {
           let ch = node.block_get_children().ok_or(E)?;
           for i in 0..ch.n_ast_node() {
             let ch = ch.get_ast_node(i).ok_or(E)?;
-            write!(f, "{}", self.gen(ch, tags))?;
+            write!(f, "{}", self.gen(ch, s))?;
           }
         }
         AstNodeType::User => {
@@ -242,11 +285,15 @@ impl Func {
           if let Some(store) = &comp.store {
             write!(f, "{}={};", store, comp.expr)?;
           } else {
-            // 没有store的comp表示成一个标量定义
-            write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr)?;
+            // 没有store的comp表示成一个标量定义，如果类型是void就只写右手项
+            if comp.expr.ty() == Void {
+              write!(f, "{};", comp.expr)?;
+            } else {
+              write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr)?;
+            }
           }
         }
-        _ => panic!("invalid ast node type"),
+        _ => debug_panic!("invalid ast node type"),
       }
       Ok(())
     })
@@ -254,7 +301,7 @@ impl Func {
 }
 
 // 从user node中提取Comp::dim_tags中循环的tag，用HashMap保存for node对应的循环的tag
-fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashMap<AstNodeRef, DimTag>) -> Unit {
+fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashMap<AstNodeRef, (u32, Option<DimTag>)>) -> Unit {
   match node.get_type() {
     AstNodeType::For => {
       levels.push(node);
@@ -272,12 +319,17 @@ fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashM
     AstNodeType::User => {
       let comp = P::new(node.get_annotation()?.get_user() as *const CompInfo);
       for (i, &tag) in comp.comp.dim_tags.iter().enumerate() {
-        if let (Some(i), Some(tag)) = (comp.dim_map[i], tag) {
-          tags.insert(levels[i as usize], tag);
+        if let Some(i) = comp.dim_map[i] {
+          // 多个Comp可能向同一个for node添加level和tag，如果实现正确，这个for node在不同Comp中的循环层次应该是一样的
+          // 有些Comp在这层没有tag，确保这个None不会覆盖原来的Some(tag)
+          let old = tags.entry(levels[i as usize]).or_insert((i, tag));
+          debug_assert_eq!(old.0, i);
+          debug_assert!(old.1.is_none() || old.1 == tag);
+          if old.1.is_none() { old.1 = tag; }
         }
       }
     }
-    _ => panic!("invalid ast node type"),
+    _ => debug_panic!("invalid ast node type"),
   }
   Unit
 }

@@ -1,14 +1,14 @@
 use crate::*;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Type { I8, U8, I16, U16, I32, U32, I64, U64, F32, F64, Ptr }
+pub enum Type { I8, U8, I16, U16, I32, U32, I64, U64, F32, F64, Void }
 
 impl Type {
   // 将Expr::Val中的值转化为i64
   pub fn val_i64(self, x: u64) -> i64 {
     match self {
       I8 => x as i8 as _, U8 => x as u8 as _, I16 => x as i16 as _, U16 => x as u16 as _,
-      I32 => x as i32 as _, U32 => x as u32 as _, I64 | U64 | Ptr => x as _,
+      I32 => x as i32 as _, U32 => x as u32 as _, I64 | U64 | Void => x as _, // Void应该是不可能的
       F32 => f32::from_bits(x as _) as _, F64 => f64::from_bits(x) as _,
     }
   }
@@ -26,8 +26,9 @@ pub enum Expr {
   Call(Box<str>, Box<[Expr]>),
   Access(P<Comp>, Box<[Expr]>),
   Load(P<Buf>, Box<[Expr]>),
-  Alloc(Box<str>),
-  Free(Box<str>),
+  Memcpy(P<Buf>, P<Buf>),
+  Alloc(P<Buf>),
+  Free(P<Buf>),
 }
 
 impl_try!(Expr);
@@ -41,7 +42,7 @@ pub const EMPTY2: &[(Expr, Expr)] = &[];
 pub enum UnOp { Floor, Ceil, Round, Trunc, Sin, Cos, Tan, Abs, Sqrt, Exp, Log }
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum BinOp { Add, Sub, Mul, Div, Rem, LAnd, LOr, Eq, Ne, Le, Lt, Ge, Gt, Max, Min, Memcpy }
+pub enum BinOp { Add, Sub, Mul, Div, Rem, LAnd, LOr, Eq, Ne, Le, Lt, Ge, Gt, Max, Min }
 
 // 用在Expr::visit和visit_mut中，返回true表示继续访问Expr的children，否则不访问
 pub trait VisitChildren { fn visit(self) -> bool; }
@@ -57,16 +58,14 @@ impl Expr {
       &Val(ty, _) | &Iter(ty, _) | &Cast(ty, _) => ty,
       Param(comp) | Access(comp, _) => comp.expr.ty(),
       Unary(_, x) => x.ty(),
-      Binary(op, box [l, r]) => match *op {
+      Binary(op, box [l, r]) => if (Add <= *op && *op <= Rem) || (Max <= *op && *op <= Min) {
         // 这是我随意规定的类型规则，不完全符合C语言的规则
         // 两个整数运算，若位数不同则结果是位数高的类型，若位数相同，有符号和无符号的运算结果是无符号
         // 整数和浮点数运算结果总是浮点数，两个浮点数运算也是取位数高的类型
-        op if (Add <= op && op <= Rem) || (Max <= op && op <= Min) => l.ty().max(r.ty()),
-        op if LAnd <= op && op <= Gt => I32,
-        _ => Ptr, // Memcpy
-      }
+        l.ty().max(r.ty())
+      } else { I32 }
       Load(buf, _) => buf.ty,
-      Call(..) | Alloc(..) | Free(..) => Ptr,
+      Call(..) | Memcpy(..) | Alloc(..) | Free(..) => Void,
     }
   }
 
@@ -79,11 +78,11 @@ impl Expr {
       Unary(_, x) | Cast(_, x) => std::slice::from_ref(x),
       Binary(_, lr) => lr.as_ref(),
       Call(_, args) | Access(_, args) | Load(_, args) => args,
-      Val(..) | Iter(..) | Param(..) | Alloc(..) | Free(..) => &[],
+      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) => &[],
     }
   }
 
-  pub fn args_mut(&mut self) -> &mut [Expr] { P::new(self.args()).get() }
+  pub fn args_mut(&mut self) -> &mut [Expr] { self.args().p().get() }
 
   pub fn visit<'a, R: VisitChildren>(&'a self, f: &mut impl FnMut(&'a Expr) -> R) {
     if f(self).visit() {

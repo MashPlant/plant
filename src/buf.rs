@@ -4,28 +4,55 @@ use crate::*;
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum BufKind { In, Out, Temp }
 
+// Host是CPU上malloc的内存，Global是GPU上cudaMalloc的内存
+// Local是栈上的内存，可以是CPU或GPU上的，Shared是用GPU上的共享内存，形式上类似栈上的内存，只是有__shared__标记
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
+pub enum BufLoc { Host, Global, Local, Shared }
+
 #[derive(Debug)]
 pub struct Buf {
+  pub func: P<Func>,
   pub name: Box<str>,
   pub ty: Type,
   pub kind: BufKind,
+  pub loc: BufLoc,
   pub sizes: Vec<Expr>,
 }
 
 impl Func {
+  // 默认loc为Host
   pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: &[impl IntoExpr]) -> &Buf {
-    assert!(self.find_buf(name).is_none() && !sizes.is_empty());
-    let buf = box Buf { name: name.into(), ty, kind, sizes: sizes.iter().map(|e| e.clone_expr()).collect() };
+    debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty());
+    let sizes = sizes.iter().map(|e| e.clone_expr()).collect();
+    let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, sizes };
+    debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
     let ret = R::new(&*buf);
-    P::new(self).bufs.push(buf);
+    self.p().bufs.push(buf);
     ret.get()
   }
 }
 
 impl Buf {
   pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
-    assert_eq!(idx.len(), self.sizes.len());
+    debug_assert_eq!(idx.len(), self.sizes.len());
     Load(self.into(), idx.iter().map(|e| e.clone_expr()).collect())
+  }
+
+  pub fn set_loc(&self, loc: BufLoc) { self.p().loc = loc; }
+
+  pub fn dup(&self) -> &Buf {
+    let name = format!("_{}_dup{}", self.name, self.func.new_buf_id());
+    self.func.buf(&name, self.ty, self.kind, &self.sizes)
+  }
+
+  // 输出元素数
+  pub fn elems<'a>(&'a self) -> impl Display + 'a {
+    fn2display(move |f| write!(f, "{}", sep(self.sizes.iter(), "*")))
+  }
+
+  // 输出字节数
+  pub fn bytes<'a>(&'a self) -> impl Display + 'a {
+    fn2display(move |f| write!(f, "{}*sizeof({})", self.elems(), self.ty))
   }
 }
 

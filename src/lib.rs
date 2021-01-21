@@ -20,7 +20,7 @@ use isl::*;
 use std::fmt::{*, Result as FmtResult};
 pub use expr::{Type::*, Expr::*};
 pub use comp::DimTag::*;
-pub use buf::BufKind::*;
+pub use buf::{BufKind::*, BufLoc::*};
 
 pub type HashMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<ahash::AHasher>>;
 pub type HashSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<ahash::AHasher>>;
@@ -39,3 +39,6 @@ pub struct Unit;
 impl_try!(Unit);
 
 pub enum Backend { C, CUDA }
+
+pub const CC: &str = "clang";
+pub const NVCC: &str = "nvcc";

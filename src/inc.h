@@ -11,3 +11,7 @@ typedef double f64;
 #define max(x, y) ({ __typeof__(x) _x = x; __typeof__(y) _y = y; _x > _y ? _x : _y; })
 #define min(x, y) ({ __typeof__(x) _x = x; __typeof__(y) _y = y; _x > _y ? _y : _x; })
 #define floord(x, y) ({ __typeof__(x) _x = x; __typeof__(y) _y = y; _x < 0 ? -((-_x + _y - 1) / _y) : _x / _y; })
+#ifdef __CUDACC__
+template <typename F> __global__ void exec_kernel(F f) { f(); }
+#define cuda_malloc(size) ({ void *_x; cudaMalloc(&_x, size); _x; })
+#endif

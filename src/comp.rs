@@ -28,6 +28,27 @@ impl IntoExpr for &Comp {
   fn expr(self) -> Expr { self.as_param() }
 }
 
+// 用来实现类似重载的效果，为Func::comp提供“默认参数”
+pub trait CompBuilder {
+  fn comp(self, f: &Func) -> &Comp;
+}
+
+impl<E1: IntoExpr, E2: IntoExpr, E3: IntoExpr> CompBuilder for (&str, &[(E1, E2)], E3) {
+  fn comp(self, f: &Func) -> &Comp { f.comp(self.0, self.1, self.2) }
+}
+
+impl<E1: IntoExpr> CompBuilder for (&str, E1) {
+  fn comp(self, f: &Func) -> &Comp { f.comp(self.0, EMPTY2, self.1) }
+}
+
+impl<E1: IntoExpr, E2: IntoExpr, E3: IntoExpr> CompBuilder for (&[(E1, E2)], E3) {
+  fn comp(self, f: &Func) -> &Comp { f.comp(&format!("_auto{}", f.new_comp_id()), self.0, self.1) }
+}
+
+impl<E1: IntoExpr> CompBuilder for E1 {
+  fn comp(self, f: &Func) -> &Comp { f.comp(&format!("_auto{}", f.new_comp_id()), EMPTY2, self) }
+}
+
 impl Func {
   pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> &Comp {
     // 很多时候调用方可以提供&[(Expr, Expr)]，这里的拷贝是多余的，但这点浪费可以忽略
@@ -55,9 +76,9 @@ impl Func {
     let schedule = identity_schedule(&domain);
     debug!("comp_raw: initial identity schedule = {}", schedule);
     let comp = box Comp { ctx: *self.ctx, func: self.into(), domain, expr, schedule, store: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
-    assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
+    debug_assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     let ret = R::new(&*comp);
-    P::new(self).comps.push(comp);
+    self.p().comps.push(comp);
     ret.get()
   }
 }
@@ -78,7 +99,7 @@ impl Comp {
       .map(|i| self.domain.get_dim_name(DimType::Param, i).unwrap()))))
   }
 
-  pub fn set_expr(&self, expr: Expr) { P::new(self).expr = expr; }
+  pub fn set_expr(&self, expr: Expr) { self.p().expr = expr; }
 
   // 将自身作为一个Param表达式，Expr中直接通过它的名字使用它
   // 当且仅当它没有store的时候，生成的代码会在计算发生的地方定义一个对应名字的局部变量，所以它必须没有store
@@ -87,12 +108,12 @@ impl Comp {
   pub fn as_param(&self) -> Expr { Param(self.into()) }
 
   pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
-    assert_eq!(idx.len() as u32, self.n_dim());
+    debug_assert_eq!(idx.len() as u32, self.n_dim());
     Access(self.into(), idx.iter().map(|e| e.clone_expr()).collect())
   }
 
   pub fn at_inline(&self, idx: &[impl IntoExpr]) -> Expr {
-    assert_eq!(idx.len() as u32, self.n_dim());
+    debug_assert_eq!(idx.len() as u32, self.n_dim());
     let mut expr = self.expr.clone();
     expr.visit_mut(&mut |e| if let Iter(_, x) = &e { *e = idx[*x as usize].clone_expr(); });
     expr
@@ -101,12 +122,12 @@ impl Comp {
 
 impl Comp {
   pub fn tile(&self, i: u32, j: u32, tile_i: u32, tile_j: u32) -> &Comp {
-    assert!(i < j);
+    debug_assert!(i < j);
     self.split(i, tile_i).split(j + 1, tile_j).reorder(i + 1, j + 1)
   }
 
   pub fn tile_3(&self, i: u32, j: u32, k: u32, tile_i: u32, tile_j: u32, tile_k: u32) -> &Comp {
-    assert!(i < j && j < k);
+    debug_assert!(i < j && j < k);
     self.split(i, tile_i).split(j + 1, tile_j).split(k + 2, tile_k)
       // i0 i1 j0 j1 k0 k1 -> i0 j0 k0 i1 j1 k1
       .reorder_n(&[(i + 1, j + 1), (j + 1, k + 2), (j + 2, i + 1), (k + 2, j + 2)])
@@ -143,7 +164,7 @@ impl Comp {
   }
 
   pub fn skew(&self, i: u32, j: u32, factor: u32) -> &Comp {
-    assert!(i < j);
+    debug_assert!(i < j);
     let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
     let s = format!("{{ {} -> [{}]: i{j1} = {f} * i{i} + i{j} }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
@@ -211,8 +232,11 @@ impl Comp {
     let ge = self.schedule.copy()?.intersect_range(i_aff.copy()?.ge_set(sep.copy()?)?
       .add_dims(DimType::Out, n - pos - 1)?)?;
     // 被separate出去的计算迭代域是空集则不生成Comp
-    if ge.is_empty()? { return None; }
-    let name = self.func.new_comp_name();
+    if ge.is_empty()? {
+      debug!("separate: dup comp has empty domain");
+      return None;
+    }
+    let name = format!("_{}_sep{}\0", self.name(), self.func.new_comp_id());
     let dup = box Comp {
       ctx: self.ctx,
       func: self.func,
@@ -230,7 +254,7 @@ impl Comp {
       .add_dims(DimType::Out, n - pos - 1).unwrap()).unwrap());
     debug!("separate: created dup comp {}, sch = {}", dup.name(), dup.schedule);
     let ret = R::new(&*dup);
-    P::new(self).func.comps.push(dup);
+    self.p().func.comps.push(dup);
     Some(ret.get())
   }
 
@@ -242,10 +266,28 @@ impl Comp {
   }
 }
 
+// 这个trait只是为了给Vec<&Comp>定义separate函数
+pub trait Separate {
+  fn separate(&self, i: u32, factor: u32);
+}
+
+impl Separate for Vec<&Comp> {
+  // 对自身已有元素都执行Comp::separate(i, factor)，把生成的新Comp加到自身中(虽然参数是&self，但会修改自身)
+  fn separate(&self, i: u32, factor: u32) {
+    let mut s = self.p();
+    for idx in 0..s.len() { // 不能用迭代器
+      if let Some(x) = s[idx].separate(i, factor) { s.push(x); }
+    }
+  }
+}
+
 impl Comp {
+  // 如果用来添加GPU相关的tag，需要保证tag的几个维度是完美嵌套的
+  // 例如for (i) { for (j) { C1 }  C2 }，如果tag_dim(i, GPUBlockX)，tag_dim(j, GPUThreadX)
+  // 生成的kernel会执行C1和C2，等价于for (i) { for (j) { C1 C2 } }，语义是错误的
   pub fn tag_dim(&self, at: u32, tag: DimTag) -> &Comp {
     let at = at as usize;
-    let dim_tags = &mut P::new(self).dim_tags;
+    let dim_tags = &mut self.p().dim_tags;
     if dim_tags.len() <= at { dim_tags.resize(at + 1, None); }
     dim_tags[at] = Some(tag);
     self
@@ -254,7 +296,7 @@ impl Comp {
   pub fn store(&self, buf: &Buf) -> &Comp {
     let store = identity_map(&self.domain).set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
     debug!("store: {}", store);
-    P::new(self).store = Some(store);
+    self.p().store = Some(store);
     self
   }
 
@@ -262,7 +304,7 @@ impl Comp {
     let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.n_dim()),
       buf.name, comma_sep(idx.iter().map(|e| e.clone_expr())));
     debug!("store_at: {}", s);
-    P::new(self).store = Some(self.ctx.map_read_from_str(cstr(&s))?);
+    self.p().store = Some(self.ctx.map_read_from_str(cstr(&s))?);
     self
   }
 }
@@ -271,13 +313,13 @@ impl Comp {
   // at的意义是在包围at层循环的static dim上，self在after之后
   // A.after(B, i).after(C, j)的链式调用，语义是A在B后，B在C后
   pub fn after<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
-    let mut other = P::new(other);
+    let mut other = other.p();
     let old_level = other.succ.entry(self.into()).or_insert(at);
     *old_level = at.max(*old_level);
     if let Some(mut p) = self.pred {
       if p != other { p.succ.remove(&self.into()); }
     }
-    P::new(self).pred = Some(other);
+    self.p().pred = Some(other);
     other.get()
   }
 
