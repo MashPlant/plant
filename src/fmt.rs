@@ -106,7 +106,7 @@ impl Display for Expr {
         }
       }
       Alloc(x) => match x.loc {
-        Host | Global => write!(f, "{ty}*{}=({ty}*){}malloc({})", x.name, if x.loc == Global { "cuda_" } else { "" }, x.bytes(), ty = x.ty),
+        Host | Global => write!(f, "{ty}*__restrict__ {}=({ty}*){}malloc({})", x.name, if x.loc == Global { "cuda_" } else { "" }, x.bytes(), ty = x.ty),
         Local | Shared => write!(f, "{} {} {}[{}];", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems()),
       }
       Free(x) => match x.loc {

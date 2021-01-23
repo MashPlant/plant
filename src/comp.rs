@@ -4,12 +4,12 @@ use crate::*;
 pub struct Comp {
   pub ctx: CtxRef,
   pub func: P<Func>,
+  pub expr: Expr,
+  // schedule将表示原始循环迭代范围的set映射到调度后的循环迭代范围的set，同时还包含循环间的顺序关系
+  // in dim名字是Comp的名字，out dim名字是空的，#out = #in * 2 + 1
+  // out dim分为static和dynamic dim，从循环层次i到包围它的static dim：i * 2；从循环层次i到它的dynamic dim：i * 2 + 1
   // isl_basic_set表示可以用一组仿射约束的交集定义的集合，isl_set表示一组isl_basic_set的并集
   // 这里需要用到isl_set，例如i <= max(x, y)这样的约束无法用交集表示，必须是i <= x or i <= y
-  pub domain: Set,
-  pub expr: Expr,
-  // in dim名字是Comp的名字，out dim名字是空的
-  // 从循环层次i到包围它的static dim：i * 2；从循环层次i到它的dynamic dim：i * 2 + 1
   pub schedule: Map,
   pub store: Option<Map>,
   pub pred: Option<P<Comp>>,
@@ -42,11 +42,17 @@ impl<E1: IntoExpr> CompBuilder for (&str, E1) {
 }
 
 impl<E1: IntoExpr, E2: IntoExpr, E3: IntoExpr> CompBuilder for (&[(E1, E2)], E3) {
-  fn comp(self, f: &Func) -> &Comp { f.comp(&format!("_auto{}", f.new_comp_id()), self.0, self.1) }
+  fn comp(self, f: &Func) -> &Comp {
+    let e = self.1.expr();
+    f.comp(&f.auto_comp_name(&e), self.0, e)
+  }
 }
 
 impl<E1: IntoExpr> CompBuilder for E1 {
-  fn comp(self, f: &Func) -> &Comp { f.comp(&format!("_auto{}", f.new_comp_id()), EMPTY2, self) }
+  fn comp(self, f: &Func) -> &Comp {
+    let e = self.expr();
+    f.comp(&f.auto_comp_name(&e), EMPTY2, e)
+  }
 }
 
 impl Func {
@@ -72,10 +78,9 @@ impl Func {
 
   pub fn comp_raw(&self, domain: Set, expr: Expr) -> &Comp {
     // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
-    let domain = domain.coalesce()?;
-    let schedule = identity_schedule(&domain);
+    let schedule = identity_schedule(domain.coalesce()?);
     debug!("comp_raw: initial identity schedule = {}", schedule);
-    let comp = box Comp { ctx: *self.ctx, func: self.into(), domain, expr, schedule, store: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
+    let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, schedule, store: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
     debug_assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     let ret = R::new(&*comp);
     self.p().comps.push(comp);
@@ -85,18 +90,26 @@ impl Func {
 
 impl Comp {
   // 返回的字符串来源于cstr，[len()]位置是\0，可以传入ISL的接口，更直接的是使用name_cstr
-  pub fn name(&self) -> &str { self.domain.get_tuple_name().unwrap().as_str() }
+  pub fn name(&self) -> &str { self.name_cstr().unwrap().as_str() }
 
-  pub fn name_cstr(&self) -> Option<CStr> { self.domain.get_tuple_name() }
+  pub fn name_cstr(&self) -> Option<CStr> { self.schedule.get_tuple_name(DimType::In) }
 
-  pub fn n_dim(&self) -> u32 { self.domain.n_dim() as _ }
+  pub fn n_dim(&self) -> u32 { self.schedule.dim(DimType::In) as _ }
 
   pub fn sch_dim(&self) -> u32 { self.schedule.dim(DimType::Out) as _ }
 
+  // 表示原始循环迭代范围的Set
+  pub fn domain(&self) -> Set { self.schedule.copy()?.domain()? }
+
+  // 表示调度后循环迭代范围的Set，注意需要设置名字，schedule的out dim名字为空
+  pub fn schedule(&self) -> Set {
+    self.schedule.copy()?.range()?.set_tuple_name(self.name_cstr())?
+  }
+
   // 输出[逗号分隔的params列表]
   pub fn params<'a>(&'a self) -> impl Display + 'a {
-    fn2display(move |f| write!(f, "[{}]", comma_sep((0..self.domain.dim(DimType::Param) as u32)
-      .map(|i| self.domain.get_dim_name(DimType::Param, i).unwrap()))))
+    fn2display(move |f| write!(f, "[{}]", comma_sep((0..self.schedule.dim(DimType::Param) as u32)
+      .map(|i| self.schedule.get_dim_name(DimType::Param, i).unwrap()))))
   }
 
   pub fn set_expr(&self, expr: Expr) { self.p().expr = expr; }
@@ -119,6 +132,11 @@ impl Comp {
     expr
   }
 }
+
+// Bound(zero, min, max)，意义是循环i及外层循环的空间上的0，i的最小值，最大值 + 1 (min <= i < max)
+// 最小值和最大值用包围i的循环变量表示
+pub struct Bound(Aff, PwAff, PwAff);
+impl_try!(Bound);
 
 impl Comp {
   pub fn tile(&self, i: u32, j: u32, tile_i: u32, tile_j: u32) -> &Comp {
@@ -182,46 +200,10 @@ impl Comp {
   }
 
   pub fn separate(&self, i: u32, factor: u32) -> Option<&Comp> {
+    let Bound(zero, min, max) = self.extract_bound(i);
     let (n, pos) = (self.sch_dim(), i * 2 + 1);
-    // 通过投影去掉i之后的维度，用i前面的维度表示i的上下界
-    // remove_divs会去掉类似floor(x / 2) + floor(y / 3) + 4 <= 0这样的约束
-    // 因为后面提取上下界的时候也处理不了这样的约束，所以就在这里去掉，这个近似不会造成结果出错
-    // todo: 这个apply过程可以提取一下，codegen中也用到了
-    let dom = self.domain.copy()?.apply(self.schedule.copy()?)?.set_tuple_name(cstr(self.name()))?
-      .project_out(DimType::Out, pos + 1, n - pos - 1)?.remove_divs()?;
-    debug!("separate: projected dom = {}", dom);
-    // 只支持由一个BasicSet组成的Set上的separate，否则情况太复杂
-    if dom.n_basic_set() > 1 {
-      warn!("separate: #bset > 1 not supported");
-      return None;
-    }
-    let csts = dom.get_basic_set_list()?.get_basic_set(0)?.get_constraint_list()?;
-    let (mut min, mut max) = (None, None);
-    for i in 0..csts.n_constraint() {
-      let cst = csts.get_constraint(i)?;
-      let k = cst.get_coefficient_val(DimType::Out, pos as _)?.get_num_si();
-      if k != 0 {
-        // 如果这个维度可以用前面的维度用等式表示，那它就只有这一个取值，循环变换没有意义
-        if cst.is_equality()? {
-          debug!("separate: dim has equality constraint");
-          return None;
-        }
-        let aff = cst.get_bound(DimType::Out, pos as _)?.pw_aff_from_aff()?;
-        // ISL中inequality约束一定是... >= 0
-        if k > 0 {
-          min = Some(if let Some(x) = min { aff.max(x)? } else { aff });
-        } else {
-          max = Some(if let Some(x) = max { aff.min(x)? } else { aff });
-        }
-      }
-    }
-    let (min, max) = (min?, max?);
     let factor = self.ctx.val_int_from_ui(factor as _)?;
-    // 有没有简单一点的方法定义i和1...
-    let zero = dom.get_space()?.local_space_from_space()?.aff_zero_on_domain()?;
-    let i_aff = zero.copy()?.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
-    let one = zero.set_constant_si(1)?.pw_aff_from_aff()?;
-    let max = max.add(one)?; // max += 1，循环范围变成min <= i < max
+    let i_aff = zero.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
     // sep = min + floor((max - min) / factor) * factor，划分成i < sep和sep <= i两个区间
     // ISL中pw_aff_scale_down_val是精确除法，结果保存成类似3 / 2的形式
     // pw_aff_div也是精确除法，它最终会调用scale_down_val
@@ -240,7 +222,6 @@ impl Comp {
     let dup = box Comp {
       ctx: self.ctx,
       func: self.func,
-      domain: self.domain.copy()?.set_tuple_name(cstr(&name))?,
       expr: self.expr.clone(),
       schedule: ge.set_tuple_name(DimType::In, cstr(&name))?,
       store: if let Some(x) = &self.store { Some(x.copy()?.set_tuple_name(DimType::In, cstr(&name))?) } else { None },
@@ -256,6 +237,76 @@ impl Comp {
     let ret = R::new(&*dup);
     self.p().func.comps.push(dup);
     Some(ret.get())
+  }
+
+  // 将循环层次i和i + 1合并成一个循环
+  // 循环i + 1的static dim被丢弃；after，tag之类的都不会特殊处理，调用fuse前应保证它们不存在
+  pub fn fuse(&self, i: u32) -> &Comp {
+    // min1 <= i1 < max1, min2 <= i2 < max2, 令j = (i1 - min1) * (max2 - min2) + (i2 - min2)
+    // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2 (这由ISL自己推导)
+    let Bound(_, min1, _) = self.extract_bound(i);
+    let Bound(zero2, min2, max2) = self.extract_bound(i + 1);
+    let (n, pos) = (self.sch_dim(), i * 2 + 1);
+    let min1 = min1.add_dims(DimType::In, 2)?;
+    let i1 = zero2.copy()?.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
+    let i2 = zero2.copy()?.set_coefficient_si(DimType::In, (pos + 2) as _, 1)?.pw_aff_from_aff()?;
+    let j = zero2.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
+    let mut trans = i1.sub(min1)?.mul(max2.sub(min2.copy()?)?)?.add(i2.sub(min2)?)?.eq_map(j)?
+      .add_dims(DimType::In, n - pos - 3)?.add_dims(DimType::Out, n - pos - 5)?;
+    // 设置其他维度为恒等映射
+    for i in 0..n - 2 {
+      if i == pos { continue; }
+      // out dim比in dim少2，pos + 1和pos + 2在out dim中不存在，所以i >= pos时in_pos要+ 2
+      let in_pos = if i < pos { i } else { i + 2 };
+      let cst = trans.get_space()?.local_space_from_space()?.constraint_alloc_equality()?
+        .set_coefficient_si(DimType::In, in_pos as _, -1)?
+        .set_coefficient_si(DimType::Out, i as _, 1)?;
+      trans = trans.add_constraint(cst)?;
+    }
+    debug!("fuse: trans = {}", trans);
+    self.schedule.write(self.schedule.read().apply_range(trans.align_params(self.schedule.get_space()?)?)?);
+    debug!("fuse: schedule = {}", self.schedule);
+    self
+  }
+
+  // 提取循环层次i的迭代范围，Bound的意义见Bound自身的注释
+  pub fn extract_bound(&self, i: u32) -> Bound {
+    let (n, pos) = (self.sch_dim(), i * 2 + 1);
+    // 通过投影去掉i之后的维度，用i前面的维度表示i的上下界
+    let dom = self.schedule().project_out(DimType::Set, pos + 1, n - pos - 1)?;
+    debug!("extract_bound: projected dom = {}", dom);
+    // Div维度用来实现类似floor(x / 2) + floor(y / 3) + 4 <= 0的约束，后面提取上下界的时候处理不了它，所以要求它不存在
+    debug_assert_eq!(dom.dim(DimType::Div), 0);
+    // 只支持在一个BasicSet组成的Set上提取bound，否则情况太复杂
+    debug_assert_eq!(dom.n_basic_set(), 1);
+    let csts = dom.get_basic_set_list()?.get_basic_set(0)?.get_constraint_list()?;
+    let (mut min, mut max) = (None, None);
+    for i in 0..csts.n_constraint() {
+      let cst = csts.get_constraint(i)?;
+      let k = cst.get_coefficient_val(DimType::Out, pos as _)?.get_num_si();
+      if k != 0 {
+        let aff = cst.get_bound(DimType::Out, pos as _)?.pw_aff_from_aff()?;
+        // 如果这个维度可以用前面的维度用等式表示，那它就只有这一个取值，即min/max都是它
+        if cst.is_equality()? {
+          debug!("extract_bound: dim has equality constraint: {}", aff);
+          min = Some(aff.copy()?);
+          max = Some(aff);
+          break;
+        }
+        // ISL中inequality约束是... >= 0
+        if k > 0 {
+          min = Some(if let Some(x) = min { aff.max(x)? } else { aff });
+        } else {
+          max = Some(if let Some(x) = max { aff.min(x)? } else { aff });
+        }
+      }
+    }
+    let (min, max) = (min?, max?);
+    let zero = dom.get_space()?.aff_zero_on_domain_space()?;
+    let one = zero.copy()?.set_constant_si(1)?.pw_aff_from_aff()?;
+    let max = max.add(one)?; // max += 1，循环范围是min <= i < max
+    debug!("extract_bound: min = {}, max = {}", min, max);
+    Bound(zero, min, max)
   }
 
   pub fn apply_sch_raw(&self, s: &str) -> &Comp {
@@ -294,7 +345,8 @@ impl Comp {
   }
 
   pub fn store(&self, buf: &Buf) -> &Comp {
-    let store = identity_map(&self.domain).set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
+    let store = identity_map(self.domain())
+      .set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
     debug!("store: {}", store);
     self.p().store = Some(store);
     self
@@ -399,15 +451,16 @@ pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Map {
 
 // 从set生成一对一的map，map的in dim名字为set名字，out dim名字为空
 // 注意ISL中名字是空字符串和名字是空指针被认为是不一样的，用reset_tuple_id将名字赋成空指针，或set_tuple_name传None
-pub(crate) fn identity_map(set: &Set) -> Map {
+pub(crate) fn identity_map(set: Set) -> Map {
   set.get_space()?.add_dims(DimType::In, set.n_dim() as _)?
     .set_tuple_name(DimType::In, set.get_tuple_name())?.reset_tuple_id(DimType::Out)?
-    .map_identity()?.intersect_domain(set.copy()?)?
+    .map_identity()?.intersect_domain(set)?
 }
 
-pub(crate) fn identity_schedule(domain: &Set) -> Map {
+pub(crate) fn identity_schedule(domain: Set) -> Map {
+  let n_dim = domain.n_dim() as u32;
   let mut sch = identity_map(domain);
-  for i in 0..=domain.n_dim() as u32 { // 在0，2，4...，2 * n_dim下标处插入0
+  for i in 0..=n_dim { // 在0，2，4...，2 * n_dim下标处插入0
     let pos = 2 * i;
     sch = sch.insert_dims(DimType::Out, pos, 1)?;
     sch = map_add_constraint(sch, pos, 0, 0);

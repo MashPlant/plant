@@ -1,6 +1,5 @@
 use std::{io::{self, Write, BufWriter}, fs::File};
 use crate::*;
-use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct Func {
@@ -23,17 +22,27 @@ impl Func {
     box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, ctx: Ctx::new() }
   }
 
-  pub fn find_comp(&self, name: &str) -> Option<P<Comp>> {
-    self.comps.iter().find(|c| c.name() == name).map(|c| c.deref().p())
+  pub fn find_comp(&self, name: &str) -> Option<&Comp> {
+    self.comps.iter().find(|c| c.name() == name).map(|c| c.as_ref())
   }
 
-  pub fn find_buf(&self, name: &str) -> Option<P<Buf>> {
-    self.bufs.iter().find(|c| &*c.name == name).map(|c| c.deref().p())
+  pub fn find_buf(&self, name: &str) -> Option<&Buf> {
+    self.bufs.iter().find(|c| &*c.name == name).map(|c| c.as_ref())
   }
 
   pub fn iter(&self, level: u32) -> Expr { Iter(self.iter_ty, level) }
 
   pub fn new_comp_id(&self) -> u32 { (self.comp_cnt, self.p().comp_cnt += 1).0 }
+
+  pub fn auto_comp_name(&self, e: &Expr) -> String {
+    // 这个名字没什么意义，只是为了人阅读方便
+    let desc = match e {
+      Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
+      Binary(..) => "binary", Call(..) => "call", Access(..) => "access", Load(..) => "load",
+      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free"
+    };
+    format!("_{}{}", desc, self.new_comp_id())
+  }
 
   pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
 
@@ -50,7 +59,7 @@ impl Func {
   // 并将domain和schedule的params都统一成全部params
   pub fn align_schedule(&self) -> Unit {
     let mut max_dim = 0;
-    let mut all_params = self.comps.get(0).expect("no comp").domain.get_space()?;
+    let mut all_params = self.comps.get(0).expect("no comp").schedule.get_space()?;
     for c in &self.comps {
       max_dim = max_dim.max(c.sch_dim());
       all_params = all_params.align_params(c.schedule.get_space()?)?;
@@ -62,8 +71,7 @@ impl Func {
       for i in orig_dim..max_dim { sch = map_add_constraint(sch, i, 0, 0); }
       sch = sch.align_params(all_params.copy()?)?;
       c.schedule.write(sch);
-      c.domain.write(c.domain.read().align_params(all_params.copy()?)?);
-      debug!("aligned schedule: {}; domain: {}", c.schedule, c.domain);
+      debug!("aligned schedule: {}", c.schedule);
       if let Some(store) = &c.store {
         store.write(store.read().align_params(all_params.copy()?)?);
         debug!("aligned store: {}", store);
@@ -84,19 +92,22 @@ impl Func {
         // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
         if let Some(x) = prev { c.after_raw(x, 0); }
         prev = Some(c);
-        self.sch_graph_dfs(c.deref().p(), &mut vis);
+        self.sch_graph_dfs(c.as_ref().p(), &mut vis);
       }
     }
     let mut info = Vec::new();
     let ast = self.build_isl_ast(&mut info); // todo: 可以从这个ast中提取特征，无需自己维护ast了
-    let mut tags = HashMap::default();
-    extract_tags(*ast, &mut Vec::new(), &mut tags);
+    let mut s = CodegenState::default();
+    // 实现上必须访问两次才能提取used_buf和local_buf信息，extract_tags只给for加tag
+    // 有了tag后，extract_buf才能提取信息并保存到第一个进入GPU的ForInfo中
+    extract_tags(*ast, &mut Vec::new(), &mut s.info);
+    extract_buf(self, *ast, &mut s);
     let mut w = BufWriter::new(File::create(path)?);
     debug!("codegen: ast = {}", ast);
     w.write_all(include_bytes!("inc.h"))?;
     write!(w, "void {}({}){{{}}}\n", self.name,
       comma_sep(args.iter().map(|&x| fn2display(move |f| write!(f, "{}*__restrict__ {}", x.ty, x.name)))),
-      self.gen(ast, &CodegenState { tags, ..Default::default() }))?;
+      self.gen(ast, &s))?;
     Ok(())
   }
 }
@@ -114,14 +125,31 @@ struct CompInfo {
   comp: P<Comp>,
 }
 
+struct ForInfo {
+  // 给这个for加上tag的Comp，有且仅有一个
+  comp: P<Comp>,
+  // 这个for对应schedule中的哪个dynamic dim
+  // 一个for可能出现在多个Comp中，但在不同的Comp中它必须拥有相同的dynamic dim
+  level: u32,
+  tag: DimTag,
+  // used_buf和local_buf用于GPU代码生成，分别表示kern中使用的所有Buf和kern中自己分配的Buf
+  // 如果一个Buf被使用，但不是自己分配的，就作为参数传给kern
+  // 代码生成中使用了extended lambda来生成kern，可以自动捕获使用的标量，所以不收集它们
+  // 其实也可以自动捕获使用的指针，但经实验这样会丢失restrict信息，导致kern效率降低，所以还是手动收集它们
+  used_buf: HashSet<P<Buf>>,
+  local_buf: HashSet<P<Buf>>,
+}
+
 #[derive(Default)]
 struct CodegenState {
-  // tags保存AST中的for循环的信息
-  // V中的u32是它对应schedule中的哪个dynamic dim，Option<DimTag>是这个dim上可能有的tag
-  tags: HashMap<AstNodeRef, (u32, Option<DimTag>)>,
-  in_kernel: bool,
-  // kernel的启动参数，6对应<<<dim3(...), dim3(...)>>>中的6个参数，如果是None就填1
-  kernel_cfg: [Option<Box<str>>; 6],
+  // tags保存AST中的for循环的信息，AstNodeRef的具体类型一定是for节点，有且仅有一个Comp在这个for上添加了tag
+  info: HashMap<AstNodeRef, ForInfo>,
+  in_kern: bool,
+  // used_buf和local_buf与ForInfo中的意义相同，是借用这里保存一下，填好后放进第一个进入GPU的for的ForInfo中
+  used_buf: HashSet<P<Buf>>,
+  local_buf: HashSet<P<Buf>>,
+  // kern的启动参数，6对应<<<dim3(...), dim3(...)>>>中的6个参数，如果是None就填1
+  kern_cfg: [Option<Box<str>>; 6],
 }
 
 impl Func {
@@ -140,9 +168,8 @@ impl Func {
   fn build_isl_ast(&self, info: &mut Vec<Box<CompInfo>>) -> AstNode {
     let mut union_sch = None;
     for c in &self.comps {
-      let sch_domain = c.domain.copy()?.apply(c.schedule.copy()?)?.set_tuple_name(cstr(c.name()))?;
       // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，`identity_map`保证这一点
-      let sch = identity_map(&sch_domain).union_map_from_map()?;
+      let sch = identity_map(c.schedule()).union_map_from_map()?;
       union_sch = Some(if let Some(x) = union_sch { sch.union(x)? } else { sch });
     }
     let union_sch = union_sch?;
@@ -188,13 +215,13 @@ impl Func {
       Some(Expr::from_isl(self, comp_access(build, access)))
     } else { None };
     // 创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
-    let access_self = comp_access(build, identity_map(&comp.domain)
+    let access_self = comp_access(build, identity_map(comp.domain())
       .apply_domain(comp.schedule.copy()?)?
       .set_tuple_name(DimType::In, comp.name_cstr())?);
     let n = access_self.get_op_n_arg();
     let mut iter_map = Vec::with_capacity(n as usize - 1);
     for i in 1..n {
-      iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?)?);
+      iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?));
     }
     debug!("visit_comp: comp = {}, dim_map = {:?}, iter_map = [{}]", comp.name(), dim_map, comma_sep(iter_map.iter()));
     let mut expr = comp.expr.clone();
@@ -211,125 +238,182 @@ impl Func {
       }
       _ => true
     });
-    let ci = box CompInfo { dim_map, store, expr, comp };
+    let ci = box CompInfo { dim_map, store, expr, comp: comp.into() };
     let node = node.set_annotation(self.ctx.id_alloc(None, ci.as_ref() as *const _ as _)?)?;
     info.push(ci);
     node
   }
 
+  // 实际上会修改s中的内容，为了规避借用检查，使用不可变引用
+  // 访问/修改s.in_kern来实现在第一个进入GPU的for处生成代码，访问/修改s.kern_cfg来获取kern的启动参数
   fn gen<'a>(&'a self, node: AstNode, s: &'a CodegenState) -> impl Display + 'a {
-    // 实际上会修改s中的内容，为了规避借用检查，使用不可变引用
-    use std::fmt::Error as E;
-    fn2display(move |f| {
-      // if let Some(x) = last_kernel_iter { write!(f, "if({}==0){{", x.gpu_idx()); }
+    let work = move |f: &mut Formatter| {
       match node.get_type() {
         AstNodeType::For => {
-          let it = node.for_get_iterator().ok_or(E)?.get_id().ok_or(E)?.get_name().ok_or(E)?;
-          let init = node.for_get_init().ok_or(E)?;
-          let cond = node.for_get_cond().ok_or(E)?;
-          let inc = node.for_get_inc().ok_or(E)?;
-          let (init_s, cond_s, inc_s) = (init.to_C_str().ok_or(E)?, cond.to_C_str().ok_or(E)?, inc.to_C_str().ok_or(E)?);
-          let body = node.for_get_body().ok_or(E)?;
-          match s.tags.get(&*node) {
+          let it = node.for_get_iterator()?.get_id()?.get_name()?;
+          let init = node.for_get_init()?.to_C_str()?;
+          let cond = node.for_get_cond()?.to_C_str()?;
+          let inc = node.for_get_inc()?.to_C_str()?;
+          let body = node.for_get_body()?;
+          match s.info.get(&*node) {
             // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
-            Some((_, Some(Parallel))) => f.write_str("\n#pragma omp parallel for\n")?,
-            // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kernel和kernel调用
-            // kernel将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
+            Some(ForInfo { tag: Parallel, .. }) => f.write_str("\n#pragma omp parallel for\n").ok()?,
+            // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
+            // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
             // 这导致了Comp::tag_dim的注释中描述的问题
-            Some(&(level, Some(gpu))) => {
+            Some(ForInfo { comp, level, tag, used_buf, local_buf }) => {
               let mut s = s.p();
-              let old_in_kernel = std::mem::replace(&mut s.in_kernel, true);
-              if !old_in_kernel { // 第一个进入GPU的for，在这里生成代码
-                f.write_str("{auto _kernel=[=]__device__{")?;
+              let old_in_kern = std::mem::replace(&mut s.in_kern, true);
+              if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
+                let param_buf = comma_sep(used_buf.difference(local_buf).map(|x|
+                  fn2display(move |f| write!(f, "{}*__restrict__ {}", x.ty, x.name))));
+                write!(f, "{{auto _kern=[=]__device__({}){{", param_buf).ok()?;
               }
-              let mut range = format!("{}-{}", cond.get_op_arg(1).ok_or(E)?.to_C_str().ok_or(E)?, init_s);
-              let op = cond.get_op_type();
-              debug_assert!(op == AstExprOpType::Lt || op == AstExprOpType::Le);
-              if op == AstExprOpType::Le { range.push_str("+1"); }
-              let old_cfg = s.kernel_cfg[(gpu as usize - GPUBlockX as usize)].replace(range.into());
-              debug_assert!(old_cfg.is_none()); // 嵌套中的多个循环标记了同一个gpu idx，不合法
-              write!(f, "{} i{}={}+{};{{{}}}", self.iter_ty, level, gpu.gpu_idx(), init_s, self.gen(body, &*s))?;
-              s.in_kernel = old_in_kernel;
-              if !old_in_kernel {
+              let (sch, pos) = (comp.schedule(), (level * 2 + 1) as _);
+              let (min, max) = (sch.copy()?.dim_min_val(pos)?, sch.dim_max_val(pos)?);
+              debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", comp.name(), level, min, tag.gpu_idx(), max);
+              let range = max.copy()?.sub(min.copy()?)?.add(self.ctx.val_one()?)?;
+              let old_cfg = s.kern_cfg[(*tag as usize - GPUBlockX as usize)]
+                .replace(range.to_str()?.as_str().into());
+              debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
+              write!(f, "{ty} i{i}={idx}+{min};\
+                assume({min}<=i{i}&&i{i}<={max});\
+                if({init}<=i{i}&&{cond}){{{body}}}", ty = self.iter_ty, i = level, idx = tag.gpu_idx(),
+                min = min, max = max, init = init, cond = cond, body = self.gen(body, &*s)).ok()?;
+              s.in_kern = old_in_kern;
+              if !old_in_kern {
                 fn fmt<'a>(c: &'a [Option<Box<str>>]) -> impl Display + 'a {
                   // 用lambda表达式会报声明周期错误，所以用函数定义
                   comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
                 }
-                write!(f, "}};exec_kernel<<<dim3({}),dim3({})>>>(_kernel);}}", fmt(&s.kernel_cfg[..3]), fmt(&s.kernel_cfg[3..]))?;
-                s.kernel_cfg = Default::default();
+                let arg_buf = comma_sep(used_buf.difference(local_buf).map(|x| &x.name));
+                write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}",
+                  fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..]), arg_buf).ok()?;
+                s.kern_cfg = Default::default();
               }
-              return Ok(()); // 跳过下面的for生成
+              return Unit; // 跳过下面的for生成
             }
             _ => {}
           }
-          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init_s, cond_s, inc_s, self.gen(body, s), it = it)?;
+          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init, cond, inc, self.gen(body, s), it = it).ok()?;
         }
         AstNodeType::If => {
-          let cond = node.if_get_cond().ok_or(E)?.to_C_str().ok_or(E)?;
-          let t = node.if_get_then().ok_or(E)?;
-          write!(f, "if({}){{{}}}", cond, self.gen(t, s))?;
+          let cond = node.if_get_cond()?.to_C_str()?;
+          let t = node.if_get_then()?;
+          write!(f, "if({}){{{}}}", cond, self.gen(t, s)).ok()?;
           if let Some(e) = node.if_get_else() {
-            write!(f, "else{{{}}}", self.gen(e, s))?;
+            write!(f, "else{{{}}}", self.gen(e, s)).ok()?;
           }
         }
         AstNodeType::Block => {
           // block node不需要{}包裹，因为if，for已经有{}了，而且用{}包裹会让一些局部变量无法访问
-          let ch = node.block_get_children().ok_or(E)?;
+          let ch = node.block_get_children()?;
           for i in 0..ch.n_ast_node() {
-            let ch = ch.get_ast_node(i).ok_or(E)?;
-            write!(f, "{}", self.gen(ch, s))?;
+            write!(f, "{}", self.gen(ch.get_ast_node(i)?, s)).ok()?;
           }
         }
         AstNodeType::User => {
-          let comp = P::new(node.get_annotation().ok_or(E)?.get_user() as *const CompInfo);
+          let comp = P::new(node.get_annotation()?.get_user() as *const CompInfo);
           if let Some(store) = &comp.store {
-            write!(f, "{}={};", store, comp.expr)?;
+            write!(f, "{}={};", store, comp.expr).ok()?;
           } else {
             // 没有store的comp表示成一个标量定义，如果类型是void就只写右手项
             if comp.expr.ty() == Void {
-              write!(f, "{};", comp.expr)?;
+              write!(f, "{};", comp.expr).ok()?;
             } else {
-              write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr)?;
+              write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr).ok()?;
             }
           }
         }
-        _ => debug_panic!("invalid ast node type"),
+        ty => debug_panic!("invalid ast node type: {:?}", ty),
       }
+      Unit
+    };
+    fn2display(move |f| {
+      work(f);
       Ok(())
     })
   }
 }
 
-// 从user node中提取Comp::dim_tags中循环的tag，用HashMap保存for node对应的循环的tag
-fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, tags: &mut HashMap<AstNodeRef, (u32, Option<DimTag>)>) -> Unit {
+// 从user node中提取Comp::dim_tags中循环的tag
+fn extract_tags(node: AstNodeRef, levels: &mut Vec<AstNodeRef>, info: &mut HashMap<AstNodeRef, ForInfo>) -> Unit {
   match node.get_type() {
     AstNodeType::For => {
       levels.push(node);
-      extract_tags(*node.for_get_body()?, levels, tags)?;
+      extract_tags(*node.for_get_body()?, levels, info)?;
       levels.pop();
     }
     AstNodeType::If => {
-      extract_tags(*node.if_get_then()?, levels, tags)?;
-      if let Some(e) = node.if_get_else() { extract_tags(*e, levels, tags)?; }
+      extract_tags(*node.if_get_then()?, levels, info)?;
+      if let Some(e) = node.if_get_else() { extract_tags(*e, levels, info)?; }
     }
     AstNodeType::Block => {
       let ch = node.block_get_children()?;
-      for i in 0..ch.n_ast_node() { extract_tags(*ch.get_ast_node(i)?, levels, tags)?; }
+      for i in 0..ch.n_ast_node() { extract_tags(*ch.get_ast_node(i)?, levels, info)?; }
     }
     AstNodeType::User => {
       let comp = P::new(node.get_annotation()?.get_user() as *const CompInfo);
       for (i, &tag) in comp.comp.dim_tags.iter().enumerate() {
-        if let Some(i) = comp.dim_map[i] {
-          // 多个Comp可能向同一个for node添加level和tag，如果实现正确，这个for node在不同Comp中的循环层次应该是一样的
-          // 有些Comp在这层没有tag，确保这个None不会覆盖原来的Some(tag)
-          let old = tags.entry(levels[i as usize]).or_insert((i, tag));
-          debug_assert_eq!(old.0, i);
-          debug_assert!(old.1.is_none() || old.1 == tag);
-          if old.1.is_none() { old.1 = tag; }
+        if let (Some(i), Some(tag)) = (comp.dim_map[i], tag) {
+          let old = info.insert(levels[i as usize],
+            ForInfo { comp: comp.comp, level: i, tag, used_buf: <_>::default(), local_buf: <_>::default() });
+          debug_assert!(old.is_none(), "duplicate tag");
         }
       }
     }
-    _ => debug_panic!("invalid ast node type"),
+    ty => debug_panic!("invalid ast node type: {:?}", ty),
+  }
+  Unit
+}
+
+// 提取used_buf和local_buf信息
+fn extract_buf(f: &Func, node: AstNodeRef, s: &mut CodegenState) -> Unit {
+  fn extract_buf_expr(e: &Expr, s: &mut CodegenState) {
+    e.visit(&mut move |e| match *e {
+      Load(x, _) | Free(x) => { s.used_buf.insert(x); }
+      Memcpy(x, y) => {
+        s.used_buf.insert(x);
+        s.used_buf.insert(y);
+      }
+      Alloc(x) => { s.local_buf.insert(x); }
+      _ => {}
+    });
+  }
+  let extract_buf_isl = move |e: AstExpr, s: &mut CodegenState| extract_buf_expr(&Expr::from_isl(f, e), s);
+  match node.get_type() {
+    AstNodeType::For => {
+      let old_in_kern = s.in_kern;
+      let info = s.info.get_mut(&node).filter(|x|
+        GPUBlockX <= x.tag && x.tag <= GPUThreadZ).map(|x| x.p());
+      if info.is_some() { s.in_kern = true; }
+      if s.in_kern {
+        extract_buf_isl(node.for_get_init()?, s);
+        extract_buf_isl(node.for_get_cond()?, s);
+        extract_buf_isl(node.for_get_inc()?, s);
+      }
+      extract_buf(f, *node.for_get_body()?, s)?;
+      if let (Some(mut info), false) = (info, old_in_kern) {
+        info.used_buf = std::mem::replace(&mut s.used_buf, <_>::default());
+        info.local_buf = std::mem::replace(&mut s.local_buf, <_>::default());
+      }
+      s.in_kern = old_in_kern;
+    }
+    AstNodeType::If => {
+      if s.in_kern { extract_buf_isl(node.if_get_cond()?, s); }
+      extract_buf(f, *node.if_get_then()?, s)?;
+      if let Some(e) = node.if_get_else() { extract_buf(f, *e, s)?; }
+    }
+    AstNodeType::Block => {
+      let ch = node.block_get_children()?;
+      for i in 0..ch.n_ast_node() { extract_buf(f, *ch.get_ast_node(i)?, s)?; }
+    }
+    AstNodeType::User => if s.in_kern {
+      let comp = P::new(node.get_annotation()?.get_user() as *const CompInfo);
+      if let Some(store) = &comp.store { extract_buf_expr(store, s); }
+      extract_buf_expr(&comp.expr, s);
+    }
+    ty => debug_panic!("invalid ast node type: {:?}", ty),
   }
   Unit
 }

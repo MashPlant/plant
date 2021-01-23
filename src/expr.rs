@@ -119,7 +119,7 @@ impl Expr {
             let buf = f.find_buf(name)?;
             let mut idx = Vec::with_capacity(n as usize - 1);
             for i in 1..n { idx.push(Expr::from_isl(f, e.get_op_arg(i)?)); }
-            Load(buf, idx.into())
+            Load(buf.into(), idx.into())
           }
           _ => {
             let op0 = Expr::from_isl(f, e.get_op_arg(0)?);
@@ -128,14 +128,14 @@ impl Expr {
               FDivQ => BinOp::Div, PDivQ => BinOp::Div, PDivR => BinOp::Rem, ZDivR => BinOp::Rem,
               Eq => BinOp::Eq, Le => BinOp::Le, Lt => BinOp::Lt, Ge => BinOp::Ge, Gt => BinOp::Gt,
               Minus => return Binary(BinOp::Sub, box [0.expr(), op0]),
-              _ => try_failed(),
+              _ => debug_panic!("invalid expr op: {:?}", op),
             };
             let op1 = Expr::from_isl(f, e.get_op_arg(1)?);
             Binary(op, box [op0, op1])
           }
         }
       }
-      _ => try_failed(),
+      ty => debug_panic!("invalid expr type: {:?}", ty),
     }
   }
 }
