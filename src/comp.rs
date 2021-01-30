@@ -13,7 +13,7 @@ pub struct Comp {
   pub schedule: Map,
   pub store: Option<Map>,
   pub pred: Option<P<Comp>>,
-  pub succ: HashMap<P<Comp>, u32>,
+  pub succ: Vec<Option<P<Comp>>>,
   pub dim_tags: Vec<Option<DimTag>>,
 }
 
@@ -56,9 +56,9 @@ impl<E1: IntoExpr> CompBuilder for E1 {
 }
 
 impl Func {
-  pub fn comp(&self, name: &str, ranges: &[(impl IntoExpr, impl IntoExpr)], expr: impl IntoExpr) -> &Comp {
+  pub fn comp<E1: IntoExpr, E2: IntoExpr>(&self, name: &str, ranges: &[(E1, E2)], expr: impl IntoExpr) -> &Comp {
     // 很多时候调用方可以提供&[(Expr, Expr)]，这里的拷贝是多余的，但这点浪费可以忽略
-    let ranges = ranges.iter().map(|(lb, ub)| (lb.clone_expr(), ub.clone_expr())).collect::<Vec<_>>();
+    let ranges = ranges.into_iter().map(|(lb, ub)| (lb.clone_expr(), ub.clone_expr())).collect::<Vec<_>>();
     let expr = expr.expr();
     let mut params = HashSet::default();
     // 收集ranges，expr中的所有Param
@@ -80,9 +80,9 @@ impl Func {
     // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
     let schedule = identity_schedule(domain.coalesce()?);
     debug!("comp_raw: initial identity schedule = {}", schedule);
-    let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, schedule, store: None, pred: None, succ: HashMap::default(), dim_tags: Vec::new() };
+    let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, schedule, store: None, pred: None, succ: Vec::new(), dim_tags: Vec::new() };
     debug_assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
-    let ret = R::new(&*comp);
+    let ret = comp.as_ref().p();
     self.p().comps.push(comp);
     ret.get()
   }
@@ -112,7 +112,10 @@ impl Comp {
       .map(|i| self.schedule.get_dim_name(DimType::Param, i).unwrap()))))
   }
 
-  pub fn set_expr(&self, expr: Expr) { self.p().expr = expr; }
+  pub fn set_expr(&self, expr: Expr) -> &Comp {
+    self.p().expr = expr;
+    self
+  }
 
   // 将自身作为一个Param表达式，Expr中直接通过它的名字使用它
   // 当且仅当它没有store的时候，生成的代码会在计算发生的地方定义一个对应名字的局部变量，所以它必须没有store
@@ -120,15 +123,17 @@ impl Comp {
   // 如果只是用于普通运算，可以用as_param或at，as_param会往domain/schedule中引入一个参数，应该没有什么好处
   pub fn as_param(&self) -> Expr { Param(self.into()) }
 
-  pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
+  pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
+    let idx = idx.into_iter().map(|e| e.clone_expr()).collect::<Box<[_]>>();
     debug_assert_eq!(idx.len() as u32, self.n_dim());
-    Access(self.into(), idx.iter().map(|e| e.clone_expr()).collect())
+    Access(self.into(), idx)
   }
 
-  pub fn at_inline(&self, idx: &[impl IntoExpr]) -> Expr {
+  pub fn at_inline<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
+    let idx = idx.into_iter().map(|e| e.clone_expr()).collect::<Vec<_>>();
     debug_assert_eq!(idx.len() as u32, self.n_dim());
     let mut expr = self.expr.clone();
-    expr.visit_mut(&mut |e| if let Iter(_, x) = &e { *e = idx[*x as usize].clone_expr(); });
+    expr.visit_mut(&mut |e| if let Iter(_, x) = &e { *e = idx[*x as usize].clone(); });
     expr
   }
 }
@@ -226,7 +231,7 @@ impl Comp {
       schedule: ge.set_tuple_name(DimType::In, cstr(&name))?,
       store: if let Some(x) = &self.store { Some(x.copy()?.set_tuple_name(DimType::In, cstr(&name))?) } else { None },
       pred: None,
-      succ: HashMap::default(),
+      succ: Vec::new(),
       dim_tags: self.dim_tags.clone(),
     };
     // 上面的所有操作都只修改局部变量(修改Func::comp_cnt可以接受)，因此错误可以恢复，从这里开始的错误不能恢复
@@ -234,7 +239,7 @@ impl Comp {
     self.schedule.write(self.schedule.read().intersect_range(i_aff.lt_set(sep).unwrap()
       .add_dims(DimType::Out, n - pos - 1).unwrap()).unwrap());
     debug!("separate: created dup comp {}, sch = {}", dup.name(), dup.schedule);
-    let ret = R::new(&*dup);
+    let ret = dup.as_ref().p();
     self.p().func.comps.push(dup);
     Some(ret.get())
   }
@@ -332,6 +337,20 @@ impl Separate for Vec<&Comp> {
   }
 }
 
+pub struct CacheCfg {
+  pub size: u32,
+  pub pad: bool,
+  pub dst: Expr,
+  pub src: Expr,
+  pub access: Expr,
+}
+
+pub struct CacheCfg2 {
+  pub size: u32,
+  pub pad: bool,
+  pub offset: Expr,
+}
+
 impl Comp {
   // 如果用来添加GPU相关的tag，需要保证tag的几个维度是完美嵌套的
   // 例如for (i) { for (j) { C1 }  C2 }，如果tag_dim(i, GPUBlockX)，tag_dim(j, GPUThreadX)
@@ -352,33 +371,136 @@ impl Comp {
     self
   }
 
-  pub fn store_at(&self, buf: &Buf, idx: &[impl IntoExpr]) -> &Comp {
+  pub fn store_at<E: IntoExpr, I: Iterator<Item=E> + Clone>(&self, buf: &Buf, idx: impl IntoIterator<Item=E, IntoIter=I>) -> &Comp {
     let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.n_dim()),
-      buf.name, comma_sep(idx.iter().map(|e| e.clone_expr())));
+      buf.name, comma_sep(idx.into_iter().map(|e| e.clone_expr())));
     debug!("store_at: {}", s);
     self.p().store = Some(self.ctx.map_read_from_str(cstr(&s))?);
     self
   }
+
+  // 会将self.expr中所有对src的访问下标都替换成cfg.access的列表，不管原来的下标是什么；若原来有src[i][j]和src[j][i]，会导致错误的结果
+  pub fn cache(&self, src: &Buf, at: u32, threads: u32, cfg: &[CacheCfg]) -> &Buf {
+    debug_assert_eq!(src.sizes.len(), cfg.len());
+    let (f, src) = (self.func, src.p());
+    let at = at + 1;
+    let name = format!("_cache{}_{}\0", f.new_buf_id(), src.name);
+    let buf = f.buf(&name[..name.len() - 1], src.ty, Temp,
+      cfg.iter().map(|c| c.size + c.pad as u32));
+    let elems = cfg.iter().map(|c| c.size).product::<u32>();
+    let mut dom = project_static_dim(self.schedule());
+    let n = dom.n_dim() as u32;
+    dom = dom.project_out(DimType::Set, at, n - at)?;
+    let sync_dom = dom.copy()?; // 执行Sync的循环范围，与下面的buf.alloc_at的Alloc/Free的范围一样
+    dom = dom.add_dims(DimType::Set, 1)?; // 添加一个新循环copy_iter，下面设置循环范围
+    let cst = dom.get_space()?.local_space_from_space()?.constraint_alloc_inequality()?
+      .set_coefficient_si(DimType::Set, at as _, 1)?;  // copy_iter >= 0
+    dom = dom.add_constraint(cst)?;
+    let cst = dom.get_space()?.local_space_from_space()?.constraint_alloc_inequality()?
+      .set_coefficient_si(DimType::Set, at as _, -1)?
+      .set_constant_si(((elems - 1) / threads) as _)?; // copy_iter <= (elems - 1) / threads
+    dom = dom.add_constraint(cst)?;
+    dom = dom.set_tuple_name(cstr(&name))?;
+    debug!("cache: copy dom = {}", dom);
+    let copy = Load(src.into(), cfg.iter().map(|c| c.src.clone()).collect());
+    debug!("cache: copy src = {}", copy);
+    let copy = f.comp_raw(dom, copy).store_at(buf, cfg.iter().map(|c| &c.dst));
+    let sync1 = f.comp_raw(sync_dom.copy()?.set_tuple_name(cstr(&format!("_sync1{}", name)))?, Sync);
+    let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, Sync);
+    self.after_between_pred(sync2, at).after_between_pred(copy, at).after_between_pred(sync1, at);
+    buf.alloc_at(self, (at - 1) as _);
+    self.p().expr.visit_mut(&mut move |e| match e {
+      Load(b, idx) => if *b == src {
+        debug_assert_eq!(idx.len(), cfg.len());
+        *b = buf.p();
+        *idx = cfg.iter().map(|c| c.access.clone()).collect();
+      }
+      _ => {}
+    });
+    buf.p().get()
+  }
+
+  pub fn cache_identity(&self, src: &Buf, at: u32, threads: &[(u32, u32)], cfg2: &[CacheCfg2]) -> &Buf {
+    debug_assert_eq!(src.sizes.len(), cfg2.len());
+    let mut idx = self.func.iter(at + 1);
+    for &(th, range) in threads { idx = idx * range + self.func.iter(th); }
+    debug!("cache_identity: idx = {}", idx);
+    let mut cfg = Vec::with_capacity(cfg2.len());
+    let mut extent = cfg2.iter().map(|c| c.size).product::<u32>();
+    let mut orig = Vec::new();
+    self.expr.visit(&mut |e| match e {
+      Load(buf, idx) if *buf == src.p() => {
+        debug_assert_eq!(idx.len(), cfg2.len());
+        orig = idx.to_vec();
+      }
+      _ => {}
+    });
+    for (CacheCfg2 { size, pad, offset }, orig) in cfg2.iter().zip(orig.into_iter()) {
+      extent /= *size;
+      let idx = (&idx / extent) % *size;
+      debug!("cache_identity: dst = {}", idx);
+      cfg.push(CacheCfg { size: *size, pad: *pad, dst: idx.clone(), src: idx + offset, access: orig % *size });
+    }
+    let threads = threads.iter().map(|x| x.1).product();
+    self.cache(src, at, threads, &cfg)
+  }
 }
 
 impl Comp {
-  // at的意义是在包围at层循环的static dim上，self在after之后
+  // at的意义是在包围at层循环的static dim上，self在after之后，at取值范围是0..=循环层数
   // A.after(B, i).after(C, j)的链式调用，语义是A在B后，B在C后
+  // 要求self没有前驱；如果other在at处已经有后继x，则把self插在other和x之间
   pub fn after<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
-    let mut other = other.p();
-    let old_level = other.succ.entry(self.into()).or_insert(at);
-    *old_level = at.max(*old_level);
-    if let Some(mut p) = self.pred {
-      if p != other { p.succ.remove(&self.into()); }
+    debug!("after: setting {} after {}", self.name(), other.name());
+    debug_assert!(self.pred.is_none());
+    let (mut this, mut other, at) = (self.p(), other.p(), at as usize);
+    this.pred = Some(other);
+    if other.succ.len() <= at { other.succ.resize(at + 1, None); }
+    if let Some(mut x) = other.succ[at] {
+      x.pred = Some(this);
+      if this.succ.len() <= at { this.succ.resize(at + 1, None); }
+      this.succ[at] = Some(x);
     }
-    self.p().pred = Some(other);
+    other.succ[at] = Some(this);
     other.get()
+  }
+
+  // 与after区别在于：如果self有前驱p，则要求other没有前驱，并将other插在self和p间
+  pub fn after_between_pred<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
+    let (mut this, mut other) = (self.p(), other.p());
+    if let Some(mut p) = this.pred {
+      debug_assert!(other.pred.is_none());
+      other.pred = Some(p);
+      *p.succ.iter_mut().find(|x| **x == Some(this)).unwrap() = Some(other);
+      this.pred = None;
+    }
+    self.after(other.get(), at)
   }
 
   // A.before(B, i).before(C, j)的链式调用，语义是A在B前，B在C前
   pub fn before<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
     other.after(self, at);
     other
+  }
+
+  pub fn before_between_pred<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
+    other.after_between_pred(self, at);
+    other
+  }
+
+  pub fn root_comp(&self, at: u32) -> &Comp {
+    let mut ret = self;
+    while let Some(p) = ret.pred {
+      if p.succ.get(at as usize) != Some(&Some(ret.p())) { break; }
+      ret = p.get();
+    }
+    ret
+  }
+
+  pub fn leaf_comp(&self, at: u32) -> &Comp {
+    let mut ret = self;
+    while let Some(&Some(ch)) = ret.succ.get(at as usize) { ret = ch.get(); }
+    ret
   }
 
   // 用schedule中的static dim来实现after的逻辑。可以直接使用它，但多个Comp间的关系不一定可以保留
@@ -466,4 +588,13 @@ pub(crate) fn identity_schedule(domain: Set) -> Map {
     sch = map_add_constraint(sch, pos, 0, 0);
   }
   sch
+}
+
+// set表示是一个调度后的schedule，偶数下标处都是static dim，这个函数去掉这些static dim，让它可以用作未经调度的schedule
+pub(crate) fn project_static_dim(mut set: Set) -> Set {
+  let n = set.n_dim() as u32;
+  debug_assert_eq!(n % 2, 1);
+  // static dim是0, 2, ..., 2 * (n / 2)，但去掉0后，下一个就变成1，去掉1后，下一个就变成2...故循环删除0, 1, ..., n / 2
+  for i in 0..n / 2 { set = set.project_out(DimType::Set, i, 1)?; }
+  set
 }

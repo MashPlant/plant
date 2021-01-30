@@ -29,6 +29,7 @@ pub enum Expr {
   Memcpy(P<Buf>, P<Buf>),
   Alloc(P<Buf>),
   Free(P<Buf>),
+  Sync,
 }
 
 impl_try!(Expr);
@@ -65,7 +66,7 @@ impl Expr {
         l.ty().max(r.ty())
       } else { I32 }
       Load(buf, _) => buf.ty,
-      Call(..) | Memcpy(..) | Alloc(..) | Free(..) => Void,
+      Call(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync => Void,
     }
   }
 
@@ -78,7 +79,7 @@ impl Expr {
       Unary(_, x) | Cast(_, x) => std::slice::from_ref(x),
       Binary(_, lr) => lr.as_ref(),
       Call(_, args) | Access(_, args) | Load(_, args) => args,
-      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) => &[],
+      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync => &[],
     }
   }
 
@@ -126,7 +127,7 @@ impl Expr {
             let op = match op {
               Max => BinOp::Max, Min => BinOp::Min, Add => BinOp::Add, Sub => BinOp::Sub, Mul => BinOp::Mul,
               FDivQ => BinOp::Div, PDivQ => BinOp::Div, PDivR => BinOp::Rem, ZDivR => BinOp::Rem,
-              Eq => BinOp::Eq, Le => BinOp::Le, Lt => BinOp::Lt, Ge => BinOp::Ge, Gt => BinOp::Gt,
+              And => BinOp::LAnd, Or => BinOp::LOr, Eq => BinOp::Eq, Le => BinOp::Le, Lt => BinOp::Lt, Ge => BinOp::Ge, Gt => BinOp::Gt,
               Minus => return Binary(BinOp::Sub, box [0.expr(), op0]),
               _ => debug_panic!("invalid expr op: {:?}", op),
             };
@@ -161,9 +162,14 @@ impl IntoExpr for Expr { fn expr(self) -> Expr { self } }
 
 impl IntoExpr for &Expr { fn expr(self) -> Expr { self.clone() } }
 
+impl IntoExpr for &&Expr { fn expr(self) -> Expr { (*self).clone() } }
+
 macro_rules! impl_primitive {
   ($($val: ident $ty: ident),*) => {
-    $(impl IntoExpr for $ty { fn expr(self) -> Expr { Val($val, self as _) } })*
+    $(
+      impl IntoExpr for $ty { fn expr(self) -> Expr { Val($val, self as _) } }
+      impl IntoExpr for &$ty { fn expr(self) -> Expr { Val($val, *self as _) } }
+    )*
   };
 }
 
@@ -174,7 +180,7 @@ impl IntoExpr for f32 { fn expr(self) -> Expr { Val(F32, self.to_bits() as _) } 
 impl IntoExpr for f64 { fn expr(self) -> Expr { Val(F64, self.to_bits()) } }
 
 macro_rules! impl_op {
-  ($($op: ident $fn: ident),*) => {
+  ($($op: ident $fn: ident $op_assign: ident $fn_assign: ident),*) => {
     $(impl<R: IntoExpr> std::ops::$op<R> for Expr {
       type Output = Expr;
       fn $fn(self, rhs: R) -> Expr { Binary(BinOp::$op, box [self, rhs.expr()]) }
@@ -183,8 +189,13 @@ macro_rules! impl_op {
     impl<R: IntoExpr> std::ops::$op<R> for &Expr {
       type Output = Expr;
       fn $fn(self, rhs: R) -> Expr { Binary(BinOp::$op, box [self.clone(), rhs.expr()]) }
+    }
+
+    impl<R: IntoExpr> std::ops::$op_assign<R> for Expr {
+      fn $fn_assign(&mut self, rhs: R) { *self = Binary(BinOp::$op, box [self.clone(), rhs.expr()]) }
     })*
   };
 }
 
-impl_op!(Add add, Sub sub, Mul mul, Div div, Rem rem);
+impl_op!(Add add AddAssign add_assign, Sub sub SubAssign sub_assign,
+  Mul mul MulAssign mul_assign, Div div DivAssign div_assign, Rem rem RemAssign rem_assign);

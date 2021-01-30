@@ -39,7 +39,7 @@ impl Func {
     let desc = match e {
       Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
       Binary(..) => "binary", Call(..) => "call", Access(..) => "access", Load(..) => "load",
-      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free"
+      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync",
     };
     format!("_{}{}", desc, self.new_comp_id())
   }
@@ -49,7 +49,7 @@ impl Func {
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: &[Expr]) -> Unit {
     self.align_schedule();
-    let s = format!("{} -> {{: {}}}\0", self.comps.first().expect("no comp").params(), sep(csts.iter(), " and "));
+    let s = format!("{} -> {{: {}}}\0", self.comps[0].params(), sep(csts.iter(), " and "));
     debug!("set_constraint: {}", s);
     self.p().func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s))?);
     Unit
@@ -59,7 +59,7 @@ impl Func {
   // 并将domain和schedule的params都统一成全部params
   pub fn align_schedule(&self) -> Unit {
     let mut max_dim = 0;
-    let mut all_params = self.comps.get(0).expect("no comp").schedule.get_space()?;
+    let mut all_params = self.comps[0].schedule.get_space()?;
     for c in &self.comps {
       max_dim = max_dim.max(c.sch_dim());
       all_params = all_params.align_params(c.schedule.get_space()?)?;
@@ -84,15 +84,14 @@ impl Func {
     for b in args { debug_assert_ne!(b.kind, BufKind::Temp); }
     self.align_schedule();
     let mut vis = HashSet::default();
-    let mut prev = None;
+    let mut prev = None::<P<Comp>>;
     for c in &self.comps {
       if c.pred.is_none() {
-        // 所有没有前驱的节点按定义顺序排序
+        // 所有没有前驱的节点按定义顺序排序，后续节点排在前面节点的所有叶子节点后
         // after_raw要求按照从前往后顺序调用，例如B after_raw C, A after_raw B，不能是A after_raw B, B after_raw C
         // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
-        if let Some(x) = prev { c.after_raw(x, 0); }
-        prev = Some(c);
-        self.sch_graph_dfs(c.as_ref().p(), &mut vis);
+        if let Some(x) = prev { c.after_raw(&*x, 0); }
+        prev = Some(self.sch_graph_dfs(c.as_ref().p(), &mut vis));
       }
     }
     let mut info = Vec::new();
@@ -153,12 +152,17 @@ struct CodegenState {
 }
 
 impl Func {
-  fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) {
+  // 返回c的排在最后的，即static dim字典序最大的孩子
+  fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) -> P<Comp> {
     if !vis.insert(c) { debug_panic!("cyclic schedule graph"); }
-    for (&s, &at) in &c.succ {
-      s.get().after_raw(c.get(), at);
-      self.sch_graph_dfs(s, vis);
+    let mut ret = c;
+    for (at, &s) in c.succ.iter().enumerate().rev() {
+      if let Some(s) = s {
+        s.after_raw(c.get(), at as _);
+        ret = self.sch_graph_dfs(s, vis);
+      }
     }
+    ret
   }
 
   // info不能是本函数的局部变量，否则会在本函数中析构，而codegen中仍需使用其中的数据
@@ -177,7 +181,7 @@ impl Func {
     let mut build = if let Some(ctx) = self.func_ctx.as_ref() {
       ctx.copy()?.set_from_basic_set()?.ast_build_from_context()
     } else { self.ctx.ast_build_alloc() }?;
-    let n_dim = self.comps.first().expect("no comp").sch_dim();
+    let n_dim = self.comps[0].sch_dim();
     debug_assert_eq!(n_dim % 2, 1); // 一定是 static, dynamic, ..., static的模式
     let mut iters = self.ctx.id_list_alloc(n_dim as _)?;
     for i in 0..n_dim / 2 {

@@ -82,8 +82,11 @@ impl Display for Expr {
       &Param(x) => f.write_str(x.name()),
       Cast(ty, x) => write!(f, "({})({})", ty, x),
       Unary(op, x) => write!(f, "{}({})", op, x),
-      Binary(op, box [l, r]) =>
-        if *op >= Max { write!(f, "{}({},{})", op, l, r) } else { write!(f, "({}{}{})", l, op, r) },
+      Binary(op, box [l, r]) => match *op {
+        Div => write!(f, "floord({},{})", l, r),
+        Max | Min => write!(f, "{}({},{})", op, l, r),
+        _ => write!(f, "({}{}{})", l, op, r),
+      }
       Call(x, args) => write!(f, "{}({})", x, comma_sep(args.iter())),
       Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
       Load(buf, idx) => {
@@ -107,12 +110,13 @@ impl Display for Expr {
       }
       Alloc(x) => match x.loc {
         Host | Global => write!(f, "{ty}*__restrict__ {}=({ty}*){}malloc({})", x.name, if x.loc == Global { "cuda_" } else { "" }, x.bytes(), ty = x.ty),
-        Local | Shared => write!(f, "{} {} {}[{}];", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems()),
+        Local | Shared => write!(f, "{} {} {}[{}]", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems()),
       }
       Free(x) => match x.loc {
         Host | Global => write!(f, "{}({})", if x.loc == Host { "free" } else { "cudaFree" }, x.name),
         _ => write!(f, "/*free({})*/", x.name), // 不实际执行free
       }
+      Sync => f.write_str("__syncthreads()"),
     }
   }
 }

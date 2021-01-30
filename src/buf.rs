@@ -19,30 +19,60 @@ pub struct Buf {
   pub sizes: Vec<Expr>,
 }
 
+impl_try!(&Buf);
+
 impl Func {
   // 默认loc为Host
-  pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: &[impl IntoExpr]) -> &Buf {
+  pub fn buf<E: IntoExpr>(&self, name: &str, ty: Type, kind: BufKind, sizes: impl IntoIterator<Item=E>) -> &Buf {
+    let sizes = sizes.into_iter().map(|e| e.clone_expr()).collect::<Vec<_>>();
     debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty());
-    let sizes = sizes.iter().map(|e| e.clone_expr()).collect();
     let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, sizes };
     debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
-    let ret = R::new(&*buf);
+    let ret = buf.as_ref().p();
     self.p().bufs.push(buf);
     ret.get()
   }
 }
 
 impl Buf {
-  pub fn at(&self, idx: &[impl IntoExpr]) -> Expr {
+  pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
+    let idx = idx.into_iter().map(|e| e.clone_expr()).collect::<Box<[_]>>();
     debug_assert_eq!(idx.len(), self.sizes.len());
-    Load(self.into(), idx.iter().map(|e| e.clone_expr()).collect())
+    Load(self.into(), idx)
   }
 
-  pub fn set_loc(&self, loc: BufLoc) { self.p().loc = loc; }
+  pub fn set_loc(&self, loc: BufLoc) -> &Buf {
+    self.p().loc = loc;
+    self
+  }
 
   pub fn dup(&self) -> &Buf {
     let name = format!("_{}_dup{}", self.name, self.func.new_buf_id());
     self.func.buf(&name, self.ty, self.kind, &self.sizes)
+  }
+
+  // 在comp的循环层次at的开头/结尾放置Alloc/Free；若at == -1，则是在函数的开头/结尾放置Alloc/Free
+  // 开头/结尾是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在开头/结尾
+  pub fn alloc_at(&self, comp: &Comp, at: i32) -> &Buf {
+    debug_assert!(at >= -1);
+    let mut f = comp.func;
+    let mut dom = project_static_dim(comp.schedule());
+    let (n, at) = (dom.n_dim() as u32, (at + 1) as u32);
+    dom = dom.project_out(DimType::Set, at, n - at)?;
+    debug!("alloc_at: dom = {}", dom);
+    let alloc = f.comp_raw(dom.copy()?.set_tuple_name(
+      cstr(&format!("_alloc{}_{}\0", f.new_comp_id(), self.name)))?, Alloc(self.into()));
+    let free = f.comp_raw(dom.set_tuple_name(
+      cstr(&format!("_free{}_{}\0", f.new_comp_id(), self.name)))?, Free(self.into()));
+    if at > 0 {
+      comp.root_comp(at).after_between_pred(alloc, at);
+      free.after_between_pred(comp.leaf_comp(at), at);
+    } else {
+      let alloc_idx = f.comps.len() - 2;
+      let alloc = f.comps.remove(alloc_idx);
+      f.comps.insert(0, alloc);
+    }
+    self
   }
 
   // 输出元素数
