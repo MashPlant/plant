@@ -10,3 +10,5 @@ isl = { path = "./isl-rs" }
 log = "0.4"
 env_logger = "0.8"
 ahash = { version = "*", default-features = false }
+tempfile = "3"
+libloading = "0.6"

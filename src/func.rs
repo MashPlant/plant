@@ -1,4 +1,6 @@
-use std::{io::{self, Write, BufWriter}, fs::File};
+use libloading::Library;
+use tempfile::NamedTempFile;
+use std::{io::{self, Write, BufWriter}, fs::{self, File}, path::Path, process::Command};
 use crate::*;
 
 #[derive(Debug)]
@@ -13,13 +15,15 @@ pub struct Func {
   pub comp_cnt: u32,
   // 用于命名自动生成的Buf
   pub buf_cnt: u32,
+  // codegen时是使用tempfile还是以函数名为文件名；可以作为codegen的参数，但放在这里codegen调用更方便一点
+  pub tmp: bool,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
 }
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -39,12 +43,17 @@ impl Func {
     let desc = match e {
       Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
       Binary(..) => "binary", Call(..) => "call", Access(..) => "access", Load(..) => "load",
-      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync",
+      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Opaque(..) => "opaque",
     };
     format!("_{}{}", desc, self.new_comp_id())
   }
 
   pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
+
+  pub fn set_tmp(&self, tmp: bool) -> &Func {
+    self.p().tmp = tmp;
+    self
+  }
 
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: &[Expr]) -> Unit {
@@ -80,7 +89,7 @@ impl Func {
     Unit
   }
 
-  pub fn codegen(&self, args: &[&Buf], path: &str) -> io::Result<()> {
+  pub fn codegen(&self, args: &[&Buf], backend: Backend) -> io::Result<Library> {
     for b in args { debug_assert_ne!(b.kind, BufKind::Temp); }
     self.align_schedule();
     let mut vis = HashSet::default();
@@ -101,13 +110,38 @@ impl Func {
     // 有了tag后，extract_buf才能提取信息并保存到第一个进入GPU的ForInfo中
     extract_tags(*ast, &mut Vec::new(), &mut s.info);
     extract_buf(self, *ast, &mut s);
-    let mut w = BufWriter::new(File::create(path)?);
     debug!("codegen: ast = {}", ast);
+    // path1/path2各自只在一个分支上有效，path在两个分支上分别借用它们
+    // 这样设计是因为tempfile::TempPath析构时会删掉文件，不能直接把它转化为Path，要让它在完成编译后再析构
+    let (path1, path2, path);
+    let f = if self.tmp {
+      let f = NamedTempFile::new()?.into_parts();
+      path1 = f.1;
+      path = &*path1;
+      f.0
+    } else {
+      path2 = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if backend == C { "c" } else { "cu" });
+      path = &path2;
+      File::create(&path2)?
+    };
+    let mut w = BufWriter::new(f);
     w.write_all(include_bytes!("inc.h"))?;
-    write!(w, "void {}({}){{{}}}\n", self.name,
-      comma_sep(args.iter().map(|&x| fn2display(move |f| write!(f, "{}*__restrict__ {}", x.ty, x.name)))),
+    write!(w, "void {}({}){{{}}}\n", self.name, comma_sep(args.iter().map(|&x| x.arg())),
       self.gen(ast, &s))?;
-    Ok(())
+    w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
+    let so_path = path.with_extension("so");
+    let mut cmd = Command::new(if backend == C { CC } else { NVCC });
+    match backend {
+      C => cmd.arg("-x").arg("c").arg(&path).arg("-Ofast").arg("-march=native").arg("-fopenmp"),
+      CUDA => cmd.arg("-x").arg("cu").arg(&path).arg("-O3"),
+    };
+    cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
+    debug!("codegen: cmd = {:?}", cmd);
+    let status = cmd.status()?;
+    debug_assert!(status.success());
+    let lib = Library::new(&so_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    fs::remove_file(&so_path)?;
+    Ok(lib)
   }
 }
 
@@ -269,8 +303,7 @@ impl Func {
               let mut s = s.p();
               let old_in_kern = std::mem::replace(&mut s.in_kern, true);
               if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
-                let param_buf = comma_sep(used_buf.difference(local_buf).map(|x|
-                  fn2display(move |f| write!(f, "{}*__restrict__ {}", x.ty, x.name))));
+                let param_buf = comma_sep(used_buf.difference(local_buf).map(|x| x.arg()));
                 write!(f, "{{auto _kern=[=]__device__({}){{", param_buf).ok()?;
               }
               let (sch, pos) = (comp.schedule(), (level * 2 + 1) as _);
@@ -424,7 +457,7 @@ fn extract_buf(f: &Func, node: AstNodeRef, s: &mut CodegenState) -> Unit {
 
 fn access_to_load(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {
   let s = format!("{} -> {{ {}{} -> {}[{}] }}\0", comp.params(),
-    comp.name(), i0_in(comp.n_dim()), arg.name(), comma_sep(idx.iter()));
+    comp.name(), i0_in(comp.orig_dim()), arg.name(), comma_sep(idx.iter()));
   debug!("access_to_load: {}", s);
   // 对于没有store的arg返回Param表达式，这不会影响到domain/schedule的参数，这个表达式之后只会用于输出
   let store = if let Some(x) = arg.store.as_ref() { x.copy()? } else { return arg.as_param(); };

@@ -1,4 +1,4 @@
-#![feature(box_syntax, box_patterns, try_trait, move_ref_pattern)]
+#![feature(box_syntax, box_patterns, try_trait)]
 
 #[macro_use]
 extern crate log;
@@ -21,6 +21,7 @@ use std::fmt::{*, Result as FmtResult};
 pub use expr::{Type::*, Expr::*};
 pub use comp::DimTag::*;
 pub use buf::{BufKind::*, BufLoc::*};
+pub use Backend::*;
 
 pub type HashMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<ahash::AHasher>>;
 pub type HashSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<ahash::AHasher>>;
@@ -38,6 +39,7 @@ pub fn init_log() {
 pub struct Unit;
 impl_try!(Unit);
 
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Backend { C, CUDA }
 
 pub const CC: &str = "clang";

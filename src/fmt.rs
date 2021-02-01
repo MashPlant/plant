@@ -87,7 +87,7 @@ impl Display for Expr {
         Max | Min => write!(f, "{}({},{})", op, l, r),
         _ => write!(f, "({}{}{})", l, op, r),
       }
-      Call(x, args) => write!(f, "{}({})", x, comma_sep(args.iter())),
+      Call(x) => write!(f, "{}({})", x.name, comma_sep(x.args.iter())),
       Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
       Load(buf, idx) => {
         let first = idx.first().expect("empty index");
@@ -117,6 +117,7 @@ impl Display for Expr {
         _ => write!(f, "/*free({})*/", x.name), // 不实际执行free
       }
       Sync => f.write_str("__syncthreads()"),
+      Opaque(_, x) => f.write_str(x),
     }
   }
 }

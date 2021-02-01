@@ -24,7 +24,7 @@ impl_try!(&Buf);
 impl Func {
   // 默认loc为Host
   pub fn buf<E: IntoExpr>(&self, name: &str, ty: Type, kind: BufKind, sizes: impl IntoIterator<Item=E>) -> &Buf {
-    let sizes = sizes.into_iter().map(|e| e.clone_expr()).collect::<Vec<_>>();
+    let sizes = sizes.into_iter().map(|e| e.expr()).collect::<Vec<_>>();
     debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty());
     let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, sizes };
     debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
@@ -36,7 +36,7 @@ impl Func {
 
 impl Buf {
   pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
-    let idx = idx.into_iter().map(|e| e.clone_expr()).collect::<Box<[_]>>();
+    let idx = idx.into_iter().map(|e| e.expr()).collect::<Box<[_]>>();
     debug_assert_eq!(idx.len(), self.sizes.len());
     Load(self.into(), idx)
   }
@@ -46,33 +46,67 @@ impl Buf {
     self
   }
 
-  pub fn dup(&self) -> &Buf {
-    let name = format!("_{}_dup{}", self.name, self.func.new_buf_id());
+  pub fn clone(&self) -> &Buf {
+    let name = format!("_{}_clone{}", self.name, self.func.new_buf_id());
     self.func.buf(&name, self.ty, self.kind, &self.sizes)
   }
 
-  // 在comp的循环层次at的开头/结尾放置Alloc/Free；若at == -1，则是在函数的开头/结尾放置Alloc/Free
-  // 开头/结尾是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在开头/结尾
-  pub fn alloc_at(&self, comp: &Comp, at: i32) -> &Buf {
-    debug_assert!(at >= -1);
-    let mut f = comp.func;
+  // 在comp的循环层次at的开头/结尾放置Alloc/Free
+  // 开头/结尾是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在开头/结尾，alloc_at_func同理
+  pub fn alloc_at(&self, comp: &Comp, at: u32) -> &Buf {
+    debug_assert!(at < comp.loop_dim());
     let mut dom = project_static_dim(comp.schedule());
-    let (n, at) = (dom.n_dim() as u32, (at + 1) as u32);
+    let (n, at) = (dom.n_dim() as u32, at + 1);
     dom = dom.project_out(DimType::Set, at, n - at)?;
-    debug!("alloc_at: dom = {}", dom);
+    let (alloc, free) = self.mk_alloc(dom)?;
+    comp.root_comp(at).after_between_pred(alloc, at);
+    free.after_between_pred(comp.leaf_comp(at), at);
+    self
+  }
+
+  // 在函数的开头/结尾放置Alloc/Free
+  pub fn alloc_at_func(&self) -> &Buf {
+    let mut f = self.func;
+    self.mk_alloc(f.ctx.space_set_alloc(0, 0)?.set_universe()?)?;
+    let idx = f.comps.len() - 2;
+    let c = f.comps.remove(idx);
+    f.comps.insert(0, c);
+    self
+  }
+
+  fn mk_alloc(&self, dom: Set) -> Option<(&Comp, &Comp)> {
+    debug!("mk_alloc: dom = {}", dom);
+    let f = self.func;
     let alloc = f.comp_raw(dom.copy()?.set_tuple_name(
       cstr(&format!("_alloc{}_{}\0", f.new_comp_id(), self.name)))?, Alloc(self.into()));
     let free = f.comp_raw(dom.set_tuple_name(
       cstr(&format!("_free{}_{}\0", f.new_comp_id(), self.name)))?, Free(self.into()));
-    if at > 0 {
-      comp.root_comp(at).after_between_pred(alloc, at);
-      free.after_between_pred(comp.leaf_comp(at), at);
-    } else {
-      let alloc_idx = f.comps.len() - 2;
-      let alloc = f.comps.remove(alloc_idx);
-      f.comps.insert(0, alloc);
+    Some((alloc.p().get(), free.p().get()))
+  }
+
+  // 返回host Buf
+  pub fn auto_transfer(&self) -> &Buf {
+    debug_assert_ne!(self.kind, Temp);
+    let host = self.clone().p();
+    self.set_loc(BufLoc::Global);
+    let mut f = self.func;
+    let dom = f.ctx.space_set_alloc(0, 0)?.set_universe()?.set_tuple_name(
+      cstr(&format!("_memcpy{}_{}\0", f.new_comp_id(), self.name)))?;
+    f.comp_raw(dom, if self.kind == In { Memcpy(self.into(), host) } else { Memcpy(host, self.into()) });
+    if self.kind == In {
+      let idx = f.comps.len() - 1;
+      let c = f.comps.remove(idx);
+      f.comps.insert(0, c);
     }
-    self
+    self.alloc_at_func();
+    host.get()
+  }
+
+  // 输出本Buf作为函数参数的形式，要求kind必须是In或Out
+  pub fn arg<'a>(&'a self) -> impl Display + 'a {
+    debug_assert_ne!(self.kind, Temp);
+    fn2display(move |f| write!(f, "{}{}*__restrict__ {}",
+      if self.kind == In { "const " } else { "" }, self.ty, self.name))
   }
 
   // 输出元素数

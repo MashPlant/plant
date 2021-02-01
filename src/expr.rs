@@ -23,16 +23,31 @@ pub enum Expr {
   Cast(Type, Box<Expr>),
   Unary(UnOp, Box<Expr>),
   Binary(BinOp, Box<[Expr; 2]>),
-  Call(Box<str>, Box<[Expr]>),
+  // 用Box包一层以减小整个enum的大小
+  Call(Box<Call>),
   Access(P<Comp>, Box<[Expr]>),
   Load(P<Buf>, Box<[Expr]>),
   Memcpy(P<Buf>, P<Buf>),
   Alloc(P<Buf>),
   Free(P<Buf>),
   Sync,
+  // 一段直接用于输出的字符串，不考虑它的内部结构
+  Opaque(Type, R<str>),
 }
 
 impl_try!(Expr);
+
+#[derive(Debug, Clone)]
+pub struct Call {
+  pub ret: Type,
+  pub name: R<str>,
+  pub args: Box<[Expr]>,
+}
+
+pub fn call<E: IntoExpr>(ret: Type, name: &str, args: impl IntoIterator<Item=E>) -> Expr {
+  let args = args.into_iter().map(|e| e.expr()).collect();
+  Call(box Call { ret, name: name.into(), args })
+}
 
 // 可用于Func::comp，Comp::at等接受impl Expr的slice的函数，直接传&[]会报错无法推断类型
 pub const EMPTY: &[Expr] = &[];
@@ -56,7 +71,7 @@ impl Expr {
   pub fn ty(&self) -> Type {
     use BinOp::*;
     match self {
-      &Val(ty, _) | &Iter(ty, _) | &Cast(ty, _) => ty,
+      &Val(ty, _) | &Iter(ty, _) | &Cast(ty, _) | &Call(box Call { ret: ty, .. }) | &Opaque(ty, _) => ty,
       Param(comp) | Access(comp, _) => comp.expr.ty(),
       Unary(_, x) => x.ty(),
       Binary(op, box [l, r]) => if (Add <= *op && *op <= Rem) || (Max <= *op && *op <= Min) {
@@ -66,7 +81,7 @@ impl Expr {
         l.ty().max(r.ty())
       } else { I32 }
       Load(buf, _) => buf.ty,
-      Call(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync => Void,
+      Memcpy(..) | Alloc(..) | Free(..) | Sync => Void,
     }
   }
 
@@ -78,8 +93,8 @@ impl Expr {
     match self {
       Unary(_, x) | Cast(_, x) => std::slice::from_ref(x),
       Binary(_, lr) => lr.as_ref(),
-      Call(_, args) | Access(_, args) | Load(_, args) => args,
-      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync => &[],
+      Call(box Call { args, .. }) | Access(_, args) | Load(_, args) => args,
+      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync | Opaque(..) => &[],
     }
   }
 
@@ -151,8 +166,6 @@ macro_rules! impl_other {
 
 pub trait IntoExpr: Sized + Clone {
   fn expr(self) -> Expr;
-
-  fn clone_expr(&self) -> Expr { self.clone().expr() }
 
   // max_，min_是为了和std::cmp::Ord::max做出区分
   impl_other!(LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt, Max max_, Min min_);

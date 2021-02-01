@@ -58,7 +58,7 @@ impl<E1: IntoExpr> CompBuilder for E1 {
 impl Func {
   pub fn comp<E1: IntoExpr, E2: IntoExpr>(&self, name: &str, ranges: &[(E1, E2)], expr: impl IntoExpr) -> &Comp {
     // 很多时候调用方可以提供&[(Expr, Expr)]，这里的拷贝是多余的，但这点浪费可以忽略
-    let ranges = ranges.into_iter().map(|(lb, ub)| (lb.clone_expr(), ub.clone_expr())).collect::<Vec<_>>();
+    let ranges = ranges.iter().map(|(lb, ub)| (lb.clone().expr(), ub.clone().expr())).collect::<Vec<_>>();
     let expr = expr.expr();
     let mut params = HashSet::default();
     // 收集ranges，expr中的所有Param
@@ -82,6 +82,7 @@ impl Func {
     debug!("comp_raw: initial identity schedule = {}", schedule);
     let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, schedule, store: None, pred: None, succ: Vec::new(), dim_tags: Vec::new() };
     debug_assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
+    if cfg!(debug_assertions) { comp.check_iter(&comp.expr); }
     let ret = comp.as_ref().p();
     self.p().comps.push(comp);
     ret.get()
@@ -94,9 +95,12 @@ impl Comp {
 
   pub fn name_cstr(&self) -> Option<CStr> { self.schedule.get_tuple_name(DimType::In) }
 
-  pub fn n_dim(&self) -> u32 { self.schedule.dim(DimType::In) as _ }
+  pub fn orig_dim(&self) -> u32 { self.schedule.dim(DimType::In) as _ }
 
   pub fn sch_dim(&self) -> u32 { self.schedule.dim(DimType::Out) as _ }
+
+  // 调度后的循环层数
+  pub fn loop_dim(&self) -> u32 { self.sch_dim() / 2 }
 
   // 表示原始循环迭代范围的Set
   pub fn domain(&self) -> Set { self.schedule.copy()?.domain()? }
@@ -124,14 +128,14 @@ impl Comp {
   pub fn as_param(&self) -> Expr { Param(self.into()) }
 
   pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
-    let idx = idx.into_iter().map(|e| e.clone_expr()).collect::<Box<[_]>>();
-    debug_assert_eq!(idx.len() as u32, self.n_dim());
+    let idx = idx.into_iter().map(|e| e.expr()).collect::<Box<[_]>>();
+    debug_assert_eq!(idx.len() as u32, self.orig_dim());
     Access(self.into(), idx)
   }
 
   pub fn at_inline<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
-    let idx = idx.into_iter().map(|e| e.clone_expr()).collect::<Vec<_>>();
-    debug_assert_eq!(idx.len() as u32, self.n_dim());
+    let idx = idx.into_iter().map(|e| e.expr()).collect::<Vec<_>>();
+    debug_assert_eq!(idx.len() as u32, self.orig_dim());
     let mut expr = self.expr.clone();
     expr.visit_mut(&mut |e| if let Iter(_, x) = &e { *e = idx[*x as usize].clone(); });
     expr
@@ -157,6 +161,7 @@ impl Comp {
   }
 
   pub fn split(&self, i: u32, factor: u32) -> &Comp {
+    debug_assert!(i < self.loop_dim());
     let (n, i) = (self.sch_dim(), i * 2 + 1);
     let s = format!("{{ {} -> [{}]: i{i0} = floor(i{i} / {f}) and i{i1} = i{i} % {f} }}\0", i0_in(n),
       comma_sep((0..n + 2).map(|x| fn2display(move |f|
@@ -176,6 +181,14 @@ impl Comp {
   // 对于map中每个元素(old, new)，将循环层次old用new代替
   // 用户须保证map是一一映射，即old不重复，new不重复，且old构成的集合与new构成的集合相等
   pub fn reorder_n(&self, map: &[(u32, u32)]) -> &Comp {
+    if cfg!(debug_assertions) { // 非debug模式下整个块不执行，只用debug_assert编译器可能没法优化掉下面的东西
+      let (mut old, mut new) = (HashSet::default(), HashSet::default());
+      for &(o, n) in map {
+        assert!(o < self.loop_dim() && n < self.loop_dim());
+        assert!(old.insert(o) && new.insert(n)); // 不重复
+      }
+      assert_eq!(old, new);
+    }
     let n = self.sch_dim();
     let s = format!("{{ {} -> [{}] }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
@@ -188,6 +201,7 @@ impl Comp {
 
   pub fn skew(&self, i: u32, j: u32, factor: u32) -> &Comp {
     debug_assert!(i < j);
+    debug_assert!(i < self.loop_dim() && j < self.loop_dim());
     let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
     let s = format!("{{ {} -> [{}]: i{j1} = {f} * i{i} + i{j} }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
@@ -198,6 +212,7 @@ impl Comp {
   }
 
   pub fn shift(&self, i: u32, n: i32) -> &Comp {
+    debug_assert!(i < self.loop_dim());
     // 设置i_out = i_in + n
     self.schedule.write(map_set_eq(self.schedule.read(), i * 2 + 1, -1, n));
     debug!("shift: {}", self.schedule);
@@ -205,6 +220,7 @@ impl Comp {
   }
 
   pub fn separate(&self, i: u32, factor: u32) -> Option<&Comp> {
+    debug_assert!(i < self.loop_dim());
     let Bound(zero, min, max) = self.extract_bound(i);
     let (n, pos) = (self.sch_dim(), i * 2 + 1);
     let factor = self.ctx.val_int_from_ui(factor as _)?;
@@ -215,16 +231,16 @@ impl Comp {
     // pw_aff_tdiv_q是r >= 0 ? pw_aff_floor(pw_aff_div(l, r)) : pw_aff_ceil(pw_aff_div(l, r))
     // 这里假定max - min >= 0成立，直接调用pw_aff_floor和pw_aff_scale_down_val即可
     let sep = min.copy()?.add(max.sub(min)?.scale_down_val(factor.copy()?)?.floor()?.scale_val(factor)?)?;
-    debug!("separate: sep = {}", sep);
+    debug!("separate: sep expr = {}", sep);
     let ge = self.schedule.copy()?.intersect_range(i_aff.copy()?.ge_set(sep.copy()?)?
       .add_dims(DimType::Out, n - pos - 1)?)?;
     // 被separate出去的计算迭代域是空集则不生成Comp
     if ge.is_empty()? {
-      debug!("separate: dup comp has empty domain");
+      debug!("separate: sep comp has empty domain");
       return None;
     }
     let name = format!("_{}_sep{}\0", self.name(), self.func.new_comp_id());
-    let dup = box Comp {
+    let c = box Comp {
       ctx: self.ctx,
       func: self.func,
       expr: self.expr.clone(),
@@ -235,18 +251,19 @@ impl Comp {
       dim_tags: self.dim_tags.clone(),
     };
     // 上面的所有操作都只修改局部变量(修改Func::comp_cnt可以接受)，因此错误可以恢复，从这里开始的错误不能恢复
-    dup.after(self, i);
+    c.after(self, i);
     self.schedule.write(self.schedule.read().intersect_range(i_aff.lt_set(sep).unwrap()
       .add_dims(DimType::Out, n - pos - 1).unwrap()).unwrap());
-    debug!("separate: created dup comp {}, sch = {}", dup.name(), dup.schedule);
-    let ret = dup.as_ref().p();
-    self.p().func.comps.push(dup);
+    debug!("separate: created sep comp {}, sch = {}", c.name(), c.schedule);
+    let ret = c.as_ref().p();
+    self.p().func.comps.push(c);
     Some(ret.get())
   }
 
   // 将循环层次i和i + 1合并成一个循环
   // 循环i + 1的static dim被丢弃；after，tag之类的都不会特殊处理，调用fuse前应保证它们不存在
   pub fn fuse(&self, i: u32) -> &Comp {
+    debug_assert!(i < self.loop_dim());
     // min1 <= i1 < max1, min2 <= i2 < max2, 令j = (i1 - min1) * (max2 - min2) + (i2 - min2)
     // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2 (这由ISL自己推导)
     let Bound(_, min1, _) = self.extract_bound(i);
@@ -276,6 +293,7 @@ impl Comp {
 
   // 提取循环层次i的迭代范围，Bound的意义见Bound自身的注释
   pub fn extract_bound(&self, i: u32) -> Bound {
+    debug_assert!(i < self.loop_dim());
     let (n, pos) = (self.sch_dim(), i * 2 + 1);
     // 通过投影去掉i之后的维度，用i前面的维度表示i的上下界
     let dom = self.schedule().project_out(DimType::Set, pos + 1, n - pos - 1)?;
@@ -339,7 +357,7 @@ impl Separate for Vec<&Comp> {
 
 pub struct CacheCfg {
   pub size: u32,
-  pub pad: bool,
+  pub pad: u32,
   pub dst: Expr,
   pub src: Expr,
   pub access: Expr,
@@ -347,7 +365,7 @@ pub struct CacheCfg {
 
 pub struct CacheCfg2 {
   pub size: u32,
-  pub pad: bool,
+  pub pad: u32,
   pub offset: Expr,
 }
 
@@ -356,6 +374,7 @@ impl Comp {
   // 例如for (i) { for (j) { C1 }  C2 }，如果tag_dim(i, GPUBlockX)，tag_dim(j, GPUThreadX)
   // 生成的kernel会执行C1和C2，等价于for (i) { for (j) { C1 C2 } }，语义是错误的
   pub fn tag_dim(&self, at: u32, tag: DimTag) -> &Comp {
+    debug_assert!(at < self.loop_dim());
     let at = at as usize;
     let dim_tags = &mut self.p().dim_tags;
     if dim_tags.len() <= at { dim_tags.resize(at + 1, None); }
@@ -371,22 +390,37 @@ impl Comp {
     self
   }
 
+  // 检查e的孩子中Iter(x)的x都小于loop_dim
+  pub fn check_iter(&self, e: &Expr) {
+    e.visit(&mut move |e| if let &Iter(_, x) = e { assert!(x < self.loop_dim()); })
+  }
+
   pub fn store_at<E: IntoExpr, I: Iterator<Item=E> + Clone>(&self, buf: &Buf, idx: impl IntoIterator<Item=E, IntoIter=I>) -> &Comp {
-    let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.n_dim()),
-      buf.name, comma_sep(idx.into_iter().map(|e| e.clone_expr())));
+    let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.orig_dim()),
+      buf.name, comma_sep(idx.into_iter().map(|e| {
+        let e = e.expr();
+        if cfg!(debug_assertions) { self.check_iter(&e); }
+        e
+      })));
     debug!("store_at: {}", s);
     self.p().store = Some(self.ctx.map_read_from_str(cstr(&s))?);
     self
   }
 
+  // todo: comment
   // 会将self.expr中所有对src的访问下标都替换成cfg.access的列表，不管原来的下标是什么；若原来有src[i][j]和src[j][i]，会导致错误的结果
   pub fn cache(&self, src: &Buf, at: u32, threads: u32, cfg: &[CacheCfg]) -> &Buf {
     debug_assert_eq!(src.sizes.len(), cfg.len());
+    debug_assert!(at < self.loop_dim());
+    if cfg!(debug_assertions) {
+      // dst和src不必满足self的迭代域，copy的comp_raw和store_at中会检查
+      for c in cfg { self.check_iter(&c.access); }
+    }
     let (f, src) = (self.func, src.p());
     let at = at + 1;
     let name = format!("_cache{}_{}\0", f.new_buf_id(), src.name);
     let buf = f.buf(&name[..name.len() - 1], src.ty, Temp,
-      cfg.iter().map(|c| c.size + c.pad as u32));
+      cfg.iter().map(|c| c.size + c.pad));
     let elems = cfg.iter().map(|c| c.size).product::<u32>();
     let mut dom = project_static_dim(self.schedule());
     let n = dom.n_dim() as u32;
@@ -420,12 +454,11 @@ impl Comp {
     buf.p().get()
   }
 
-  pub fn cache_identity(&self, src: &Buf, at: u32, threads: &[(u32, u32)], cfg2: &[CacheCfg2]) -> &Buf {
+  pub fn cache_identity(&self, src: &Buf, at: u32, threads: &[(u32, u32)], cfg2: Vec<CacheCfg2>) -> &Buf {
     debug_assert_eq!(src.sizes.len(), cfg2.len());
     let mut idx = self.func.iter(at + 1);
     for &(th, range) in threads { idx = idx * range + self.func.iter(th); }
-    debug!("cache_identity: idx = {}", idx);
-    let mut cfg = Vec::with_capacity(cfg2.len());
+    debug!("cache_identity: copy idx = {}", idx);
     let mut extent = cfg2.iter().map(|c| c.size).product::<u32>();
     let mut orig = Vec::new();
     self.expr.visit(&mut |e| match e {
@@ -435,11 +468,13 @@ impl Comp {
       }
       _ => {}
     });
-    for (CacheCfg2 { size, pad, offset }, orig) in cfg2.iter().zip(orig.into_iter()) {
-      extent /= *size;
-      let idx = (&idx / extent) % *size;
+    debug!("cache_identity: orig idx = {}", comma_sep(orig.iter()));
+    let mut cfg = Vec::with_capacity(cfg2.len());
+    for (CacheCfg2 { size, pad, offset }, orig) in cfg2.into_iter().zip(orig.into_iter()) {
+      extent /= size;
+      let idx = (&idx / extent) % size;
       debug!("cache_identity: dst = {}", idx);
-      cfg.push(CacheCfg { size: *size, pad: *pad, dst: idx.clone(), src: idx + offset, access: orig % *size });
+      cfg.push(CacheCfg { size, pad, dst: idx.clone(), src: idx + offset, access: orig % size });
     }
     let threads = threads.iter().map(|x| x.1).product();
     self.cache(src, at, threads, &cfg)
@@ -453,6 +488,7 @@ impl Comp {
   pub fn after<'a>(&self, other: &'a Comp, at: u32) -> &'a Comp {
     debug!("after: setting {} after {}", self.name(), other.name());
     debug_assert!(self.pred.is_none());
+    debug_assert!(at <= self.loop_dim() && at <= other.loop_dim());
     let (mut this, mut other, at) = (self.p(), other.p(), at as usize);
     this.pred = Some(other);
     if other.succ.len() <= at { other.succ.resize(at + 1, None); }
