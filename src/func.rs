@@ -15,15 +15,18 @@ pub struct Func {
   pub comp_cnt: u32,
   // 用于命名自动生成的Buf
   pub buf_cnt: u32,
-  // codegen时是使用tempfile还是以函数名为文件名；可以作为codegen的参数，但放在这里codegen调用更方便一点
+  // tmp为true时，codegen使用tempfile为文件名；否则以函数名为文件名
+  // 理论上tmp和backend都可以作为codegen的参数，但放在这里codegen调用更方便一点
   pub tmp: bool,
+  pub backend: Backend,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
 }
 
 impl Func {
+  // 默认tmp为false，backend为C
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, backend: C, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -50,10 +53,8 @@ impl Func {
 
   pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
 
-  pub fn set_tmp(&self, tmp: bool) -> &Func {
-    self.p().tmp = tmp;
-    self
-  }
+  impl_setter!(set_tmp tmp bool);
+  impl_setter!(set_backend backend Backend);
 
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: &[Expr]) -> Unit {
@@ -89,7 +90,7 @@ impl Func {
     Unit
   }
 
-  pub fn codegen(&self, args: &[&Buf], backend: Backend) -> io::Result<Library> {
+  pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Library> {
     for b in args { debug_assert_ne!(b.kind, BufKind::Temp); }
     self.align_schedule();
     let mut vis = HashSet::default();
@@ -111,27 +112,26 @@ impl Func {
     extract_tags(*ast, &mut Vec::new(), &mut s.info);
     extract_buf(self, *ast, &mut s);
     debug!("codegen: ast = {}", ast);
-    // path1/path2各自只在一个分支上有效，path在两个分支上分别借用它们
-    // 这样设计是因为tempfile::TempPath析构时会删掉文件，不能直接把它转化为Path，要让它在完成编译后再析构
-    let (path1, path2, path);
-    let f = if self.tmp {
-      let f = NamedTempFile::new()?.into_parts();
-      path1 = f.1;
-      path = &*path1;
-      f.0
+    let b = self.backend;
+    let (f, path) = if self.tmp {
+      let (f, path) = NamedTempFile::new()?.into_parts();
+      (f, path.keep()?)
     } else {
-      path2 = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if backend == C { "c" } else { "cu" });
-      path = &path2;
-      File::create(&path2)?
+      let path = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if b == C { "c" } else { "cu" });
+      (File::create(&path)?, path)
     };
     let mut w = BufWriter::new(f);
     w.write_all(include_bytes!("inc.h"))?;
-    write!(w, "void {}({}){{{}}}\n", self.name, comma_sep(args.iter().map(|&x| x.arg())),
-      self.gen(ast, &s))?;
+    // 除了生成名为{self.name}和{self.name}_wrapper的两个函数
+    // wrapper函数接受void **p，从p[0], p[2], p[4], ...位置处读出实际函数的参数，以此调用实际函数
+    write!(w, "void {f}({}){{{}}}\
+      void {f}_wrapper(void**p){{{f}({});}}\n", comma_sep(args.iter().map(|x| x.arg())), self.gen(ast, &s),
+      comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 2 * i)))),
+      f = self.name)?;
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
     let so_path = path.with_extension("so");
-    let mut cmd = Command::new(if backend == C { CC } else { NVCC });
-    match backend {
+    let mut cmd = Command::new(if b == C { CC } else { NVCC });
+    match b {
       C => cmd.arg("-x").arg("c").arg(&path).arg("-Ofast").arg("-march=native").arg("-fopenmp"),
       CUDA => cmd.arg("-x").arg("cu").arg(&path).arg("-O3"),
     };
@@ -140,7 +140,8 @@ impl Func {
     let status = cmd.status()?;
     debug_assert!(status.success());
     let lib = Library::new(&so_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    fs::remove_file(&so_path)?;
+    if self.tmp { fs::remove_file(path)?; }
+    fs::remove_file(so_path)?;
     Ok(lib)
   }
 }

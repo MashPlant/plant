@@ -116,10 +116,7 @@ impl Comp {
       .map(|i| self.schedule.get_dim_name(DimType::Param, i).unwrap()))))
   }
 
-  pub fn set_expr(&self, expr: Expr) -> &Comp {
-    self.p().expr = expr;
-    self
-  }
+  impl_setter!(set_expr expr Expr);
 
   // 将自身作为一个Param表达式，Expr中直接通过它的名字使用它
   // 当且仅当它没有store的时候，生成的代码会在计算发生的地方定义一个对应名字的局部变量，所以它必须没有store

@@ -4,6 +4,13 @@ use crate::*;
 pub enum Type { I8, U8, I16, U16, I32, U32, I64, U64, F32, F64, Void }
 
 impl Type {
+  pub fn size(self) -> usize {
+    match self {
+      I8 | U8 => 1, I16 | U16 => 2,
+      I32 | U32 | F32 => 4, I64 | U64 | Void | F64 => 8, // Void应该是不可能的
+    }
+  }
+
   // 将Expr::Val中的值转化为i64
   pub fn val_i64(self, x: u64) -> i64 {
     match self {

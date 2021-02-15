@@ -1,4 +1,4 @@
-use std::{ptr::*, alloc::*, mem::*, ops::*, slice};
+use std::{ptr::*, alloc::{self, Layout}, mem::*, ops::*, slice};
 use crate::*;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -25,7 +25,7 @@ impl Func {
   // 默认loc为Host
   pub fn buf<E: IntoExpr>(&self, name: &str, ty: Type, kind: BufKind, sizes: impl IntoIterator<Item=E>) -> &Buf {
     let sizes = sizes.into_iter().map(|e| e.expr()).collect::<Vec<_>>();
-    debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty());
+    debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty() && ty != Void);
     let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, sizes };
     debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
     let ret = buf.as_ref().p();
@@ -41,10 +41,7 @@ impl Buf {
     Load(self.into(), idx)
   }
 
-  pub fn set_loc(&self, loc: BufLoc) -> &Buf {
-    self.p().loc = loc;
-    self
-  }
+  impl_setter!(set_loc loc BufLoc);
 
   pub fn clone(&self) -> &Buf {
     let name = format!("_{}_clone{}", self.name, self.func.new_buf_id());
@@ -133,28 +130,33 @@ pub struct Slice<T, D: Dims> {
   pub dim: D,
 }
 
+pub(crate) fn alloc<T>(size: usize) -> NonNull<T> {
+  unsafe { NonNull::new(alloc::alloc(Layout::from_size_align_unchecked(size, 32)) as _).expect("failed to alloc") }
+}
+
+pub(crate) fn alloc_zeroed<T>(size: usize) -> NonNull<T> {
+  unsafe { NonNull::new(alloc::alloc_zeroed(Layout::from_size_align_unchecked(size, 32)) as _).expect("failed to alloc") }
+}
+
+pub(crate) fn dealloc(p: *mut u8, size: usize) {
+  unsafe { alloc::dealloc(p, Layout::from_size_align_unchecked(size, 32)) }
+}
+
 impl<T, D: Dims> Array<T, D> {
   // 不初始化元素
   pub fn new(dim: D) -> Array<T, D> {
-    unsafe {
-      let ptr = alloc(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 32));
-      Array { ptr: NonNull::new(ptr as _).expect("failed to alloc"), dim }
-    }
+    Array { ptr: alloc(dim.total() * size_of::<T>()), dim }
   }
 
   // 所有元素初始化为逐字节全0
   pub fn zeroed(dim: D) -> Array<T, D> {
-    unsafe {
-      let ptr = alloc_zeroed(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 32));
-      debug_assert!(!ptr.is_null());
-      Array { ptr: NonNull::new(ptr as _).expect("failed to alloc"), dim }
-    }
+    Array { ptr: alloc_zeroed(dim.total() * size_of::<T>()), dim }
   }
 }
 
 impl<T, D: Dims> Drop for Array<T, D> {
   fn drop(&mut self) {
-    unsafe { dealloc(self.ptr() as _, Layout::from_size_align_unchecked(self.dim.total() * size_of::<T>(), 32)); }
+    dealloc(self.ptr() as _, self.dim.total() * size_of::<T>())
   }
 }
 
