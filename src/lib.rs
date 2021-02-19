@@ -1,4 +1,4 @@
-#![feature(box_syntax, box_patterns, try_trait)]
+#![feature(box_syntax, box_patterns, try_trait, bindings_after_at)]
 
 #[macro_use]
 extern crate log;
@@ -18,6 +18,7 @@ pub mod buf;
 pub mod func;
 pub mod fmt;
 pub mod tuner;
+pub mod feature;
 
 pub use expr::*;
 pub use comp::*;
@@ -25,6 +26,7 @@ pub use buf::*;
 pub use func::*;
 pub use fmt::*;
 pub use tuner::*;
+pub use feature::*;
 
 use ptr::*;
 use isl::*;
@@ -33,7 +35,8 @@ pub use expr::{Type::*, Expr::*};
 pub use comp::DimTag::*;
 pub use buf::{BufKind::*, BufLoc::*};
 pub use Backend::*;
-pub use tuner::TunerPolicy::*;
+pub use tuner::{Loss::*, TunerPolicy::*};
+pub use feature::Feature::*;
 
 pub type HashMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<ahash::AHasher>>;
 pub type HashSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<ahash::AHasher>>;

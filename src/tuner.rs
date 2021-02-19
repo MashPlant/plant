@@ -20,18 +20,31 @@ impl XorShiftRng {
 
   // 返回0.0~1.0间的浮点数
   pub fn gen_f32(&self) -> f32 {
-    const INV_U32_MAX: f32 = 1.0 / u32::MAX as f32;
-    self.gen() as u32 as f32 * INV_U32_MAX
+    self.gen() as u32 as f32 * (1.0 / u32::MAX as f32)
+  }
+
+  pub unsafe fn fill(&self, ty: Type, p: *mut u8) {
+    let x = self.gen();
+    match ty {
+      I8 | U8 => *p = x as _, I16 | U16 => *(p as *mut u16) = x as _,
+      I32 | U32 => *(p as *mut u32) = x as _, I64 | U64 | Void => *(p as *mut u64) = x as _, // Void应该是不可能的
+      F32 => *(p as *mut f32) = x as u32 as f32 * (1.0 / u32::MAX as f32), F64 => *(p as *mut f64) = x as f64 * (1.0 / u64::MAX as f64),
+    }
   }
 }
 
-// 搜索空间，每个元素表示选项的名字和选项的可能取值
-#[derive(Debug, Clone)]
-pub struct ConfigSpace(pub Vec<(R<str>, Box<[u32]>)>);
+pub struct ConfigSpace {
+  // 搜索空间，每个元素表示选项的名字和选项的可能取值
+  pub space: Vec<(R<str>, Box<[u32]>)>,
+  // 返回的Vec<P<Buf>>表示函数参数
+  pub template: Box<dyn Fn(&ConfigEntity) -> (Vec<P<Buf>>, Box<Func>) + std::marker::Sync>,
+}
 
 impl ConfigSpace {
   // 返回Box<Self>是因为很多地方需要保存它的地址，ConfigSpace不能被移动
-  pub fn new() -> Box<Self> { box ConfigSpace(Vec::new()) }
+  pub fn new(template: impl Fn(&ConfigEntity) -> (Vec<P<Buf>>, Box<Func>) + std::marker::Sync + 'static) -> Box<Self> {
+    box ConfigSpace { space: Vec::new(), template: box template }
+  }
 
   // 搜索空间大小，即每个选项的可能取值数的积
   pub fn size(&self) -> u64 {
@@ -77,13 +90,19 @@ impl ConfigSpace {
   }
 }
 
+impl Debug for ConfigSpace {
+  fn fmt(&self, f: &mut Formatter) -> FmtResult {
+    f.debug_tuple("ConfigSpace").field(&self.space).finish()
+  }
+}
+
 impl Deref for ConfigSpace {
   type Target = Vec<(R<str>, Box<[u32]>)>;
-  fn deref(&self) -> &Self::Target { &self.0 }
+  fn deref(&self) -> &Self::Target { &self.space }
 }
 
 impl DerefMut for ConfigSpace {
-  fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
+  fn deref_mut(&mut self) -> &mut Self::Target { &mut self.space }
 }
 
 // 搜索空间上一组具体的取值
@@ -114,8 +133,6 @@ impl Display for ConfigEntity {
 
 pub struct Tuner {
   pub space: Box<ConfigSpace>,
-  // 返回的Vec<P<Buf>>表示函数参数
-  pub template: Box<dyn Fn(&ConfigEntity) -> (Vec<P<Buf>>, Box<Func>) + std::marker::Sync>,
   // 一次性编译运行batch_size个函数；编译是并行的(利用pool)，运行是串行的(因为需要计时)
   pub batch_size: u32,
   // 计时重复n_repeat次
@@ -130,6 +147,8 @@ pub struct Tuner {
   pub best: (ConfigEntity, Duration),
   pub pool: Pool,
   // 理论上libs只是Tuner::eval中的局部变量，放在这里只是为了避免重复申请内存
+  // Symbol的生命周期参数表示它来自的Library的生命周期，这里是.1借用.0，没法提供这个参数，就用'static
+  // 实际上Symbol不持有指向Library的引用，且它们只会一起使用，所以这是安全的
   pub libs: Vec<(Library, Symbol<'static, fn(*const *mut u8)>)>,
 }
 
@@ -141,13 +160,12 @@ pub enum TunerPolicy {
 }
 
 impl Tuner {
-  pub fn new(space: Box<ConfigSpace>, policy: TunerPolicy, template: impl Fn(&ConfigEntity) -> (Vec<P<Buf>>, Box<Func>) + std::marker::Sync + 'static) -> Tuner {
+  pub fn new(space: Box<ConfigSpace>, policy: TunerPolicy) -> Tuner {
     const DEFAULT_BATCH: u32 = 16;
     // !0即无符号全1，相当于无穷大的耗时
     let best = (ConfigEntity { space: space.as_ref().r(), choices: <_>::default() }, Duration::from_secs(!0));
     Tuner {
       space,
-      template: box template,
       batch_size: DEFAULT_BATCH,
       n_repeat: 3,
       timeout: Duration::from_secs(1),
@@ -218,7 +236,7 @@ impl Tuner {
           xgb.next_batch(&mut batch, n);
           let cost = &mut cost[..n as usize];
           self.eval(&batch, Some(cost));
-          xgb.update(&batch, cost);
+          xgb.update(&batch, cost, &mut self.p().pool);
           batch.clear();
         }
       }
@@ -229,23 +247,24 @@ impl Tuner {
   pub fn eval(&self, batch: &[ConfigEntity], mut cost: Option<&mut [f32]>) {
     if let Some(cost) = cost.as_ref() { debug_assert_eq!(cost.len(), batch.len()); }
     let data = self.p().data.get_or_insert_with(|| {
-      (self.template)(&batch[0]).0.iter().map(|b| {
-        let mut size = b.ty.size();
+      let rng = XorShiftRng(19260817);
+      (self.space.template)(&batch[0]).0.iter().map(|&b| {
+        let mut size = 1;
         for s in &b.sizes {
-          match s {
-            &Val(ty, x) => size *= ty.val_i64(x) as usize,
-            _ => debug_panic!("arg buf size must be Val"),
-          }
+          size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
         }
-        info!("eval: buf {} alloc size = {}", b.name, size);
-        (alloc::<u8>(size).as_ptr(), size)
+        let elem = b.ty.size();
+        let p = alloc_zeroed::<u8>(size * elem).as_ptr();
+        for i in 0..size { unsafe { rng.fill(b.ty, p.add(i * elem)); } }
+        info!("eval: buf {}, size = {}, ptr = {:p}", b.name, size, p);
+        (p, size * elem)
       }).collect()
     }).as_ptr() as _;
     debug_assert_eq!(self.libs.len(), 0);
     self.p().libs.reserve(batch.len());
     unsafe { self.p().libs.set_len(batch.len()); }
     self.p().pool.scoped(|scope| {
-      let (libs_ptr, template) = (P::new(self.libs.as_ptr()), &self.template);
+      let (libs_ptr, template) = (P::new(self.libs.as_ptr()), &self.space.template);
       for (idx, cfg) in batch.iter().enumerate() {
         scope.execute(move || unsafe {
           let (bufs, f) = template(cfg);
@@ -255,7 +274,8 @@ impl Tuner {
         });
       }
     });
-    for (idx, ((_, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
+    // 与AstInfo的注释描述的不同，这里用_l或者_都可以，都会在for body的末尾析构，为了统一性还是不用_
+    for (idx, ((_l, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
       let t0 = Instant::now();
       // 预运行一次，不参与计时，只用它判断是否超时
       f(data);
@@ -264,9 +284,9 @@ impl Tuner {
       if elapsed < self.timeout {
         for _ in 0..self.n_repeat { f(data); }
         elapsed = Instant::now().duration_since(t1) / self.n_repeat;
-        info!("eval: cfg {} time = {:?}", cfg, elapsed);
+        info!("eval: {}, {:?}", cfg, elapsed);
       } else {
-        warn!("eval: cfg {} time out", cfg);
+        warn!("eval: {} time out, {:?}", cfg, elapsed);
       }
       if elapsed < self.best.1 {
         self.p().best.1 = elapsed;
@@ -323,33 +343,6 @@ pub struct XGBModel {
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Loss { Reg, Rank }
-
-// Feature表示从程序中提取特征的方法
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Feature {
-  // 直用每个选项的取值作为输入向量
-  Knob,
-  Iter,
-  Curve,
-}
-
-impl Feature {
-  // 把cfgs中配置的特征加入到xs中，不影响xs原来保存的内容
-  pub fn get(self, cfgs: &[ConfigEntity], xs: &mut Vec<f32>) {
-    match self {
-      Feature::Knob => {
-        xs.reserve(cfgs[0].space.len() * cfgs.len());
-        for cfg in cfgs {
-          for (idx, (_, candidates)) in cfg.space.iter().enumerate() {
-            xs.push(candidates[cfg.choices[idx] as usize] as f32);
-          }
-        }
-      }
-      Feature::Iter => {}
-      Feature::Curve => {}
-    }
-  }
-}
 
 impl XGBModel {
   pub fn new(space: &ConfigSpace, loss: Loss, feature: Feature) -> Box<Self> {
@@ -416,8 +409,8 @@ impl XGBModel {
   }
 
   // 用一组配置及其对应的耗时更新模型；cost表示耗时，单位无所谓
-  pub fn update(&self, batch: &[ConfigEntity], cost: &[f32]) {
-    self.feature.get(batch, &mut self.p().xs);
+  pub fn update(&self, batch: &[ConfigEntity], cost: &[f32], pool: &mut Pool) {
+    self.feature.get(batch, &mut self.p().xs, pool);
     self.p().xs_rows += batch.len() as u32;
     self.p().ys.reserve(cost.len());
     let mut cost_min = 1e9;
@@ -430,7 +423,7 @@ impl XGBModel {
     if self.xs_rows >= (self.train_cnt + 1) * self.plan_size {
       info!("update: begin sa for {} samples", self.xs_rows);
       self.p().train_cnt += 1;
-      self.sa(&self.model());
+      self.sa(&self.model(), pool);
     }
   }
 
@@ -441,7 +434,7 @@ impl XGBModel {
     Booster::train(&self.params).unwrap()
   }
 
-  fn sa(&self, bst: &Booster) {
+  fn sa(&self, bst: &Booster, pool: &mut Pool) {
     let plans = &mut self.p().plans;
     plans.clear();
     // 初始时往plans中填入plan_size个无效的值，choices为空，预测值为-inf
@@ -455,7 +448,7 @@ impl XGBModel {
       mem::replace(&mut self.p().last_points, Vec::new())
     };
     let mut xs = Vec::new();
-    self.feature.get(&points, &mut xs);
+    self.feature.get(&points, &mut xs, pool);
     let mut ys = bst.predict(&DMatrix::from_dense(&xs, points.len()).unwrap()).unwrap();
     fn update_plans(points: &[ConfigEntity], ys: &[f32], plans: &mut Vec<(ConfigEntity, f32)>, vis: &HashSet<Box<[u32]>>) {
       debug_assert_eq!(points.len(), ys.len());
@@ -491,7 +484,7 @@ impl XGBModel {
         new_points.push(p);
       }
       xs.clear();
-      self.feature.get(&new_points, &mut xs);
+      self.feature.get(&new_points, &mut xs, pool);
       let new_ys = bst.predict(&DMatrix::from_dense(&xs, new_points.len()).unwrap()).unwrap();
       update_plans(&new_points, &new_ys, plans, &self.vis);
       debug_assert_eq!(points.len(), new_points.len());

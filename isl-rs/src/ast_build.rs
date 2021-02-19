@@ -19,6 +19,8 @@ extern "C" {
   pub fn isl_options_get_ast_build_allow_else(ctx: CtxRef) -> c_int;
   pub fn isl_options_set_ast_build_allow_or(ctx: CtxRef, val: c_int) -> Stat;
   pub fn isl_options_get_ast_build_allow_or(ctx: CtxRef) -> c_int;
+  pub fn isl_options_set_ast_build_keep_degenerate_for(ctx: CtxRef, val: c_int) -> Stat;
+  pub fn isl_options_get_ast_build_keep_degenerate_for(ctx: CtxRef) -> c_int;
   pub fn isl_ast_build_get_ctx(build: AstBuildRef) -> Option<CtxRef>;
   pub fn isl_ast_build_alloc(ctx: CtxRef) -> Option<AstBuild>;
   pub fn isl_ast_build_from_context(set: Set) -> Option<AstBuild>;
@@ -377,6 +379,20 @@ impl CtxRef {
   pub fn options_get_ast_build_allow_or(self) -> c_int {
     unsafe {
       let ret = isl_options_get_ast_build_allow_or(self.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn options_set_ast_build_keep_degenerate_for(self, val: c_int) -> Stat {
+    unsafe {
+      let ret = isl_options_set_ast_build_keep_degenerate_for(self.to(), val.to());
+      (ret).to()
+    }
+  }
+  #[inline(always)]
+  pub fn options_get_ast_build_keep_degenerate_for(self) -> c_int {
+    unsafe {
+      let ret = isl_options_get_ast_build_keep_degenerate_for(self.to());
       (ret).to()
     }
   }

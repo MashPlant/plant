@@ -43,6 +43,9 @@ int isl_options_get_ast_build_allow_else(__isl_keep isl_ctx *ctx);
 isl_stat isl_options_set_ast_build_allow_or(__isl_keep isl_ctx *ctx, int val);
 int isl_options_get_ast_build_allow_or(__isl_keep isl_ctx *ctx);
 
+isl_stat isl_options_set_ast_build_keep_degenerate_for(__isl_keep isl_ctx *ctx, int val);
+int isl_options_get_ast_build_keep_degenerate_for(__isl_keep isl_ctx *ctx);
+
 __isl_keep isl_ctx *isl_ast_build_get_ctx(__isl_keep isl_ast_build *build);
 
 __isl_constructor
