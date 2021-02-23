@@ -4,35 +4,6 @@ use xgboost::{parameters::{*, learning::*}, DMatrix, Booster};
 use std::{mem, time::{Instant, Duration}, ops::{Deref, DerefMut}, cmp::Ordering};
 use crate::*;
 
-// 虽然有很多开源的随机数实现，但用自己的还是方便一点
-#[derive(Debug, Clone, Copy)]
-pub struct XorShiftRng(pub u64);
-
-impl XorShiftRng {
-  pub fn gen(&self) -> u64 {
-    let mut x = self.p().get().0;
-    x ^= x << 13;
-    x ^= x >> 7;
-    x ^= x << 17;
-    self.p().get().0 = x;
-    x
-  }
-
-  // 返回0.0~1.0间的浮点数
-  pub fn gen_f32(&self) -> f32 {
-    self.gen() as u32 as f32 * (1.0 / u32::MAX as f32)
-  }
-
-  pub unsafe fn fill(&self, ty: Type, p: *mut u8) {
-    let x = self.gen();
-    match ty {
-      I8 | U8 => *p = x as _, I16 | U16 => *(p as *mut u16) = x as _,
-      I32 | U32 => *(p as *mut u32) = x as _, I64 | U64 | Void => *(p as *mut u64) = x as _, // Void应该是不可能的
-      F32 => *(p as *mut f32) = x as u32 as f32 * (1.0 / u32::MAX as f32), F64 => *(p as *mut f64) = x as f64 * (1.0 / u64::MAX as f64),
-    }
-  }
-}
-
 pub struct ConfigSpace {
   // 搜索空间，每个元素表示选项的名字和选项的可能取值
   pub space: Vec<(R<str>, Box<[u32]>)>,
@@ -135,6 +106,8 @@ pub struct Tuner {
   pub space: Box<ConfigSpace>,
   // 一次性编译运行batch_size个函数；编译是并行的(利用pool)，运行是串行的(因为需要计时)
   pub batch_size: u32,
+  // 丢弃前n_discard次测试，至少会丢弃一次，即使n_discard是0
+  pub n_discard: u32,
   // 计时重复n_repeat次
   pub n_repeat: u32,
   // 如果一次运行时长超过timeout，认为这个配置超时
@@ -167,6 +140,7 @@ impl Tuner {
     Tuner {
       space,
       batch_size: DEFAULT_BATCH,
+      n_discard: 1,
       n_repeat: 3,
       timeout: Duration::from_secs(1),
       policy,
@@ -179,6 +153,7 @@ impl Tuner {
 
   pub fn space(&self) -> R<ConfigSpace> { self.space.as_ref().r() }
 
+  impl_setter!(set_n_discard n_discard u32);
   impl_setter!(set_n_repeat n_repeat u32);
   impl_setter!(set_timeout timeout Duration);
   impl_setter!(set_policy policy TunerPolicy);
@@ -254,7 +229,7 @@ impl Tuner {
           size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
         }
         let elem = b.ty.size();
-        let p = alloc_zeroed::<u8>(size * elem).as_ptr();
+        let p = alloc::<u8>(size * elem).as_ptr();
         for i in 0..size { unsafe { rng.fill(b.ty, p.add(i * elem)); } }
         info!("eval: buf {}, size = {}, ptr = {:p}", b.name, size, p);
         (p, size * elem)
@@ -277,13 +252,15 @@ impl Tuner {
     // 与AstInfo的注释描述的不同，这里用_l或者_都可以，都会在for body的末尾析构，为了统一性还是不用_
     for (idx, ((_l, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
       let t0 = Instant::now();
-      // 预运行一次，不参与计时，只用它判断是否超时
+      // 预运行一次，用它判断是否超时
       f(data);
-      let t1 = Instant::now();
-      let mut elapsed = t1.duration_since(t0);
+      let mut elapsed = Instant::now().duration_since(t0);
       if elapsed < self.timeout {
+        // 预运行剩余次数
+        for _ in 1..self.n_discard { f(data); }
+        let t0 = Instant::now();
         for _ in 0..self.n_repeat { f(data); }
-        elapsed = Instant::now().duration_since(t1) / self.n_repeat;
+        elapsed = Instant::now().duration_since(t0) / self.n_repeat;
         info!("eval: {}, {:?}", cfg, elapsed);
       } else {
         warn!("eval: {} time out, {:?}", cfg, elapsed);
@@ -421,7 +398,7 @@ impl XGBModel {
     debug_assert_eq!(self.xs_rows as usize, self.ys.len());
     // 新增样本数达到了plan_size，进行一次SA，选择之后要给出的plans
     if self.xs_rows >= (self.train_cnt + 1) * self.plan_size {
-      info!("update: begin sa for {} samples", self.xs_rows);
+      info!("update: begin sa for, samples = {}, feature len = {}", self.xs_rows, self.xs.len());
       self.p().train_cnt += 1;
       self.sa(&self.model(), pool);
     }
