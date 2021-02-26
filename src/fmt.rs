@@ -87,15 +87,13 @@ impl Display for Expr {
         Max | Min => write!(f, "{}({},{})", op, l, r),
         _ => write!(f, "({}{}{})", l, op, r),
       }
+      Select(box [cond, t, f1]) => write!(f, "({}?{}:{})", cond, t, f1),
       Call(x) => write!(f, "{}({})", x.name, comma_sep(x.args.iter())),
-      Access(x, args) => write!(f, "{}[{}]", x.name(), comma_sep(args.iter())),
-      Load(buf, idx) => {
-        let first = idx.first().expect("empty index");
-        write!(f, "{}[", buf.name)?;
-        for _ in 2..idx.len() { f.write_str("(")?; }
-        write!(f, "{}{}]", first, sep(idx.iter().zip(buf.sizes.iter()).skip(1)
-          .map(|(idx, size)| fn2display(move |f| write!(f, "*{}+{}", size, idx))), ")"))
+      Access(x, args) => {
+        debug_assert_eq!(x.orig_dim(), args.len() as _);
+        write!(f, "{}[{}]", x.name(), comma_sep(args.iter()))
       }
+      Load(buf, idx) => write!(f, "{}[{}]", buf.name, idx),
       Memcpy(to, from) => {
         debug_assert!(to.sizes.len() == from.sizes.len() && to.ty == from.ty);
         match (to.loc, from.loc) {

@@ -45,20 +45,27 @@ impl Buf {
   impl_setter!(set_loc loc BufLoc);
 
   pub fn clone(&self) -> &Buf {
-    let name = format!("_{}_clone{}", self.name, self.func.new_buf_id());
-    self.func.buf(&name, self.ty, self.kind, &self.sizes)
+    self.func.buf(&format!("_clone{}_{}", self.func.new_buf_id(), self.name), self.ty, self.kind, &self.sizes)
+  }
+
+  // 创建一个identity访问自身的Comp，可用于Comp::cache
+  pub fn load(&self) -> &Comp {
+    let f = self.func;
+    f.comp(&format!("_load{}_{}", f.new_buf_id(), self.name), &self.sizes,
+      self.at((0..self.sizes.len() as u32).map(|i| f.iter(i))))
+      .set_inline(true).store(self).p().get()
   }
 
   // 在comp的循环层次at的开头/结尾放置Alloc/Free
   // 开头/结尾是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在开头/结尾，alloc_at_func同理
-  pub fn alloc_at(&self, comp: &Comp, at: u32) -> &Buf {
-    debug_assert!(at < comp.loop_dim());
+  pub fn alloc_at(&self, comp: &Comp, i: u32) -> &Buf {
+    debug_assert!(i < comp.loop_dim());
     let mut dom = project_static_dim(comp.schedule());
-    let (n, at) = (dom.n_dim() as u32, at + 1);
-    dom = dom.project_out(DimType::Set, at, n - at)?;
+    let (n, i) = (dom.n_dim() as u32, i + 1);
+    dom = dom.project_out(DimType::Set, i, n - i)?;
     let (alloc, free) = self.mk_alloc(dom)?;
-    comp.root_comp(at).after_between_pred(alloc, at);
-    free.after_between_pred(comp.leaf_comp(at), at);
+    comp.root_comp(i).after_between_pred(alloc, i);
+    free.after_between_pred(comp.leaf_comp(i), i);
     self
   }
 

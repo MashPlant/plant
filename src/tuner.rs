@@ -102,27 +102,87 @@ impl Display for ConfigEntity {
   }
 }
 
-pub struct Tuner {
-  pub space: Box<ConfigSpace>,
-  // 一次性编译运行batch_size个函数；编译是并行的(利用pool)，运行是串行的(因为需要计时)
-  pub batch_size: u32,
+pub struct TimeEvaluator {
   // 丢弃前n_discard次测试，至少会丢弃一次，即使n_discard是0
   pub n_discard: u32,
   // 计时重复n_repeat次
   pub n_repeat: u32,
   // 如果一次运行时长超过timeout，认为这个配置超时
   pub timeout: Duration,
-  pub policy: TunerPolicy,
-  // 给运行函数提供输入，默认在第一次运行前设置为随机值，可以手动设置为有意义的值
+  // 给运行函数提供输入，可以调用init设置为随机值，也可以手动设置为有意义的值，每个.1表示申请的字节数，drop时会释放这些内存
   // Func::codegen中生成的wrapper函数接受这样的指针p，从p[0], p[2], p[4], ...位置处读出实际函数的参数
   pub data: Option<Vec<(*mut u8, usize)>>,
+}
+
+pub type WrapperFn = fn(*const *mut u8);
+
+impl TimeEvaluator {
+  pub fn new(n_discard: u32, n_repeat: u32, timeout: Duration) -> Self {
+    TimeEvaluator { n_discard, n_repeat, timeout, data: None }
+  }
+
+  impl_setter!(set_n_discard n_discard u32);
+  impl_setter!(set_n_repeat n_repeat u32);
+  impl_setter!(set_timeout timeout Duration);
+  impl_setter!(set_data data Option<Vec<(*mut u8, usize)>>);
+
+  // args和Func::codegen的args意义一样；init为args中每个Buf申请内存并用随机值初始化，保存在self.data中
+  pub fn init(&self, args: &[P<Buf>]) {
+    let rng = XorShiftRng(19260817);
+    self.p().data = Some(args.iter().map(|&b| {
+      let mut size = 1;
+      for s in &b.sizes {
+        size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
+      }
+      let elem = b.ty.size();
+      let p = alloc::<u8>(size * elem).as_ptr();
+      for i in 0..size { unsafe { rng.fill(b.ty, p.add(i * elem)); } }
+      info!("eval: buf {}, size = {}, ptr = {:p}", b.name, size, p);
+      (p, size * elem)
+    }).collect());
+  }
+
+  // 返回(耗时，!是否超时)，如果超时了，耗时取一次运行的值
+  pub fn eval(&self, f: WrapperFn) -> (Duration, bool) {
+    let data = self.data.as_ref()
+      .expect("call TimeEvaluator::init or manually init TimeEvaluator::data first").as_ptr() as _;
+    let t0 = Instant::now();
+    // 预运行一次，用它判断是否超时
+    f(data);
+    let elapsed = Instant::now().duration_since(t0);
+    if elapsed < self.timeout {
+      // 预运行剩余次数
+      for _ in 1..self.n_discard { f(data); }
+      let t0 = Instant::now();
+      for _ in 0..self.n_repeat { f(data); }
+      (Instant::now().duration_since(t0) / self.n_repeat, true)
+    } else {
+      (elapsed, false)
+    }
+  }
+}
+
+impl Drop for TimeEvaluator {
+  fn drop(&mut self) {
+    if let Some(data) = self.data.as_ref() {
+      for &(p, size) in data { dealloc(p, size); }
+    }
+  }
+}
+
+pub struct Tuner {
+  pub space: Box<ConfigSpace>,
+  // 一次性编译运行batch_size个函数；编译是并行的(利用pool)，运行是串行的(因为需要计时)
+  pub batch_size: u32,
+  pub evaluator: TimeEvaluator,
+  pub policy: TunerPolicy,
   // 记录当前最优的配置和这个配置下的耗时
   pub best: (ConfigEntity, Duration),
   pub pool: Pool,
   // 理论上libs只是Tuner::eval中的局部变量，放在这里只是为了避免重复申请内存
   // Symbol的生命周期参数表示它来自的Library的生命周期，这里是.1借用.0，没法提供这个参数，就用'static
   // 实际上Symbol不持有指向Library的引用，且它们只会一起使用，所以这是安全的
-  pub libs: Vec<(Library, Symbol<'static, fn(*const *mut u8)>)>,
+  pub libs: Vec<(Library, Symbol<'static, WrapperFn>)>,
 }
 
 pub enum TunerPolicy {
@@ -140,11 +200,8 @@ impl Tuner {
     Tuner {
       space,
       batch_size: DEFAULT_BATCH,
-      n_discard: 1,
-      n_repeat: 3,
-      timeout: Duration::from_secs(1),
+      evaluator: TimeEvaluator::new(1, 3, Duration::from_secs(1)),
       policy,
-      data: None,
       best,
       pool: Pool::new(DEFAULT_BATCH),
       libs: Vec::with_capacity(DEFAULT_BATCH as _),
@@ -152,12 +209,6 @@ impl Tuner {
   }
 
   pub fn space(&self) -> R<ConfigSpace> { self.space.as_ref().r() }
-
-  impl_setter!(set_n_discard n_discard u32);
-  impl_setter!(set_n_repeat n_repeat u32);
-  impl_setter!(set_timeout timeout Duration);
-  impl_setter!(set_policy policy TunerPolicy);
-  impl_setter!(set_data data Option<Vec<(*mut u8, usize)>>);
 
   pub fn set_batch_size(&self, batch_size: u32) -> &Self {
     self.p().batch_size = batch_size;
@@ -221,20 +272,10 @@ impl Tuner {
   // 若cost为Some，它应是和batch长度一样的slice，会把每个配置的耗时依次保存在其中
   pub fn eval(&self, batch: &[ConfigEntity], mut cost: Option<&mut [f32]>) {
     if let Some(cost) = cost.as_ref() { debug_assert_eq!(cost.len(), batch.len()); }
-    let data = self.p().data.get_or_insert_with(|| {
-      let rng = XorShiftRng(19260817);
-      (self.space.template)(&batch[0]).0.iter().map(|&b| {
-        let mut size = 1;
-        for s in &b.sizes {
-          size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
-        }
-        let elem = b.ty.size();
-        let p = alloc::<u8>(size * elem).as_ptr();
-        for i in 0..size { unsafe { rng.fill(b.ty, p.add(i * elem)); } }
-        info!("eval: buf {}, size = {}, ptr = {:p}", b.name, size, p);
-        (p, size * elem)
-      }).collect()
-    }).as_ptr() as _;
+    if self.evaluator.data.is_none() {
+      // 默认在第一次运行前设置为随机值
+      self.evaluator.init(&(self.space.template)(&batch[0]).0);
+    }
     debug_assert_eq!(self.libs.len(), 0);
     self.p().libs.reserve(batch.len());
     unsafe { self.p().libs.set_len(batch.len()); }
@@ -251,16 +292,8 @@ impl Tuner {
     });
     // 与AstInfo的注释描述的不同，这里用_l或者_都可以，都会在for body的末尾析构，为了统一性还是不用_
     for (idx, ((_l, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
-      let t0 = Instant::now();
-      // 预运行一次，用它判断是否超时
-      f(data);
-      let mut elapsed = Instant::now().duration_since(t0);
-      if elapsed < self.timeout {
-        // 预运行剩余次数
-        for _ in 1..self.n_discard { f(data); }
-        let t0 = Instant::now();
-        for _ in 0..self.n_repeat { f(data); }
-        elapsed = Instant::now().duration_since(t0) / self.n_repeat;
+      let (elapsed, ok) = self.evaluator.eval(*f);
+      if ok {
         info!("eval: {}, {:?}", cfg, elapsed);
       } else {
         warn!("eval: {} time out, {:?}", cfg, elapsed);
@@ -272,14 +305,6 @@ impl Tuner {
       if let Some(cost) = cost.as_mut() { cost[idx] = elapsed.as_secs_f32(); }
     }
     info!("eval: best cfg {} time = {:?}", self.best.0, self.best.1);
-  }
-}
-
-impl Drop for Tuner {
-  fn drop(&mut self) {
-    if let Some(data) = self.data.as_ref() {
-      for &(p, size) in data { dealloc(p, size); }
-    }
   }
 }
 
@@ -385,7 +410,7 @@ impl XGBModel {
     }
   }
 
-  // 用一组配置及其对应的耗时更新模型；cost表示耗时，单位无所谓
+  // 用一组配置及其对应的耗时更新模型；cost表示耗时，单位无所谓(实际上Tuner传进来的单位是秒)
   pub fn update(&self, batch: &[ConfigEntity], cost: &[f32], pool: &mut Pool) {
     self.feature.get(batch, &mut self.p().xs, pool);
     self.p().xs_rows += batch.len() as u32;

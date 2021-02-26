@@ -32,7 +32,7 @@ fn matmul(n: u32, m: u32, s: u32) {
   c_init.tile(0, 1, tile_i, tile_j);
   c.tile_3(0, 1, 2, tile_i, tile_j, tile_k);
   c.after(c_init, 0);
-  c.tag_dim(0, Parallel);
+  c.tag(0, Parallel);
   let buf_c = f.buf("c", I32, Out, &[n, m]);
   c_init.store(buf_c);
   c.store_at(buf_c, &[i, j]);

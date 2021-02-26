@@ -19,7 +19,7 @@ pub struct Func {
   // 理论上tmp和backend都可以作为codegen的参数，但放在这里codegen调用更方便一点
   pub tmp: bool,
   // 默认为false，keep_degenerate_for为true时，不删除退化的循环(循环变量只有一个取值)，一个dynamic dim必然对应一个循环
-  // 在调用了Comp::tag_dim和提取feature这两种情况下，如果程序结构可能因为循环退化而改变，需要设置为true
+  // 在调用了Comp::tag和提取feature这两种情况下，如果程序结构可能因为循环退化而改变，需要设置为true
   pub keep_degenerate_for: bool,
   // 默认为C
   pub backend: Backend,
@@ -48,7 +48,7 @@ impl Func {
     // 这个名字没什么意义，只是为了人阅读方便
     let desc = match e {
       Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
-      Binary(..) => "binary", Call(..) => "call", Access(..) => "access", Load(..) => "load",
+      Binary(..) => "binary", Select(..) => "select", Call(..) => "call", Access(..) => "access", Load(..) => "load",
       Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Opaque(..) => "opaque",
     };
     format!("_{}{}", desc, self.new_comp_id())
@@ -123,18 +123,9 @@ pub struct ForInfo {
   pub local_buf: HashSet<P<Buf>>,
 }
 
-// (min, max, max - min + 1)
-pub struct ForExtent(pub isl::val_type::Val, pub isl::val_type::Val, pub isl::val_type::Val);
-impl_try!(ForExtent);
-
 impl ForInfo {
   // todo: 虽然for在不同的Comp中有相同的dynamic dim，但上下界不一定相同，目前kern的启动参数和提取feature用到上下界
-  pub fn extent(&self) -> ForExtent {
-    let (sch, pos) = (self.comp.schedule(), (self.level * 2 + 1) as _);
-    let (min, max) = (sch.copy()?.dim_min_val(pos)?, sch.dim_max_val(pos)?);
-    let extent = max.copy()?.sub(min.copy()?)?.add(self.comp.ctx.val_one()?)?;
-    ForExtent(min, max, extent)
-  }
+  pub fn extent(&self) -> Extent { self.comp.extent(self.level) }
 }
 
 #[derive(Default)]
@@ -157,23 +148,28 @@ pub struct AstInfo(pub AstNode, pub CodegenState, pub Vec<Box<CompInfo>>);
 impl_try!(AstInfo);
 
 impl Func {
+  // 迭代self.comps中参与调度，即inline为false的Comp
+  pub fn sch_comps(&self) -> impl IntoIterator<Item=&Comp> {
+    self.comps.iter().map(|c| c.as_ref()).filter(|c| !c.inline)
+  }
+
   // feature模块从这个AST中提取特征，无需自己定义AST
   pub fn build_ast(&self) -> AstInfo {
     self.align_schedule();
     // 依据Comp::succ表示的调度图，设置schedule的static dim，从而真正实现after的关系
     let mut vis = HashSet::default();
     let mut prev = None::<P<Comp>>;
-    for c in &self.comps {
+    for c in self.sch_comps() {
       if c.pred.is_none() {
         // 所有没有前驱的节点按定义顺序排序，后续节点排在前面节点的所有叶子节点后
         // after_raw要求按照从前往后顺序调用，例如B after_raw C, A after_raw B，不能是A after_raw B, B after_raw C
         // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
         if let Some(x) = prev { c.after_raw(&*x, 0); }
-        prev = Some(self.sch_graph_dfs(c.as_ref().p(), &mut vis));
+        prev = Some(self.sch_graph_dfs(c.p(), &mut vis));
       }
     }
     let mut union_sch = None;
-    for c in &self.comps {
+    for c in self.sch_comps() {
       // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，identity_map保证这一点
       let sch = identity_map(c.schedule()).union_map_from_map()?;
       union_sch = Some(if let Some(x) = union_sch { sch.union(x)? } else { sch });
@@ -236,9 +232,10 @@ impl Func {
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
     let so_path = path.with_extension("so");
     let mut cmd = Command::new(if b == C { CC } else { NVCC });
+    cmd.arg("-x").arg(if b == C { "c" } else { "cu" }).arg(&path);
     match b {
-      C => cmd.arg("-x").arg("c").arg(&path).arg("-Ofast").arg("-march=native").arg("-fopenmp"),
-      CUDA => cmd.arg("-x").arg("cu").arg(&path).arg("-O3"),
+      C => cmd.arg("-Ofast").arg("-march=native").arg("-fopenmp"),
+      CUDA => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options"),
     };
     cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
     debug!("codegen: cmd = {:?}", cmd);
@@ -256,9 +253,9 @@ impl Func {
   fn sch_graph_dfs(&self, c: P<Comp>, vis: &mut HashSet<P<Comp>>) -> P<Comp> {
     if !vis.insert(c) { debug_panic!("cyclic schedule graph"); }
     let mut ret = c;
-    for (at, &s) in c.succ.iter().enumerate().rev() {
+    for (i, &s) in c.succ.iter().enumerate().rev() {
       if let Some(s) = s {
-        s.after_raw(c.get(), at as _);
+        s.after_raw(c.get(), i as _);
         ret = self.sch_graph_dfs(s, vis);
       }
     }
@@ -288,11 +285,22 @@ impl Func {
     debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
     let mut expr = comp.expr.clone();
     expr.visit_mut(&mut move |e| match e {
-      // access_to_load已经将原下标替换成了新下标，不能再访问它的孩子再替换一次了
       Access(arg, idx) => {
-        *e = access_to_load(build, &comp, arg, idx);
+        // todo: inline的comp也有用access_to_load优化的必要
+        let (e1, ret) = if arg.inline {
+          let mut e1 = arg.expr.clone();
+          e1.visit_mut(&mut |e| if let Iter(_, x) = &e {
+            *e = idx[*x as usize].clone();
+            false
+          } else { true });
+          (e1, true)
+        } else {
+          // access_to_load已经将原下标替换成了新下标，不能再访问它的孩子再替换一次了
+          (access_to_load(build, &comp, arg, idx), false)
+        };
+        *e = e1;
         debug!("visit_comp: replaced access = {}", e);
-        false
+        ret
       }
       Iter(_, x) => {
         *e = iter_map[*x as usize].clone();
@@ -322,14 +330,14 @@ impl Func {
             Some(ForInfo { tag: Some(Parallel), .. }) => f.write_str("\n#pragma omp parallel for\n").ok()?,
             // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
             // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
-            // 这导致了Comp::tag_dim的注释中描述的问题
+            // 这导致了Comp::tag的注释中描述的问题
             Some(info @ ForInfo { tag: Some(tag), .. }) => {
               let old_in_kern = mem::replace(&mut s.p().in_kern, true);
               if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
                 let param_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| x.arg()));
                 write!(f, "{{auto _kern=[=]__device__({}){{", param_buf).ok()?;
               }
-              let ForExtent(min, max, extent) = info.extent();
+              let Extent(min, max, extent) = info.extent();
               debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.name(), info.level, min, tag.gpu_idx(), max);
               let old_cfg = s.p().kern_cfg[(*tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
               debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
@@ -389,7 +397,7 @@ impl Func {
   }
 }
 
-// 从user node中提取Comp::dim_tags中循环的tag
+// 从user node中提取Comp::tags中循环的tag
 fn extract_tags(n: AstNodeRef, loops: &mut Vec<AstNodeRef>, info: &mut HashMap<AstNodeRef, ForInfo>) -> Unit {
   match n.get_type() {
     AstNodeType::For => {
@@ -409,7 +417,7 @@ fn extract_tags(n: AstNodeRef, loops: &mut Vec<AstNodeRef>, info: &mut HashMap<A
       let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);
       for i in 0..comp.comp.loop_dim() as usize {
         if let Some(&l) = loops.get(i) {
-          let tag = comp.comp.dim_tags.get(i).copied().flatten();
+          let tag = comp.comp.tags.get(i).copied().flatten();
           info.entry(l).and_modify(|old| {
             if old.tag.is_none() { old.tag = tag; } else { debug_assert!(tag.is_none(), "duplicate tag"); }
             debug_assert_eq!(old.level, i as _);

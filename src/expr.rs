@@ -30,10 +30,13 @@ pub enum Expr {
   Cast(Type, Box<Expr>),
   Unary(UnOp, Box<Expr>),
   Binary(BinOp, Box<[Expr; 2]>),
+  // :?操作符
+  Select(Box<[Expr; 3]>),
   // 用Box包一层以减小整个enum的大小
   Call(Box<Call>),
   Access(P<Comp>, Box<[Expr]>),
-  Load(P<Buf>, Box<[Expr]>),
+  // idx表示成(i0 * size1) + i1 ...的形式
+  Load(P<Buf>, Box<Expr>),
   Memcpy(P<Buf>, P<Buf>),
   Alloc(P<Buf>),
   Free(P<Buf>),
@@ -58,7 +61,6 @@ pub fn call<E: IntoExpr>(ret: Type, name: &str, args: impl IntoIterator<Item=E>)
 
 // 可用于Func::comp，Comp::at等接受impl Expr的slice的函数，直接传&[]会报错无法推断类型
 pub const EMPTY: &[Expr] = &[];
-pub const EMPTY2: &[(Expr, Expr)] = &[];
 
 // 逻辑非用x != 0表示，取负用0 - x表示，不在Unary中提供
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -81,12 +83,8 @@ impl Expr {
       &Val(ty, _) | &Iter(ty, _) | &Cast(ty, _) | &Call(box Call { ret: ty, .. }) | &Opaque(ty, _) => ty,
       Param(comp) | Access(comp, _) => comp.expr.ty(),
       Unary(_, x) => x.ty(),
-      Binary(op, box [l, r]) => if (Add <= *op && *op <= Rem) || (Max <= *op && *op <= Min) {
-        // 这是我随意规定的类型规则，不完全符合C语言的规则
-        // 两个整数运算，若位数不同则结果是位数高的类型，若位数相同，有符号和无符号的运算结果是无符号
-        // 整数和浮点数运算结果总是浮点数，两个浮点数运算也是取位数高的类型
-        l.ty().max(r.ty())
-      } else { I32 }
+      Binary(op, box [l, _]) => if (Add <= *op && *op <= Rem) || (Max <= *op && *op <= Min) { l.ty() } else { I32 }
+      Select(box [_, t, _]) => t.ty(),
       Load(buf, _) => buf.ty,
       Memcpy(..) | Alloc(..) | Free(..) | Sync => Void,
     }
@@ -98,9 +96,10 @@ impl Expr {
 
   pub fn args(&self) -> &[Expr] {
     match self {
-      Unary(_, x) | Cast(_, x) => std::slice::from_ref(x),
-      Binary(_, lr) => lr.as_ref(),
-      Call(box Call { args, .. }) | Access(_, args) | Load(_, args) => args,
+      Unary(_, x) | Cast(_, x) | Load(_, x) => std::slice::from_ref(x),
+      Binary(_, x) => x.as_ref(),
+      Select(x) => x.as_ref(),
+      Call(box Call { args, .. }) | Access(_, args) => args,
       Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync | Opaque(..) => &[],
     }
   }
@@ -142,8 +141,11 @@ impl Expr {
             let buf = f.find_buf(name)?;
             let mut idx = Vec::with_capacity(n as usize - 1);
             for i in 1..n { idx.push(Expr::from_isl(f, e.get_op_arg(i)?)); }
-            Load(buf.into(), idx.into())
+            buf.at(idx)
+            // Load(buf.into(), idx.into())
           }
+          Cond | Select => Expr::Select(box [Expr::from_isl(f, e.get_op_arg(0)?),
+            Expr::from_isl(f, e.get_op_arg(1)?), Expr::from_isl(f, e.get_op_arg(2)?)]),
           _ => {
             let op0 = Expr::from_isl(f, e.get_op_arg(0)?);
             let op = match op {
