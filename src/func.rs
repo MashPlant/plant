@@ -18,7 +18,7 @@ pub struct Func {
   // 默认为false，tmp为true时，codegen使用tempfile为文件名；否则以函数名为文件名
   // 理论上tmp和backend都可以作为codegen的参数，但放在这里codegen调用更方便一点
   pub tmp: bool,
-  // 默认为C
+  // 默认为CPU
   pub backend: Backend,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
@@ -26,7 +26,7 @@ pub struct Func {
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, backend: C, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, backend: CPU, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -205,32 +205,32 @@ impl Func {
   }
 
   pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Library> {
-    for b in args { debug_assert_ne!(b.kind, BufKind::Temp); }
+    for b in args { b.check_arg(); }
     let AstInfo(ast, s, _info) = self.build_ast();
     let b = self.backend;
     let (f, path) = if self.tmp {
       let (f, path) = NamedTempFile::new()?.into_parts();
       (f, path.keep()?)
     } else {
-      let path = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if b == C { "c" } else { "cu" });
+      let path = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if b == CPU { "c" } else { "cu" });
       (File::create(&path)?, path)
     };
     let mut w = BufWriter::new(f);
     w.write_all(include_bytes!("inc.h"))?;
     // 生成名为{self.name}的实际函数和名为{self.name}_wrapper的wrapper函数
-    // wrapper函数接受void **p，从p[0], p[2], p[4], ...位置处读出实际函数的参数，以此调用实际函数
+    // wrapper函数接受void **p，从p[0], p[3], p[6], ...位置处读出实际函数的参数，以此调用实际函数
     write!(w, "void {f}({}){{{} {};{}}}void {f}_wrapper(void**p){{{f}({});}}\n",
       comma_sep(args.iter().map(|x| x.arg())),
       self.iter_ty, i0_in(s.loop_dim), self.gen(ast, &s),
-      comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 2 * i)))),
+      comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 3 * i)))),
       f = self.name)?;
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
     let so_path = path.with_extension("so");
-    let mut cmd = Command::new(if b == C { CC } else { NVCC });
-    cmd.arg("-x").arg(if b == C { "c" } else { "cu" }).arg(&path);
+    let mut cmd = Command::new(if b == CPU { CC } else { NVCC });
+    cmd.arg("-x").arg(if b == CPU { "c" } else { "cu" }).arg(&path);
     match b {
-      C => cmd.arg("-Ofast").arg("-march=native").arg("-fopenmp"),
-      CUDA => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options")
+      CPU => cmd.arg("-Ofast").arg("-march=native").arg("-fopenmp"),
+      GPU => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options")
         .arg("-Xcudafe").arg("\"--diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\""),
     };
     cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
@@ -311,7 +311,8 @@ impl Func {
           let body = n.for_get_body()?;
           match s.info.get(&*n) {
             // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
-            Some(ForInfo { tag: Some(Parallel), .. }) => f.write_str("\n#pragma omp parallel for\n").ok()?,
+            // 循环变量是在for外定义的，需要private指令避免不同线程间循环变量干扰
+            Some(ForInfo { tag: Some(Parallel), .. }) => write!(f, "\n#pragma omp parallel for private({})\n", i0_in(s.loop_dim)).ok()?,
             // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
             // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
             // 这导致了Comp::tag的注释中描述的问题

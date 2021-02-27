@@ -450,7 +450,6 @@ impl Comp {
     let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, Sync);
     self.after_between_pred(sync2, i).after_between_pred(copy, i).after_between_pred(sync1, i);
     buf.alloc_at(self, (i - 1) as _);
-
     let buf_load = buf.load().p();
     self.p().expr.visit_mut(&mut move |e| match e {
       Access(c, idx) => if *c == src {
@@ -460,15 +459,6 @@ impl Comp {
       }
       _ => {}
     });
-
-    // self.p().expr.visit_mut(&mut move |e| match e {
-    //   Access(c, idx) => if *c == src {
-    //     debug_assert_eq!(idx.len(), cfg.len());
-    //     *e = Load(buf.p(), cfg.iter().map(|c| c.access.clone()).collect());
-    //   }
-    //   _ => {}
-    // });
-
     buf.p().get()
   }
 

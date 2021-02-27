@@ -110,8 +110,8 @@ pub struct TimeEvaluator {
   // 如果一次运行时长超过timeout，认为这个配置超时
   pub timeout: Duration,
   // 给运行函数提供输入，可以调用init设置为随机值，也可以手动设置为有意义的值，每个.1表示申请的字节数，drop时会释放这些内存
-  // Func::codegen中生成的wrapper函数接受这样的指针p，从p[0], p[2], p[4], ...位置处读出实际函数的参数
-  pub data: Option<Vec<(*mut u8, usize)>>,
+  // Func::codegen中生成的wrapper函数接受这样的指针p，从p[0], p[3], p[6], ...位置处读出实际函数的参数
+  pub data: Option<Vec<Array<u8, usize>>>,
 }
 
 pub type WrapperFn = fn(*const *mut u8);
@@ -124,21 +124,27 @@ impl TimeEvaluator {
   impl_setter!(set_n_discard n_discard u32);
   impl_setter!(set_n_repeat n_repeat u32);
   impl_setter!(set_timeout timeout Duration);
-  impl_setter!(set_data data Option<Vec<(*mut u8, usize)>>);
+  impl_setter!(set_data data Option<Vec<Array<u8, usize>>>);
 
   // args和Func::codegen的args意义一样；init为args中每个Buf申请内存并用随机值初始化，保存在self.data中
   pub fn init(&self, args: &[P<Buf>]) {
     let rng = XorShiftRng(19260817);
     self.p().data = Some(args.iter().map(|&b| {
+      b.check_arg();
       let mut size = 1;
       for s in &b.sizes {
         size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
       }
       let elem = b.ty.size();
-      let p = alloc::<u8>(size * elem).as_ptr();
+      let arr = Array::<u8, _>::new(size * elem);
+      let p = arr.ptr();
       for i in 0..size { unsafe { rng.fill(b.ty, p.add(i * elem)); } }
+      if b.loc == Global { // check_arg保证loc只能是Host或Global
+        #[cfg(feature = "gpu-runtime")] { *arr.p() = arr.to_gpu(); }
+        #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled");
+      }
       info!("eval: buf {}, size = {}, ptr = {:p}", b.name, size, p);
-      (p, size * elem)
+      arr
     }).collect());
   }
 
@@ -158,14 +164,6 @@ impl TimeEvaluator {
       (Instant::now().duration_since(t0) / self.n_repeat, true)
     } else {
       (elapsed, false)
-    }
-  }
-}
-
-impl Drop for TimeEvaluator {
-  fn drop(&mut self) {
-    if let Some(data) = self.data.as_ref() {
-      for &(p, size) in data { dealloc(p, size); }
     }
   }
 }

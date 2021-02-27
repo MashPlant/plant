@@ -1,5 +1,8 @@
+#[cfg(feature = "gpu-runtime")]
+use cuda_runtime_sys::*;
+
 use num::Signed;
-use std::{ptr::*, alloc::{self, Layout}, mem::*, ops::*, slice, hash::{Hash, Hasher}};
+use std::{ptr::*, alloc::*, mem::*, ops::*, slice, hash::{Hash, Hasher}};
 use crate::*;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -123,7 +126,14 @@ impl Buf {
     host.get()
   }
 
-  // 输出本Buf作为函数参数的形式，要求kind必须是In或Out
+  // 检查本Buf是否可以作为函数参数
+  pub fn check_arg(&self) {
+    debug_assert!(self.kind == In || self.kind == Out);
+    debug_assert!(self.loc == Host || self.loc == BufLoc::Global);
+  }
+
+  // 输出本Buf作为函数参数的形式
+  // 这里不检查check_arg，因为GPU kern捕获的Buf也会调用arg，它们不一定满足要求
   pub fn arg<'a>(&'a self) -> impl Display + 'a {
     debug_assert_ne!(self.kind, Temp);
     fn2display(move |f| write!(f, "{}{}*__restrict__ {}",
@@ -152,56 +162,99 @@ macro_rules! impl_primitive {
 impl_primitive!(I8 i8, U8 u8, I16 i16, U16 u16, I32 i32, U32 u32, I64 i64, U64 u64, F32 f32, F64 f64);
 
 // 即runtime buffer，用于测试，T必须是基本类型
+#[repr(C)]
 pub struct Array<T, D: Dims> {
   pub ptr: NonNull<T>,
   pub dim: D,
+  pub loc: Backend,
 }
 
 // 和Array的唯一区别在于没有实现Drop
+#[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Slice<T, D: Dims> {
   pub ptr: NonNull<T>,
   pub dim: D,
-}
-
-pub(crate) fn alloc<T>(size: usize) -> NonNull<T> {
-  unsafe { NonNull::new(alloc::alloc(Layout::from_size_align_unchecked(size, 32)) as _).expect("failed to alloc") }
-}
-
-pub(crate) fn alloc_zeroed<T>(size: usize) -> NonNull<T> {
-  unsafe { NonNull::new(alloc::alloc_zeroed(Layout::from_size_align_unchecked(size, 32)) as _).expect("failed to alloc") }
-}
-
-pub(crate) fn dealloc(p: *mut u8, size: usize) {
-  unsafe { alloc::dealloc(p, Layout::from_size_align_unchecked(size, 32)) }
+  pub loc: Backend,
 }
 
 impl<T: Primitive, D: Dims> Array<T, D> {
   // 不初始化元素
-  pub fn new(dim: D) -> Self { Array { ptr: alloc(dim.total() * size_of::<T>()), dim } }
+  pub fn new(dim: D) -> Self {
+    let p = unsafe { alloc(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 32)) };
+    Array { ptr: NonNull::new(p as _).expect("failed to alloc"), dim, loc: CPU }
+  }
 
   // 所有元素初始化为逐字节全0
-  pub fn zeroed(dim: D) -> Self { Array { ptr: alloc_zeroed(dim.total() * size_of::<T>()), dim } }
+  pub fn zeroed(dim: D) -> Self {
+    let p = unsafe { alloc_zeroed(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 32)) };
+    Array { ptr: NonNull::new(p as _).expect("failed to alloc"), dim, loc: CPU }
+  }
 
   // 用rng随机初始化每个元素
   pub fn rand(dim: D, rng: &XorShiftRng) -> Self {
-    let ret = Array::new(dim);
+    let ret = Self::new(dim);
     let p = ret.ptr() as *mut u8;
     for i in 0..dim.total() { unsafe { rng.fill(T::TYPE, p.add(i * size_of::<T>())); } }
     ret
   }
 }
 
+#[cfg(feature = "gpu-runtime")]
+impl<T: Primitive, D: Dims> Array<T, D> {
+  pub fn new_gpu(dim: D) -> Self {
+    let mut p = null_mut();
+    unsafe { cudaMalloc(&mut p as _, dim.total() * size_of::<T>()); }
+    Array { ptr: NonNull::new(p as _).expect("failed to alloc"), dim, loc: GPU }
+  }
+
+  pub fn to_gpu(&self) -> Self {
+    debug_assert_eq!(self.loc, CPU);
+    let ret = Self::new_gpu(self.dim);
+    self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyHostToDevice);
+    ret
+  }
+
+  pub fn to_cpu(&self) -> Self {
+    debug_assert_eq!(self.loc, GPU);
+    let ret = Self::new(self.dim);
+    self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyDeviceToHost);
+    ret
+  }
+
+  fn cuda_memcpy(&self, dst: &Self, kind: cudaMemcpyKind) {
+    unsafe { cudaMemcpy(dst.ptr() as _, self.ptr() as _, self.dim.total() * size_of::<T>(), kind); }
+  }
+}
+
 impl<T, D: Dims> Drop for Array<T, D> {
   fn drop(&mut self) {
-    dealloc(self.ptr() as _, self.dim.total() * size_of::<T>())
+    match self.loc {
+      CPU => unsafe { dealloc(self.ptr() as _, Layout::from_size_align_unchecked(self.dim.total() * size_of::<T>(), 32)) },
+      GPU => {
+        #[cfg(feature = "gpu-runtime")] unsafe { cudaFree(self.ptr() as _); }
+        #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled");
+      }
+    }
   }
 }
 
 impl<T: Primitive, D: Dims> Clone for Array<T, D> {
   fn clone(&self) -> Self {
-    let ret = Self::new(self.dim);
-    unsafe { ret.ptr().copy_from_nonoverlapping(self.ptr(), self.dim.total()); }
+    let ret;
+    match self.loc {
+      CPU => {
+        ret = Self::new(self.dim);
+        unsafe { ret.ptr().copy_from_nonoverlapping(self.ptr(), self.dim.total()); }
+      }
+      GPU => {
+        #[cfg(feature = "gpu-runtime")] {
+          ret = Self::new_gpu(self.dim);
+          self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyDeviceToDevice);
+        }
+        #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled");
+      }
+    }
     ret
   }
 }
@@ -219,6 +272,7 @@ impl<T, D: Dims> Slice<T, D> {
   pub fn ptr(&self) -> *mut T { self.ptr.as_ptr() }
 
   pub fn flat(&self) -> &mut [T] {
+    debug_assert_eq!(self.loc, CPU);
     unsafe { slice::from_raw_parts_mut(self.ptr(), self.dim.total()) }
   }
 
@@ -228,7 +282,7 @@ impl<T, D: Dims> Slice<T, D> {
   pub fn sub(&self, idx: usize) -> Slice<T, D::Sub> {
     let (n, sub) = self.dim.sub();
     debug_assert!(idx < n);
-    unsafe { Slice { ptr: NonNull::new_unchecked(self.ptr().add(idx * sub.total())), dim: sub } }
+    unsafe { Slice { ptr: NonNull::new_unchecked(self.ptr().add(idx * sub.total())), dim: sub, loc: self.loc } }
   }
 
   pub fn assert_eq(&self, rhs: &Self) where D: Debug + PartialEq, T: Debug + PartialEq {
@@ -246,12 +300,14 @@ impl<T, D: Dims> Slice<T, D> {
 impl<T, D: Dims> Index<D> for Slice<T, D> {
   type Output = T;
   fn index(&self, idx: D) -> &Self::Output {
+    debug_assert_eq!(self.loc, CPU);
     unsafe { &*self.ptr().add(self.dim.offset(idx)) }
   }
 }
 
 impl<T, D: Dims> IndexMut<D> for Slice<T, D> {
   fn index_mut(&mut self, idx: D) -> &mut Self::Output {
+    debug_assert_eq!(self.loc, CPU);
     unsafe { &mut *(self.index(idx) as *const _ as *mut _) }
   }
 }

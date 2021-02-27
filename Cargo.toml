@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["MashPlant <740678788@qq.com>"]
 edition = "2018"
 
+[features]
+gpu-runtime = ["cuda-runtime-sys"]
+
 [dependencies]
 ptr = { git = "https://github.com/MashPlant/ptr" }
 isl = { path = "./isl-rs" }
@@ -15,6 +18,7 @@ libloading = "0.6"
 xgboost = "0.1"
 scoped_threadpool = "0.1"
 num = { version = "0.3", default-features = false }
+cuda-runtime-sys = { version = "0.3.0-alpha", optional = true }
 
 [dev-dependencies]
 test-case = "1"

@@ -62,7 +62,7 @@ pub struct Unit;
 impl_try!(Unit);
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Backend { C, CUDA }
+pub enum Backend { CPU, GPU }
 
 pub const CC: &str = "clang";
 pub const NVCC: &str = "nvcc";
