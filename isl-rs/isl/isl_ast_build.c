@@ -1993,6 +1993,10 @@ isl_bool isl_ast_build_has_affine_value(__isl_keep isl_ast_build *build,
 	if (!build)
 		return isl_bool_error;
 
+	// MashPlant: never eliminate a dynamic dim
+	if (pos % 2 == 1)
+		return isl_bool_false;
+
 	aff = isl_multi_aff_get_aff(build->values, pos);
 	involves = isl_aff_involves_dims(aff, isl_dim_in, pos, 1);
 	isl_aff_free(aff);

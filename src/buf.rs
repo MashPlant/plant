@@ -1,5 +1,5 @@
 use num::Signed;
-use std::{ptr::*, alloc::{self, Layout}, mem::*, ops::*, slice};
+use std::{ptr::*, alloc::{self, Layout}, mem::*, ops::*, slice, hash::{Hash, Hasher}};
 use crate::*;
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -22,6 +22,15 @@ pub struct Buf {
 
 impl_try!(&Buf);
 
+// 用Buf::name做hash，仍然用Buf地址判等；作用是在HashSet/Map<Buf>中保证稳定的顺序
+// 这一点之所以成立，还因为我使用了AHasher的默认初值作为HashSet/Map的初始状态，这是固定的值，没有任何随机性
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct NameHashBuf(pub P<Buf>);
+
+impl Hash for NameHashBuf {
+  fn hash<H: Hasher>(&self, state: &mut H) { self.0.name.hash(state) }
+}
+
 impl Func {
   // 默认loc为Host
   pub fn buf<E: IntoExpr>(&self, name: &str, ty: Type, kind: BufKind, sizes: impl IntoIterator<Item=E>) -> &Buf {
@@ -37,9 +46,16 @@ impl Func {
 
 impl Buf {
   pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
-    let idx = idx.into_iter().map(|e| e.expr()).collect::<Box<[_]>>();
-    debug_assert_eq!(idx.len(), self.sizes.len());
-    Load(self.into(), idx)
+    let mut idx = idx.into_iter();
+    let mut x = idx.next().expect("empty idx").expr();
+    let mut _cnt = 1; // 用于检查idx个数是否与sizes长度一致
+    // 构造(i0 * size1) + i1 ...
+    for (i, s) in idx.zip(self.sizes.iter().skip(1)) {
+      x = x * s + i;
+      _cnt += 1;
+    }
+    debug_assert_eq!(_cnt, self.sizes.len());
+    Load(self.into(), box x)
   }
 
   impl_setter!(set_loc loc BufLoc);

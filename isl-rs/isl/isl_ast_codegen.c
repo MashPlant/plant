@@ -1508,10 +1508,6 @@ static __isl_give isl_ast_graft *create_node_scaled(
 		bounds = isl_ast_build_compute_gist_basic_set(build, bounds);
 	sub_build = isl_ast_build_set_pending_generated(sub_build,
 						isl_basic_set_copy(bounds));
-	// MashPlant: if the option "keep_degenerate_for" is set and this is a dynamic dim, do not eliminate it in any case
-	if (isl_options_get_ast_build_keep_degenerate_for(isl_ast_build_get_ctx(build)) && depth % 2 == 1) {
-		eliminated = isl_bool_false;
-	}
 	if (eliminated)
 		executed = plug_in_values(executed, sub_build);
 	else

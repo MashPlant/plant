@@ -217,8 +217,6 @@ ISL_ARG_BOOL(struct isl_options, ast_build_allow_else, 0,
 	"ast-build-allow-else", 1, "generate if statements with else branches")
 ISL_ARG_BOOL(struct isl_options, ast_build_allow_or, 0,
 	"ast-build-allow-or", 1, "generate if conditions with disjunctions")
-ISL_ARG_BOOL(struct isl_options, ast_build_keep_degenerate_for, 0,
-	"ast-build-keep-degenerate-for", 0, "do not eliminate degenerate for")
 ISL_ARG_BOOL(struct isl_options, print_stats, 0, "print-stats", 0,
 	"print statistics for every isl_ctx")
 ISL_ARG_ULONG(struct isl_options, max_operations, 0,
@@ -392,8 +390,3 @@ ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_build_allow_or)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_build_allow_or)
-
-ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
-	ast_build_keep_degenerate_for)
-ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
-	ast_build_keep_degenerate_for)

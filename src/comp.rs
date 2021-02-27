@@ -60,7 +60,7 @@ impl Func {
     let ref mut vis = |e: &Expr| if let &Param(x) = e { params.insert(x); };
     for ub in &ubs { ub.visit(vis); }
     expr.visit(vis);
-    let s = format!("[{}] -> {{ {}{}: {} }}\0", comma_sep(params.iter().map(|c| c.name())),
+    let s = format!("[{}] -> {{ {}[{}]: {} }}\0", comma_sep(params.iter().map(|c| c.name())),
       name, i0_in(ubs.len() as _), sep(ubs.iter().enumerate().map(|(i, ub)| fn2display(move |f|
         write!(f, "0 <= i{} < {}", i, ub))), " and "));
     debug!("comp: domain = {}", s);
@@ -150,7 +150,7 @@ impl Comp {
   pub fn split(&self, i: u32, factor: u32) -> &Comp {
     debug_assert!(i < self.loop_dim());
     let (n, i) = (self.sch_dim(), i * 2 + 1);
-    let s = format!("{{ {} -> [{}]: i{i0} = floor(i{i} / {f}) and i{i1} = i{i} % {f} }}\0", i0_in(n),
+    let s = format!("{{ [{}] -> [{}]: i{i0} = floor(i{i} / {f}) and i{i1} = i{i} % {f} }}\0", i0_in(n),
       comma_sep((0..n + 2).map(|x| fn2display(move |f|
         if x == i + 1 { f.write_str("0") } else {
           write!(f, "i{}", if x < i { x } else if x == i { n } else if x == i + 2 { n + 1 } else { x - 2 })
@@ -186,7 +186,7 @@ impl Comp {
       assert_eq!(old, new);
     }
     let n = self.sch_dim();
-    let s = format!("{{ {} -> [{}] }}\0", i0_in(n),
+    let s = format!("{{ [{}] -> [{}] }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", map.iter().find(|&&(old, _)| x == old * 2 + 1)
           .map(|&(_, new)| new * 2 + 1).unwrap_or(x))
@@ -199,7 +199,7 @@ impl Comp {
     debug_assert!(i < j);
     debug_assert!(i < self.loop_dim() && j < self.loop_dim());
     let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
-    let s = format!("{{ {} -> [{}]: i{j1} = {f} * i{i} + i{j} }}\0", i0_in(n),
+    let s = format!("{{ [{}] -> [{}]: i{j1} = {f} * i{i} + i{j} }}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", if x < j { x } else if x == j { n } else { x - 1 })))),
       j1 = n, f = factor, i = i, j = j);
@@ -403,7 +403,7 @@ impl Comp {
   pub fn store_at<E: IntoExpr, I: Iterator<Item=E> + Clone>(&self, buf: &Buf, idx: impl IntoIterator<Item=E, IntoIter=I>) -> &Comp {
     let idx = idx.into_iter();
     debug_assert_eq!(idx.clone().count(), buf.sizes.len());
-    let s = format!("{{ {}{} -> {}[{}] }}\0", self.name(), i0_in(self.orig_dim()),
+    let s = format!("{{ {}[{}] -> {}[{}] }}\0", self.name(), i0_in(self.orig_dim()),
       buf.name, comma_sep(idx.map(|e| {
         let e = e.expr();
         if cfg!(debug_assertions) { self.check_iter(&e); }
@@ -594,10 +594,9 @@ impl Comp {
   }
 }
 
-// 输出[i0, ..., i{n-1}]
+// 输出i0, ..., i{n-1}
 pub(crate) fn i0_in(n: u32) -> impl Display {
-  fn2display(move |f| write!(f, "[{}]",
-    comma_sep((0..n).map(|i| fn2display(move |f| write!(f, "i{}", i))))))
+  comma_sep((0..n).map(|i| fn2display(move |f| write!(f, "i{}", i))))
 }
 
 // 在pos处添加约束: k_in * i_in + i_out + val == 0; 如果k_in传0，就是设置out维度中pos处值为val

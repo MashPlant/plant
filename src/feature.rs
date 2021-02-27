@@ -1,5 +1,5 @@
 use scoped_threadpool::Pool;
-use std::{collections::BTreeMap, cmp::Ordering};
+use std::cmp::Ordering;
 use crate::*;
 
 // 从程序中提取特征的方法
@@ -106,11 +106,12 @@ impl Feature {
             if fea.nest_level == max_depth && fea.extent == max_extent {
               for buf in fea.touch_pattern.keys() {
                 // 对一个Buf只记录一次访问
-                if added.insert(buf.0) { inner_bufs.push(*buf); }
+                if added.insert((buf.0).0) { inner_bufs.push(((buf.0).0, buf.1)); }
               }
             }
           }
           // 放个0占位，这样sample_curve总会进入if分支一次
+          // 这些数据结构不需要稳定的顺序，所以把NameHashBuf中的P<Buf>取出来
           for &buf in &inner_bufs {
             count_curve.insert(buf, vec![0.0]);
             reuse_curve.insert(buf, vec![0.0]);
@@ -118,6 +119,7 @@ impl Feature {
           }
           for fea in iter {
             for (buf, pat) in &fea.touch_pattern {
+              let ref buf = ((buf.0).0, buf.1);
               if inner_bufs.contains(buf) {
                 count_curve.get_mut(buf)?.push((pat.count as f64).log2());
                 reuse_curve.get_mut(buf)?.push((pat.reuse as f64).log2());
@@ -181,9 +183,8 @@ pub struct IterFeature {
   pub bottomup_product: i64,
   // 统计这个循环层次中的[加法，乘法，除法]次数
   pub arith_cnts: [u32; 3],
-  // 一个(R<str>, u32)表示对Buf的一次访问，R<str>是Buf的名字，u32来自TouchExtractor::buf_cnt
-  // 不用P<Buf>而是用Buf的名字，以此保证稳定的顺序
-  pub touch_pattern: BTreeMap<(R<str>, u32), TouchPattern>,
+  // 表示对Buf的一次访问，u32来自TouchExtractor::buf_cnt
+  pub touch_pattern: HashMap<(NameHashBuf, u32), TouchPattern>,
 }
 
 #[derive(Default)]
@@ -211,8 +212,6 @@ impl TouchExtractor {
   // 不改变iter_result中原有的内容，如果有需要，用户自己负责清空
   pub fn extract(&mut self, cfg: &ConfigEntity) {
     let (_, f) = (cfg.space.template)(&cfg);
-    // Iter和Curve提取特征要求程序结构不变，需要保留这样的循环，例如即使split因子为1，内层循环也不能删去
-    f.set_keep_degenerate_for(true);
     let AstInfo(n, s, _i) = f.build_ast();
     self.info = s.info;
     debug_assert!(self.iter_stack.is_empty());
@@ -233,28 +232,23 @@ impl TouchExtractor {
     })
   }
 
-  pub fn mem(&mut self, buf: P<Buf>, idx: &[Expr]) {
+  pub fn mem(&mut self, buf: P<Buf>, idx: &Expr) {
     let buf_id = *self.buf_cnt.entry(buf).and_modify(|x| *x += 1).or_insert(0);
     let mut stride_map = vec![0; self.iter_stack.len()];
-    // 一个idx中变量的stride要乘上这个位置后面的sizes的大小，变量stride就负责累乘这个大小
-    let mut stride = 1;
-    for (idx, s) in idx.iter().zip(buf.sizes.iter()).rev() {
-      // 这里不用e.visit，它不方便维护stride这样的参数
-      fn vis_idx(stride_map: &mut [i64], e: &Expr, stride: i64) {
-        match e {
-          // 如果下标中一个循环变量出现多次，取stride绝对值最大的一次
-          &Iter(_, it) => if stride_map[it as usize].abs() < stride.abs() { stride_map[it as usize] = stride; }
-          Binary(BinOp::Mul, box [Val(ty, x), y]) | Binary(BinOp::Mul, box [y, Val(ty, x)]) =>
-            vis_idx(stride_map, y, stride * ty.val_i64(*x)),
-          _ => for x in e.args() { vis_idx(stride_map, x, stride); }
-        }
+    // 这里不用e.visit，它不方便维护stride这样的参数
+    fn vis_idx(stride_map: &mut [i64], e: &Expr, stride: i64) {
+      match e {
+        // 如果下标中一个循环变量出现多次，取stride绝对值最大的一次
+        &Iter(_, it) => if stride_map[it as usize].abs() < stride.abs() { stride_map[it as usize] = stride; }
+        Binary(BinOp::Mul, box [Val(ty, x), y]) | Binary(BinOp::Mul, box [y, Val(ty, x)]) =>
+          vis_idx(stride_map, y, stride * ty.val_i64(*x)),
+        _ => for x in e.args() { vis_idx(stride_map, x, stride); }
       }
-      vis_idx(&mut stride_map, idx, stride);
-      stride *= match s { &Val(ty, x) => ty.val_i64(x), _ => debug_panic!("feature extraction requires buf size to be Val") };
     }
+    vis_idx(&mut stride_map, idx, 1);
     // 包裹这次内存访问的所有循环变量都与这次访问有关，如果idx中没有这个循环变量，stride就是0
     for (it, &stride) in self.iter_stack.iter_mut().zip(stride_map.iter()) {
-      it.touch_pattern.insert((buf.name.as_ref().r(), buf_id),
+      it.touch_pattern.insert((NameHashBuf(buf.p()), buf_id),
         TouchPattern { stride, count: 1, reuse: 1, thread_count: 0, thread_reuse: 0 });
     }
   }

@@ -18,9 +18,6 @@ pub struct Func {
   // 默认为false，tmp为true时，codegen使用tempfile为文件名；否则以函数名为文件名
   // 理论上tmp和backend都可以作为codegen的参数，但放在这里codegen调用更方便一点
   pub tmp: bool,
-  // 默认为false，keep_degenerate_for为true时，不删除退化的循环(循环变量只有一个取值)，一个dynamic dim必然对应一个循环
-  // 在调用了Comp::tag和提取feature这两种情况下，如果程序结构可能因为循环退化而改变，需要设置为true
-  pub keep_degenerate_for: bool,
   // 默认为C
   pub backend: Backend,
   // Ctx必须在所有引用Ctx的成员析构后析构
@@ -29,7 +26,7 @@ pub struct Func {
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, keep_degenerate_for: false, backend: C, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, backend: C, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -57,7 +54,6 @@ impl Func {
   pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
 
   impl_setter!(set_tmp tmp bool);
-  impl_setter!(set_keep_degenerate_for keep_degenerate_for bool);
   impl_setter!(set_backend backend Backend);
 
   // 设置domain/schedule中的params的取值范围
@@ -85,10 +81,8 @@ impl Func {
       for i in orig_dim..max_dim { sch = map_add_constraint(sch, i, 0, 0); }
       sch = sch.align_params(all_params.copy()?)?;
       c.schedule.write(sch);
-      debug!("aligned schedule: {}", c.schedule);
       if let Some(store) = &c.store {
         store.write(store.read().align_params(all_params.copy()?)?);
-        debug!("aligned store: {}", store);
       }
     }
     Unit
@@ -119,8 +113,8 @@ pub struct ForInfo {
   // 如果一个Buf被使用，但不是自己分配的，就作为参数传给kern
   // 代码生成中使用extended lambda来生成kern，可以自动捕获使用的标量，所以不收集它们
   // 其实也可以自动捕获使用的指针，但经实验这样会丢失restrict信息，导致kern效率降低，所以还是手动收集它们
-  pub used_buf: HashSet<P<Buf>>,
-  pub local_buf: HashSet<P<Buf>>,
+  pub used_buf: HashSet<NameHashBuf>,
+  pub local_buf: HashSet<NameHashBuf>,
 }
 
 impl ForInfo {
@@ -132,11 +126,13 @@ impl ForInfo {
 pub struct CodegenState {
   // tags保存AST中的for循环的信息，AstNodeRef的具体类型一定是for节点，有且仅有一个Comp在这个for上添加了tag
   pub info: HashMap<AstNodeRef, ForInfo>,
+  // 经过align_schedule，所有计算循环层次相同，都是loop_dim
+  pub loop_dim: u32,
   // 以下都是codegen过程中的临时值，in_kern表示当前是否在GPU内核中
   in_kern: bool,
   // used_buf和local_buf与ForInfo中的意义相同，是借用这里保存一下，填好后放进第一个进入GPU的for的ForInfo中
-  used_buf: HashSet<P<Buf>>,
-  local_buf: HashSet<P<Buf>>,
+  used_buf: HashSet<NameHashBuf>,
+  local_buf: HashSet<NameHashBuf>,
   // kern的启动参数，6对应<<<dim3(...), dim3(...)>>>中的6个参数，如果是None就填1
   kern_cfg: [Option<Box<str>>; 6],
 }
@@ -176,7 +172,7 @@ impl Func {
     }
     let union_sch = union_sch?;
     debug!("build_ast: union_sch = {}", union_sch);
-    let mut build = if let Some(ctx) = self.func_ctx.as_ref() {
+    let mut build = if let Some(ctx) = &self.func_ctx {
       ctx.copy()?.set_from_basic_set()?.ast_build_from_context()
     } else { self.ctx.ast_build_alloc() }?;
     let n_dim = self.comps[0].sch_dim();
@@ -192,9 +188,6 @@ impl Func {
     let mut info = Vec::new();
     build = build.set_iterators(iters)?
       .set_at_each_domain(&mut |n, build| self.visit_comp(n, build, &mut info).into())?;
-    if self.keep_degenerate_for {
-      self.ctx.options_set_ast_build_keep_degenerate_for(1)?;
-    }
     // 这几个ISL构建AST的选项影响不大，去掉也可以
     self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
     self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
@@ -202,6 +195,7 @@ impl Func {
     let ast = build.ast_from_schedule(union_sch)?;
     debug!("build_ast: ast = {}", ast);
     let mut s = CodegenState::default();
+    s.loop_dim = n_dim / 2;
     // 实现上必须访问两次才能提取used_buf和local_buf信息，extract_tags只给for加tag
     // 有了tag后，extract_buf才能提取信息并保存到第一个进入GPU的ForInfo中
     extract_tags(*ast, &mut Vec::new(), &mut s.info);
@@ -225,8 +219,9 @@ impl Func {
     w.write_all(include_bytes!("inc.h"))?;
     // 生成名为{self.name}的实际函数和名为{self.name}_wrapper的wrapper函数
     // wrapper函数接受void **p，从p[0], p[2], p[4], ...位置处读出实际函数的参数，以此调用实际函数
-    write!(w, "void {f}({}){{{}}}\
-      void {f}_wrapper(void**p){{{f}({});}}\n", comma_sep(args.iter().map(|x| x.arg())), self.gen(ast, &s),
+    write!(w, "void {f}({}){{{} {};{}}}void {f}_wrapper(void**p){{{f}({});}}\n",
+      comma_sep(args.iter().map(|x| x.arg())),
+      self.iter_ty, i0_in(s.loop_dim), self.gen(ast, &s),
       comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 2 * i)))),
       f = self.name)?;
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
@@ -235,7 +230,8 @@ impl Func {
     cmd.arg("-x").arg(if b == C { "c" } else { "cu" }).arg(&path);
     match b {
       C => cmd.arg("-Ofast").arg("-march=native").arg("-fopenmp"),
-      CUDA => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options"),
+      CUDA => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options")
+        .arg("-Xcudafe").arg("\"--diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\""),
     };
     cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
     debug!("codegen: cmd = {:?}", cmd);
@@ -271,10 +267,10 @@ impl Func {
     let store = if let Some(store) = comp.store.as_ref() {
       let access = store.copy()?.apply_domain(comp.schedule.copy()?)?
         .set_tuple_name(DimType::In, comp.name_cstr())?;
-      Some(Expr::from_isl(self, comp_access(build, access)))
+      Some(Expr::from_isl(self, access_to_expr(build, access)))
     } else { None };
     // 创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
-    let access_self = comp_access(build, identity_map(comp.domain())
+    let access_self = access_to_expr(build, identity_map(comp.domain())
       .apply_domain(comp.schedule.copy()?)?
       .set_tuple_name(DimType::In, comp.name_cstr())?);
     let op_n = access_self.get_op_n_arg();
@@ -286,21 +282,9 @@ impl Func {
     let mut expr = comp.expr.clone();
     expr.visit_mut(&mut move |e| match e {
       Access(arg, idx) => {
-        // todo: inline的comp也有用access_to_load优化的必要
-        let (e1, ret) = if arg.inline {
-          let mut e1 = arg.expr.clone();
-          e1.visit_mut(&mut |e| if let Iter(_, x) = &e {
-            *e = idx[*x as usize].clone();
-            false
-          } else { true });
-          (e1, true)
-        } else {
-          // access_to_load已经将原下标替换成了新下标，不能再访问它的孩子再替换一次了
-          (access_to_load(build, &comp, arg, idx), false)
-        };
-        *e = e1;
+        *e = access_comp(build, &comp, arg, idx);
         debug!("visit_comp: replaced access = {}", e);
-        ret
+        false
       }
       Iter(_, x) => {
         *e = iter_map[*x as usize].clone();
@@ -334,16 +318,16 @@ impl Func {
             Some(info @ ForInfo { tag: Some(tag), .. }) => {
               let old_in_kern = mem::replace(&mut s.p().in_kern, true);
               if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
-                let param_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| x.arg()));
-                write!(f, "{{auto _kern=[=]__device__({}){{", param_buf).ok()?;
+                let param_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| x.0.arg()));
+                write!(f, "{{auto _kern=[=]__device__({}){{{} {};", param_buf, self.iter_ty, i0_in(s.loop_dim)).ok()?;
               }
               let Extent(min, max, extent) = info.extent();
               debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.name(), info.level, min, tag.gpu_idx(), max);
               let old_cfg = s.p().kern_cfg[(*tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
               debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
-              write!(f, "{ty} i{i}={idx}+{min};\
+              write!(f, "i{i}={idx}+{min};\
                 assume({min}<=i{i}&&i{i}<={max});\
-                if({init}<=i{i}&&{cond}){{{body}}}", ty = self.iter_ty, i = info.level, idx = tag.gpu_idx(),
+                if({init}<=i{i}&&{cond}){{{body}}}", i = info.level, idx = tag.gpu_idx(),
                 min = min, max = max, init = init, cond = cond, body = self.gen(body, &*s)).ok()?;
               s.p().in_kern = old_in_kern;
               if !old_in_kern {
@@ -351,7 +335,7 @@ impl Func {
                   // 用lambda表达式会报声明周期错误，所以用函数定义
                   comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
                 }
-                let arg_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| &x.name));
+                let arg_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| &x.0.name));
                 write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}",
                   fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..]), arg_buf).ok()?;
                 s.p().kern_cfg = Default::default();
@@ -360,7 +344,14 @@ impl Func {
             }
             _ => {}
           }
-          write!(f, "for({} {it}={};{};{it}+={}){{{}}}", self.iter_ty, init, cond, inc, self.gen(body, s), it = it).ok()?;
+          // 我修改了ISL的代码，使它不消除任何循环，而经过align_schedule，所有计算都有相同的循环层数，保存在CodegenState::loop_dim中
+          // 如果直接生成代码，变量定义也会包裹在循环中，其他位置无法访问，所以对于degenerate的循环，不能用作用域包裹
+          // 但这样又会导致循环变量重复定义，解决方案是在函数开头定义所有循环变量(见codegen函数)，这里只是赋值
+          if n.for_is_degenerate()? {
+            write!(f, "{}={};{}", it, init, self.gen(body, s)).ok()?;
+          } else {
+            write!(f, "for({it}={};{};{it}+={}){{{}}}", init, cond, inc, self.gen(body, s), it = it).ok()?;
+          }
         }
         AstNodeType::If => {
           let cond = n.if_get_cond()?.to_C_str()?;
@@ -434,12 +425,12 @@ fn extract_tags(n: AstNodeRef, loops: &mut Vec<AstNodeRef>, info: &mut HashMap<A
 fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
   fn extract_buf_expr(e: &Expr, s: &mut CodegenState) {
     e.visit(&mut move |e| match *e {
-      Load(x, _) | Free(x) => { s.used_buf.insert(x); }
+      Load(x, _) | Free(x) => { s.used_buf.insert(NameHashBuf(x)); }
       Memcpy(x, y) => {
-        s.used_buf.insert(x);
-        s.used_buf.insert(y);
+        s.used_buf.insert(NameHashBuf(x));
+        s.used_buf.insert(NameHashBuf(y));
       }
-      Alloc(x) => { s.local_buf.insert(x); }
+      Alloc(x) => { s.local_buf.insert(NameHashBuf(x)); }
       _ => {}
     });
   }
@@ -482,21 +473,41 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
   Unit
 }
 
-fn access_to_load(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {
-  let s = format!("{} -> {{ {}{} -> {}[{}] }}\0", comp.params(),
+fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {
+  let s = format!("{} -> {{ {}[{}] -> {}[{}] }}\0", comp.params(),
     comp.name(), i0_in(comp.orig_dim()), arg.name(), comma_sep(idx.iter()));
-  debug!("access_to_load: {}", s);
-  // 对于没有store的arg返回Param表达式，这不会影响到domain/schedule的参数，这个表达式之后只会用于输出
-  let store = if let Some(x) = arg.store.as_ref() { x.copy()? } else { return arg.as_param(); };
-  let access = comp.ctx.map_read_from_str(cstr(&s))
+  debug!("access_comp: {}", s);
+  // 访问有store的计算，转化为访问对应内存；没有store且inline，计算出访问的下标后把下标代入表达式中
+  // 没有store且不inline，返回Param表达式，这个表达式之后只会用于输出计算的名字
+  let store = match (&arg.store, arg.inline) {
+    (Some(x), _) => Some(x.copy()?), (None, true) => None,
+    (None, false) => return arg.as_param(),
+  };
+  let mut access = comp.ctx.map_read_from_str(cstr(&s))
     .expect("failed to read access map, comp may have non-affine access")
-    .apply_range(store)?.apply_domain(comp.schedule.copy()?)?
+    .apply_domain(comp.schedule.copy()?)?
     .set_tuple_name(DimType::In, comp.name_cstr())?;
-  debug!("access_to_load: access = {}", access);
-  Expr::from_isl(&comp.func, comp_access(build, access))
+  if let Some(x) = store { access = access.apply_range(x)?; }
+  debug!("access_comp: access = {}", access);
+  let access = access_to_expr(build, access);
+  if arg.inline {
+    debug_assert_eq!(arg.orig_dim() + 1, access.get_op_n_arg() as _);
+    let mut idx = Vec::with_capacity(arg.orig_dim() as _);
+    for i in 1..access.get_op_n_arg() {
+      idx.push(Expr::from_isl(&comp.func, access.get_op_arg(i)?));
+    }
+    let mut e = arg.expr.clone();
+    e.visit_mut(&mut |e| if let Iter(_, x) = &e {
+      *e = idx[*x as usize].clone();
+      false
+    } else { true });
+    e
+  } else {
+    Expr::from_isl(&comp.func, access)
+  }
 }
 
-fn comp_access(build: AstBuildRef, access: Map) -> AstExpr {
+fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
   let sch = build.get_schedule()?.map_from_union_map()?;
   let map = sch.reverse()?;
   let mut iter_map = map.pw_multi_aff_from_map()?;

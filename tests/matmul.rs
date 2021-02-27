@@ -26,8 +26,8 @@ fn matmul(n: u32, m: u32, s: u32) {
   let (ref i, ref j, ref k) = (f.iter(0), f.iter(1), f.iter(2));
   let a = f.buf("a", I32, In, &[n, s]);
   let b = f.buf("b", I32, In, &[s, m]);
-  let c_init = f.comp("C_init", &[(0, n), (0, m)], 0i32);
-  let c = f.comp("C", &[(0, n), (0, m), (0, s)], 0i32);
+  let c_init = f.comp("C_init", &[n, m], 0i32);
+  let c = f.comp("C", &[n, m, s], 0i32);
   c.set_expr(a.at(&[i, k]) * b.at(&[k, j]) + c.at(&[i, j, &(k - 1)]));
   c_init.tile(0, 1, tile_i, tile_j);
   c.tile_3(0, 1, 2, tile_i, tile_j, tile_k);
