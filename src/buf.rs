@@ -135,7 +135,6 @@ impl Buf {
   // 输出本Buf作为函数参数的形式
   // 这里不检查check_arg，因为GPU kern捕获的Buf也会调用arg，它们不一定满足要求
   pub fn arg<'a>(&'a self) -> impl Display + 'a {
-    debug_assert_ne!(self.kind, Temp);
     fn2display(move |f| write!(f, "{}{}*__restrict__ {}",
       if self.kind == In { "const " } else { "" }, self.ty, self.name))
   }

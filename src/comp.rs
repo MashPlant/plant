@@ -121,6 +121,29 @@ impl Comp {
     debug_assert_eq!(idx.len() as u32, self.orig_dim());
     Access(self.into(), idx)
   }
+
+  pub(crate) fn access(&self, arg: &Comp, idx: &[Expr]) -> Map {
+    let s = format!("{} -> {{ {}[{}] -> {}[{}] }}\0", self.params(),
+      self.name(), i0_in(self.orig_dim()), arg.name(), comma_sep(idx.iter()));
+    debug!("access: {}", s);
+    self.ctx.map_read_from_str(cstr(&s))
+      .expect("failed to parse access map, comp may have non-affine access")
+      .apply_domain(self.schedule.copy()?)?
+      .set_tuple_name(DimType::In, self.name_cstr())?
+  }
+
+  // 生成的代码中循环变量的名字是i0, i1, ...，Expr::from_isl依赖这一点
+  pub(crate) fn iter_list(&self) -> IdList {
+    let loop_dim = self.loop_dim();
+    let mut iters = self.ctx.id_list_alloc((loop_dim * 2 + 1) as _)?;
+    for i in 0..loop_dim {
+      // static dim名字是_i{i}，生成的代码中不会用到，dynamic dim名字是i{i}
+      // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
+      iters = iters.add(self.ctx.id_alloc(cstr(&format!("_i{}\0", i)), 0 as _)?)?
+        .add(self.ctx.id_alloc(cstr(&format!("i{}\0", i)), 0 as _)?)?;
+    }
+    iters
+  }
 }
 
 // Bound(zero, min, max)，意义是循环i及外层循环的空间上的0，i的最小值，最大值 + 1 (min <= i < max)
@@ -359,19 +382,26 @@ impl Separate for Vec<&Comp> {
   }
 }
 
+#[derive(Debug)]
 pub struct CacheCfg {
   pub size: u32,
-  pub pad: u32,
+  // cache的目标下标
   pub dst: Expr,
+  // cache的源下标
   pub src: Expr,
+  // user的新下标，必须用user的domain表示
   pub access: Expr,
 }
 
-pub struct CacheCfg2 {
-  pub size: u32,
-  pub pad: u32,
-  pub offset: Expr,
+#[derive(Debug)]
+pub struct CacheInfo {
+  pub sync: Option<(P<Comp>, P<Comp>)>,
+  pub copy: P<Comp>,
+  pub buf: P<Buf>,
+  pub buf_load: P<Comp>,
 }
+
+impl_try!(CacheInfo);
 
 impl Comp {
   // 如果用来添加GPU相关的tag，需要保证tag的几个维度是完美嵌套的
@@ -414,12 +444,14 @@ impl Comp {
     self
   }
 
-  // todo: comment
   // 会将self.expr中所有对src的访问下标都替换成cfg.access的列表，不管原来的下标是什么；若原来有src[i][j]和src[j][i]，会导致错误的结果
-  pub fn cache(&self, src: &Comp, i: u32, threads: u32, cfg: &[CacheCfg]) -> &Buf {
-    debug_assert_eq!(src.orig_dim(), cfg.len() as _);
-    debug_assert!(i < self.loop_dim());
+  pub fn cache(&self, src: &Comp, i: u32, extent: u32, loc: BufLoc, cfg: &[CacheCfg]) -> CacheInfo {
+    // 不使用CacheCfg的Debug来输出，因为希望用Display输出Expr
+    debug!("cache: extent = {}, cfg = [{}]", extent, comma_sep(cfg.iter().map(|CacheCfg { size, dst, src, access }|
+      fn2display(move |f| write!(f, "CacheCfg {{ size: {}, dst: {}, src: {}, access: {} }}", size, dst, src, access)))));
     if cfg!(debug_assertions) {
+      assert_eq!(src.orig_dim(), cfg.len() as _);
+      assert!(i < self.loop_dim());
       // dst和src不必满足self的迭代域，copy的comp_raw和store_at中会检查
       for c in cfg { self.check_iter(&c.access); }
     }
@@ -427,8 +459,7 @@ impl Comp {
     let i = i + 1;
     let name = format!("_cache{}_{}\0", f.new_buf_id(), src.name());
     let buf = f.buf(&name[..name.len() - 1], src.expr.ty(), Temp,
-      cfg.iter().map(|c| c.size + c.pad));
-    let elems = cfg.iter().map(|c| c.size).product::<u32>();
+      cfg.iter().map(|c| c.size)).set_loc(loc);
     let mut dom = project_static_dim(self.schedule());
     let n = dom.n_dim() as u32;
     dom = dom.project_out(DimType::Set, i, n - i)?;
@@ -439,16 +470,22 @@ impl Comp {
     dom = dom.add_constraint(cst)?;
     let cst = dom.get_space()?.local_space_from_space()?.constraint_alloc_inequality()?
       .set_coefficient_si(DimType::Set, i as _, -1)?
-      .set_constant_si(((elems - 1) / threads) as _)?; // copy_iter <= (elems - 1) / threads
+      .set_constant_si((extent - 1) as _)?; // copy_iter < extent
     dom = dom.add_constraint(cst)?;
     dom = dom.set_tuple_name(cstr(&name))?;
     debug!("cache: copy dom = {}", dom);
     let copy = Access(src, cfg.iter().map(|c| c.src.clone()).collect());
-    debug!("cache: copy src = {}", copy);
+    debug!("cache: copy expr = {}", copy);
     let copy = f.comp_raw(dom, copy).store_at(buf, cfg.iter().map(|c| &c.dst));
-    let sync1 = f.comp_raw(sync_dom.copy()?.set_tuple_name(cstr(&format!("_sync1{}", name)))?, Sync);
-    let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, Sync);
-    self.after_between_pred(sync2, i).after_between_pred(copy, i).after_between_pred(sync1, i);
+    let sync = if loc == Shared {
+      let sync1 = f.comp_raw(sync_dom.copy()?.set_tuple_name(cstr(&format!("_sync1{}", name)))?, Sync);
+      let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, Sync);
+      self.after_between_pred(sync2, i).after_between_pred(copy, i).after_between_pred(sync1, i);
+      Some((sync1.p(), sync2.p()))
+    } else {
+      self.after_between_pred(copy, i);
+      None
+    };
     buf.alloc_at(self, (i - 1) as _);
     let buf_load = buf.load().p();
     self.p().expr.visit_mut(&mut move |e| match e {
@@ -459,36 +496,66 @@ impl Comp {
       }
       _ => {}
     });
-    buf.p().get()
+    CacheInfo { sync, copy: copy.p(), buf: buf.p(), buf_load }
   }
 
-  // 设计方法：cfg2[x].size对应所有线程在循环i以下访问的维度x上的不同元素的个数
-  // 即考虑下标x中的线程循环变量和循环i以下的循环变量，这些元素必须在维度x上形成连续的区间，cfg2[x].pad就是区间的起点
-  pub fn cache_identity(&self, src: &Comp, i: u32, threads: &[(u32, u32)], cfg2: Vec<CacheCfg2>) -> &Buf {
-    debug_assert_eq!(src.orig_dim(), cfg2.len() as _);
-    let mut idx = self.func.iter(i + 1);
-    for &(th, range) in threads { idx = idx * range + self.func.iter(th); }
-    debug!("cache_identity: copy idx = {}", idx);
-    let mut extent = cfg2.iter().map(|c| c.size).product::<u32>();
-    let mut orig = Vec::new();
-    self.expr.visit(&mut |e| match e {
-      Access(c, idx) if *c == src.p() => {
-        debug_assert_eq!(idx.len(), cfg2.len());
-        orig = idx.to_vec();
+  pub fn cache_identity(&self, src: &Comp, i: u32, loc: BufLoc) -> CacheInfo {
+    debug_assert!(i < self.loop_dim());
+    // 记录绑定到GPU thread的循环变量的位置和extent
+    let mut threads = Vec::new();
+    if loc == Shared {
+      for (i, &tag) in self.tags.iter().enumerate() {
+        if Some(GPUThreadX) <= tag && tag <= Some(GPUThreadZ) {
+          threads.push((i as u32, self.extent(i as _).2.get_num_si() as u32));
+        }
       }
-      _ => {}
-    });
-    debug_assert!(!orig.is_empty(), "src not in self.expr");
-    debug!("cache_identity: orig idx = [{}]", comma_sep(orig.iter()));
-    let mut cfg = Vec::with_capacity(cfg2.len());
-    for (CacheCfg2 { size, pad, offset }, orig) in cfg2.into_iter().zip(orig.into_iter()) {
-      extent /= size;
-      let idx = (&idx / extent) % size;
-      debug!("cache_identity: dst = {}", idx);
-      cfg.push(CacheCfg { size, pad, dst: idx.clone(), src: idx + offset, access: orig % size });
     }
-    let threads = threads.iter().map(|x| x.1).product();
-    self.cache(src, i, threads, &cfg)
+    debug!("cache_identity: threads = {:?}", threads);
+    let in_threads = |i| threads.iter().find(|x| x.0 == i).is_some();
+    let mut idx: &[_] = &[]; // 如果没有类型标注，默认是&[_; 0]，和下面不一致
+    self.expr.visit(&mut |e| match e { Access(c, x) if *c == src.p() => { idx = x; } _ => {} });
+    debug_assert!(!idx.is_empty(), "src not in self.expr");
+    let access = self.access(src, idx);
+    let mut access_idx = Vec::with_capacity(idx.len());
+    let mut f = |_, build: AstBuildRef| {
+      let access = access_to_expr(build, access.copy()?);
+      for i in 1..access.get_op_n_arg() {
+        access_idx.push(Expr::from_isl(&self.func, access.get_op_arg(i)?));
+      }
+      None // 这里不是为了构建AST，返回None即可
+    };
+    self.ctx.ast_build_alloc()?.set_iterators(self.iter_list())?.set_at_each_domain(&mut f)?
+      .ast_from_schedule(identity_map(self.schedule()).union_map_from_map()?);
+    debug_assert_eq!(access_idx.len(), idx.len());
+    // access_related将除了thread变量外，所有包裹循环i的循环变量置0，这样下标的范围就是需要cache的范围
+    let mut access_related = access;
+    for i in 0..=i {
+      if !in_threads(i) { access_related = access_related.fix_input_si(i * 2 + 1, 0)?; }
+    }
+    let access_related = access_related.range()?;
+    let mut copy_idx = self.func.iter(i + 1);
+    for &(i, extent) in &threads {
+      copy_idx = copy_idx * extent + self.func.iter(i);
+    }
+    debug!("cache_identity: copy idx = {}", copy_idx);
+    let mut cfg = Vec::with_capacity(idx.len());
+    let mut extent = 1;
+    for (j, idx) in idx.iter().enumerate().rev() {
+      let (min, max) = (access_related.copy()?.dim_min_val(j as _)?, access_related.copy()?.dim_max_val(j as _)?);
+      debug_assert!(min.is_zero()?);
+      let size = max.add(self.ctx.val_one()?)?.get_num_si() as u32;
+      let dst = (&copy_idx / extent) % size;
+      // 一般不对Expr做任何简化，但这里要把0 % x简化成0，因为0 % x不符合ISL的语法(而(0) % x符合，这太离谱了)
+      // 这里如果做后序遍历会更方便，但其他地方都是先序，没有什么必要专门写个后序遍历的函数
+      let src = dst.clone() + access_idx[j].modify(move |e| match e {
+        Iter(ty, x) | Binary(BinOp::Rem, box [Iter(ty, x), _]) if in_threads(*x) || *x > i => { *e = Val(*ty, 0); } _ => {}
+      });
+      cfg.push(CacheCfg { size, dst, src, access: idx % size });
+      extent *= size;
+    }
+    cfg.reverse();
+    extent /= threads.iter().map(|x| x.1).product::<u32>();
+    self.cache(src, i, extent, loc, &cfg)
   }
 }
 
@@ -499,7 +566,7 @@ impl Comp {
   pub fn after<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
     debug!("after: setting {} after {}", self.name(), other.name());
     debug_assert!(self.pred.is_none());
-    // debug_assert!(i <= self.loop_dim() && i <= other.loop_dim());
+    debug_assert!(i <= self.loop_dim() && i <= other.loop_dim());
     let (mut this, mut other, i) = (self.p(), other.p(), i as usize);
     this.pred = Some(other);
     if other.succ.len() <= i { other.succ.resize(i + 1, None); }
@@ -555,9 +622,11 @@ impl Comp {
   // 但A.after_raw(B, i); B.after_raw(C, i); 假设一开始static dim都是0，则最终A和B的都是1，分不出先后
   // 此外还须保证事先调用`Func::align_schedule`
   pub fn after_raw(&self, other: &Comp, i: u32) -> Unit {
-    debug_assert_eq!(self.sch_dim(), other.sch_dim());
+    debug!("after_raw: i = {}, self = {}, other = {}", i, self.schedule, other.schedule);
+    // debug_assert_eq!(self.sch_dim(), other.sch_dim());
+    debug_assert!(i <= self.loop_dim() && i <= other.loop_dim());
     // 理论上只需要将other.schedule中pos处的constraint + 1即可，但是ISL不提供这样的操作，必须重新构建
-    for pos in (0..self.sch_dim()).step_by(2) {
+    for pos in (0..self.sch_dim().min(other.sch_dim())).step_by(2) {
       // 获取map中对应位置的static dim
       let mut order = None;
       // Map由多个BasicMap的并集组成，理论上不同的BasicMap的同一个out dim处可以有不同的constraint
@@ -643,4 +712,13 @@ pub(crate) fn project_static_dim(mut set: Set) -> Set {
   // static dim是0, 2, ..., 2 * (n / 2)，但去掉0后，下一个就变成1，去掉1后，下一个就变成2...故循环删除0, 1, ..., n / 2
   for i in 0..n / 2 { set = set.project_out(DimType::Set, i, 1)?; }
   set
+}
+
+pub(crate) fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
+  let sch = build.get_schedule()?.map_from_union_map()?;
+  let map = sch.reverse()?;
+  let mut iter_map = map.pw_multi_aff_from_map()?;
+  let index_aff = access.pw_multi_aff_from_map()?;
+  iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;
+  build.access_from_pw_multi_aff(iter_map)?
 }

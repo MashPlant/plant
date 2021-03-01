@@ -175,19 +175,11 @@ impl Func {
     let mut build = if let Some(ctx) = &self.func_ctx {
       ctx.copy()?.set_from_basic_set()?.ast_build_from_context()
     } else { self.ctx.ast_build_alloc() }?;
-    let n_dim = self.comps[0].sch_dim();
-    debug_assert_eq!(n_dim % 2, 1); // 一定是 static, dynamic, ..., static的模式
-    let mut iters = self.ctx.id_list_alloc(n_dim as _)?;
-    for i in 0..n_dim / 2 {
-      // static dim名字是_i{i}，生成的代码中不会用到，dynamic dim名字是i{i}
-      // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
-      iters = iters.add(self.ctx.id_alloc(cstr(&format!("_i{}\0", i)), 0 as _)?)?
-        .add(self.ctx.id_alloc(cstr(&format!("i{}\0", i)), 0 as _)?)?;
-    }
     // info在返回式被移动，这不影响其中的元素的地址
     let mut info = Vec::new();
-    build = build.set_iterators(iters)?
-      .set_at_each_domain(&mut |n, build| self.visit_comp(n, build, &mut info).into())?;
+    // 如果写成set_at_each_domain(&mut ...)，理论上这句结束后闭包就析构，尽管实际上它的析构是no-op，严谨起见还是把它保存为变量
+    let mut f = |n, build| self.visit_comp(n, build, &mut info).into();
+    build = build.set_iterators(self.comps[0].iter_list())?.set_at_each_domain(&mut f)?;
     // 这几个ISL构建AST的选项影响不大，去掉也可以
     self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
     self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
@@ -195,7 +187,7 @@ impl Func {
     let ast = build.ast_from_schedule(union_sch)?;
     debug!("build_ast: ast = {}", ast);
     let mut s = CodegenState::default();
-    s.loop_dim = n_dim / 2;
+    s.loop_dim = self.comps[0].loop_dim();
     // 实现上必须访问两次才能提取used_buf和local_buf信息，extract_tags只给for加tag
     // 有了tag后，extract_buf才能提取信息并保存到第一个进入GPU的ForInfo中
     extract_tags(*ast, &mut Vec::new(), &mut s.info);
@@ -279,8 +271,7 @@ impl Func {
       iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?));
     }
     debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
-    let mut expr = comp.expr.clone();
-    expr.visit_mut(&mut move |e| match e {
+    let expr = comp.expr.modify(move |e| match e {
       Access(arg, idx) => {
         *e = access_comp(build, &comp, arg, idx);
         debug!("visit_comp: replaced access = {}", e);
@@ -475,19 +466,13 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
 }
 
 fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {
-  let s = format!("{} -> {{ {}[{}] -> {}[{}] }}\0", comp.params(),
-    comp.name(), i0_in(comp.orig_dim()), arg.name(), comma_sep(idx.iter()));
-  debug!("access_comp: {}", s);
   // 访问有store的计算，转化为访问对应内存；没有store且inline，计算出访问的下标后把下标代入表达式中
   // 没有store且不inline，返回Param表达式，这个表达式之后只会用于输出计算的名字
   let store = match (&arg.store, arg.inline) {
     (Some(x), _) => Some(x.copy()?), (None, true) => None,
     (None, false) => return arg.as_param(),
   };
-  let mut access = comp.ctx.map_read_from_str(cstr(&s))
-    .expect("failed to read access map, comp may have non-affine access")
-    .apply_domain(comp.schedule.copy()?)?
-    .set_tuple_name(DimType::In, comp.name_cstr())?;
+  let mut access = comp.access(arg, idx);
   if let Some(x) = store { access = access.apply_range(x)?; }
   debug!("access_comp: access = {}", access);
   let access = access_to_expr(build, access);
@@ -497,22 +482,11 @@ fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Exp
     for i in 1..access.get_op_n_arg() {
       idx.push(Expr::from_isl(&comp.func, access.get_op_arg(i)?));
     }
-    let mut e = arg.expr.clone();
-    e.visit_mut(&mut |e| if let Iter(_, x) = &e {
+    arg.expr.modify(move |e| if let Iter(_, x) = &e {
       *e = idx[*x as usize].clone();
       false
-    } else { true });
-    e
+    } else { true })
   } else {
     Expr::from_isl(&comp.func, access)
   }
-}
-
-fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
-  let sch = build.get_schedule()?.map_from_union_map()?;
-  let map = sch.reverse()?;
-  let mut iter_map = map.pw_multi_aff_from_map()?;
-  let index_aff = access.pw_multi_aff_from_map()?;
-  iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;
-  build.access_from_pw_multi_aff(iter_map)?
 }

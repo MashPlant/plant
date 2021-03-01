@@ -118,6 +118,12 @@ impl Expr {
     }
   }
 
+  pub fn modify<R: VisitChildren>(&self, mut f: impl FnMut(&mut Expr) -> R) -> Expr {
+    let mut e = self.clone();
+    e.visit_mut(&mut f);
+    e
+  }
+
   pub fn from_isl(f: &Func, e: AstExpr) -> Expr {
     match e.get_type() {
       // iter_ty是I32或I64都可以直接用as转换
