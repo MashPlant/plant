@@ -130,19 +130,7 @@ impl Comp {
       .expect("failed to parse access map, comp may have non-affine access")
       .apply_domain(self.schedule.copy()?)?
       .set_tuple_name(DimType::In, self.name_cstr())?
-  }
-
-  // 生成的代码中循环变量的名字是i0, i1, ...，Expr::from_isl依赖这一点
-  pub(crate) fn iter_list(&self) -> IdList {
-    let loop_dim = self.loop_dim();
-    let mut iters = self.ctx.id_list_alloc((loop_dim * 2 + 1) as _)?;
-    for i in 0..loop_dim {
-      // static dim名字是_i{i}，生成的代码中不会用到，dynamic dim名字是i{i}
-      // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
-      iters = iters.add(self.ctx.id_alloc(cstr(&format!("_i{}\0", i)), 0 as _)?)?
-        .add(self.ctx.id_alloc(cstr(&format!("i{}\0", i)), 0 as _)?)?;
-    }
-    iters
+      .detect_equalities()?
   }
 }
 
@@ -362,7 +350,7 @@ impl Comp {
   pub fn apply_sch_raw(&self, s: &str) -> &Comp {
     debug_assert!(s.ends_with('\0'));
     let t = self.ctx.map_read_from_str(cstr(&s))?.align_params(self.schedule.get_space()?)?;
-    self.schedule.write(self.schedule.read().apply_range(t)?);
+    self.schedule.write(self.schedule.read().apply_range(t)?.detect_equalities()?);
     self
   }
 }
@@ -515,46 +503,83 @@ impl Comp {
     let mut idx: &[_] = &[]; // 如果没有类型标注，默认是&[_; 0]，和下面不一致
     self.expr.visit(&mut |e| match e { Access(c, x) if *c == src.p() => { idx = x; } _ => {} });
     debug_assert!(!idx.is_empty(), "src not in self.expr");
+    let n_idx = idx.len();
     let access = self.access(src, idx);
-    let mut access_idx = Vec::with_capacity(idx.len());
-    let mut f = |_, build: AstBuildRef| {
-      let access = access_to_expr(build, access.copy()?);
-      for i in 1..access.get_op_n_arg() {
-        access_idx.push(Expr::from_isl(&self.func, access.get_op_arg(i)?));
-      }
-      None // 这里不是为了构建AST，返回None即可
-    };
-    self.ctx.ast_build_alloc()?.set_iterators(self.iter_list())?.set_at_each_domain(&mut f)?
-      .ast_from_schedule(identity_map(self.schedule()).union_map_from_map()?);
-    debug_assert_eq!(access_idx.len(), idx.len());
-    // access_related将除了thread变量外，所有包裹循环i的循环变量置0，这样下标的范围就是需要cache的范围
-    let mut access_related = access;
+    debug!("cache_identity: access = {}", access);
+    let mut access_idx = self.func.build_access_idx(identity_map(self.schedule()).union_map_from_map()?,
+      self.func.iter_list(access.dim(DimType::In) as _, true), *access);
+    // access_mut将除了thread变量外，所有包裹i的变量置0，只留下thread变量+内层变量，这样下标的范围就是需要cache的范围
+    let mut access_mut = access.set_tuple_name(DimType::In, None)?.set_tuple_name(DimType::Out, None)?;
     for i in 0..=i {
-      if !in_threads(i) { access_related = access_related.fix_input_si(i * 2 + 1, 0)?; }
+      if !in_threads(i) { access_mut = access_mut.fix_input_si(i * 2 + 1, 0)?.eliminate(DimType::In, i * 2 + 1, 1)?; }
     }
-    let access_related = access_related.range()?;
-    let mut copy_idx = self.func.iter(i + 1);
+    debug!("cache_identity: access_mut = {}", access_mut);
+    let mut copy_map = format!("{}->{{", self.params());
+    let mut copy_idx = vec![0; n_idx];
+    copy_idx[n_idx - 1] = -1;
+    let mut last_point = None::<Point>;
+    access_mut.copy()?.range()?.foreach_point(&mut |p| {
+      let mut mut_loc = n_idx - 1;
+      if let Some(x) = &last_point {
+        for i in 0..n_idx {
+          if !p.get_coordinate_val(DimType::Set, i as _)?.eq(*x.get_coordinate_val(DimType::Set, i as _)?)? {
+            mut_loc = i;
+            break;
+          }
+        }
+      }
+      copy_idx[mut_loc] += 1;
+      for x in &mut copy_idx[mut_loc + 1..] { *x = 0; }
+      let _ = write!(copy_map, "{:?}->[{}];", copy_idx, comma_sep((0..n_idx).map(|i| {
+        let p = &p;
+        fn2display(move |f| write!(f, "{}", p.get_coordinate_val(DimType::Set, i as _).unwrap()))
+      })));
+      last_point = Some(p);
+      Stat::Ok
+    })?;
+    if copy_map.ends_with(';') { copy_map.pop(); }
+    copy_map.push_str("}\0");
+    let copy_map = self.ctx.map_read_from_str(cstr(&copy_map))?.coalesce()?
+      .set_tuple_name(DimType::In, self.name_cstr())?;
+    debug!("cache_identity: copy_map = {}", copy_map);
+    let mut copy_idx = self.func.build_access_idx(identity_map(copy_map.copy()?.domain()?).union_map_from_map()?,
+      self.func.iter_list(n_idx as _, false), *copy_map);
+    let copy_dom = copy_map.copy()?.domain()?;
+    let mut access_mut_idx = self.func.build_access_idx(self.schedule.copy()?.reverse()?.union_map_from_map()?,
+      self.func.iter_list(self.orig_dim(), false), *access_mut.apply_range(copy_map.reverse()?)?);
+    debug!("cache_identity: access_mut_idx = [{}]", comma_sep(access_mut_idx.iter()));
+    debug_assert!(access_idx.len() == n_idx && copy_idx.len() == n_idx && access_mut_idx.len() == n_idx);
+    // 这里只是做identity拷贝，是否用/怎样用thread变量对后续访问没有影响
+    let mut copy_iter = self.func.iter(i + 1);
     for &(i, extent) in &threads {
-      copy_idx = copy_idx * extent + self.func.iter(i);
+      copy_iter = copy_iter * extent + self.func.iter(i);
     }
-    debug!("cache_identity: copy idx = {}", copy_idx);
-    let mut cfg = Vec::with_capacity(idx.len());
     let mut extent = 1;
-    for (j, idx) in idx.iter().enumerate().rev() {
-      let (min, max) = (access_related.copy()?.dim_min_val(j as _)?, access_related.copy()?.dim_max_val(j as _)?);
+    let mut copy_iters = Vec::with_capacity(n_idx);
+    for i in (0..n_idx).rev() {
+      let (min, max) = (copy_dom.copy()?.dim_min_val(i as _)?, copy_dom.copy()?.dim_max_val(i as _)?);
       debug_assert!(min.is_zero()?);
       let size = max.add(self.ctx.val_one()?)?.get_num_si() as u32;
-      let dst = (&copy_idx / extent) % size;
-      // 一般不对Expr做任何简化，但这里要把0 % x简化成0，因为0 % x不符合ISL的语法(而(0) % x符合，这太离谱了)
-      // 这里如果做后序遍历会更方便，但其他地方都是先序，没有什么必要专门写个后序遍历的函数
-      let src = dst.clone() + access_idx[j].modify(move |e| match e {
-        Iter(ty, x) | Binary(BinOp::Rem, box [Iter(ty, x), _]) if in_threads(*x) || *x > i => { *e = Val(*ty, 0); } _ => {}
-      });
-      cfg.push(CacheCfg { size, dst, src, access: idx % size });
+      copy_iters.push(((&copy_iter / extent) % size, size));
       extent *= size;
     }
-    cfg.reverse();
+    copy_iters.reverse();
     extent /= threads.iter().map(|x| x.1).product::<u32>();
+    let mut cfg = Vec::with_capacity(n_idx);
+    for ((((copy_iter, size), mut access_idx), mut copy_idx), access_mut_idx) in copy_iters.iter()
+      .zip(access_idx.drain(..)).zip(copy_idx.drain(..)).zip(access_mut_idx.drain(..)) {
+      // 一般不对Expr做任何简化，但这里要把0 % x简化成0，因为0 % x不符合ISL的语法(而(0) % x符合，这太离谱了)
+      // 这里如果做后序遍历会更方便，但其他地方都是先序，没有什么必要专门写个后序遍历的函数
+      access_idx.visit_mut(&mut move |e| match e {
+        Iter(ty, x) | Binary(BinOp::Rem, box [Iter(ty, x), _]) if *x > i || in_threads(*x) => { *e = Val(*ty, 0); } _ => {}
+      });
+      copy_idx.visit_mut(&mut |e| if let Iter(_, x) = e {
+        *e = copy_iters[*x as usize].0.clone();
+        false
+      } else { true });
+      let src = copy_idx + access_idx;
+      cfg.push(CacheCfg { size: *size, dst: copy_iter.clone(), src, access: access_mut_idx });
+    }
     self.cache(src, i, extent, loc, &cfg)
   }
 }

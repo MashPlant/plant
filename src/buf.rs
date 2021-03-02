@@ -83,29 +83,31 @@ impl Buf {
     let (n, i) = (dom.n_dim() as u32, i + 1);
     dom = dom.project_out(DimType::Set, i, n - i)?;
     let (alloc, free) = self.mk_alloc(dom)?;
-    comp.root_comp(i).after_between_pred(alloc, i);
-    free.after_between_pred(comp.leaf_comp(i), i);
+    comp.root_comp(i).after_between_pred(&*alloc, i);
+    if let Some(x) = free { x.after_between_pred(comp.leaf_comp(i), i); }
     self
   }
 
   // 在函数的开头/结尾放置Alloc/Free
   pub fn alloc_at_func(&self) -> &Buf {
     let mut f = self.func;
-    self.mk_alloc(f.ctx.space_set_alloc(0, 0)?.set_universe()?)?;
-    let idx = f.comps.len() - 2;
+    let (_, free) = self.mk_alloc(f.ctx.space_set_alloc(0, 0)?.set_universe()?)?;
+    let idx = f.comps.len() - 1 - free.is_some() as usize;
     let c = f.comps.remove(idx);
     f.comps.insert(0, c);
     self
   }
 
-  fn mk_alloc(&self, dom: Set) -> Option<(&Comp, &Comp)> {
+  fn mk_alloc(&self, dom: Set) -> Option<(P<Comp>, Option<P<Comp>>)> {
     debug!("mk_alloc: dom = {}", dom);
     let f = self.func;
     let alloc = f.comp_raw(dom.copy()?.set_tuple_name(
       cstr(&format!("_alloc{}_{}\0", f.new_comp_id(), self.name)))?, Alloc(self.into()));
-    let free = f.comp_raw(dom.set_tuple_name(
-      cstr(&format!("_free{}_{}\0", f.new_comp_id(), self.name)))?, Free(self.into()));
-    Some((alloc.p().get(), free.p().get()))
+    let free = if self.loc == Host || self.loc == BufLoc::Global {
+      Some(f.comp_raw(dom.set_tuple_name(
+        cstr(&format!("_free{}_{}\0", f.new_comp_id(), self.name)))?, Free(self.into())).p())
+    } else { None };
+    Some((alloc.p(), free))
   }
 
   // 返回host Buf

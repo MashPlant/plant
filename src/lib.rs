@@ -1,4 +1,4 @@
-#![feature(box_syntax, box_patterns, try_trait, bindings_after_at)]
+#![feature(box_syntax, box_patterns, try_trait, bindings_after_at, move_ref_pattern)]
 
 #[macro_use]
 extern crate log;

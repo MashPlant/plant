@@ -87,6 +87,34 @@ impl Func {
     }
     Unit
   }
+
+  // 生成的代码中循环变量的名字是i{start}, i{start + 1}, ...，Expr::from_isl依赖这一点
+  // has_static为true时生成的IdList包含static dim的名字，但只是用来占位置，这些名字没用
+  pub(crate) fn iter_list(&self, loop_dim: u32, has_static: bool) -> IdList {
+    let mut iters = self.ctx.id_list_alloc(if has_static { loop_dim * 2 } else { loop_dim } as _)?;
+    for i in 0..loop_dim {
+      // static dim名字是_i{i}，生成的代码中不会用到，dynamic dim名字是i{i}
+      // 最后一个static dim没有设置名字，这没有影响，因为所有static dim的名字都没用
+      if has_static { iters = iters.add(self.ctx.id_alloc(cstr(&format!("_i{}\0", i)), 0 as _)?)?; }
+      iters = iters.add(self.ctx.id_alloc(cstr(&format!("i{}\0", i)), 0 as _)?)?;
+    }
+    iters
+  }
+
+  pub(crate) fn build_access_idx(&self, sch: UnionMap, iters: IdList, access: MapRef) -> Vec<Expr> {
+    let mut access_idx = Vec::with_capacity(access.dim(DimType::Out) as _);
+    (|| { // 用lambda包起来才能用?操作符
+      self.ctx.ast_build_alloc()?.set_iterators(iters)?.set_at_each_domain(&mut |_, build: AstBuildRef| {
+        let access = access_to_expr(build, access.copy()?);
+        for i in 1..access.get_op_n_arg() {
+          access_idx.push(Expr::from_isl(self, access.get_op_arg(i)?));
+        }
+        None // 这里不是为了构建AST，返回None即可
+      })?.ast_from_schedule(sch)
+    })();
+    debug_assert_eq!(access_idx.len(), access.dim(DimType::Out) as _);
+    access_idx
+  }
 }
 
 // build_ast期间生成的Comp信息
@@ -179,7 +207,7 @@ impl Func {
     let mut info = Vec::new();
     // 如果写成set_at_each_domain(&mut ...)，理论上这句结束后闭包就析构，尽管实际上它的析构是no-op，严谨起见还是把它保存为变量
     let mut f = |n, build| self.visit_comp(n, build, &mut info).into();
-    build = build.set_iterators(self.comps[0].iter_list())?.set_at_each_domain(&mut f)?;
+    build = build.set_iterators(self.iter_list(self.comps[0].loop_dim(), true))?.set_at_each_domain(&mut f)?;
     // 这几个ISL构建AST的选项影响不大，去掉也可以
     self.ctx.options_set_ast_build_atomic_upper_bound(1)?;
     self.ctx.options_set_ast_build_exploit_nested_bounds(1)?;
