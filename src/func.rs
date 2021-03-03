@@ -10,7 +10,6 @@ pub struct Func {
   pub name: Box<str>,
   pub comps: Vec<Box<Comp>>,
   pub bufs: Vec<Box<Buf>>,
-  pub iter_ty: Type,
   // 用于命名自动生成的Comp
   pub comp_cnt: u32,
   // 用于命名自动生成的Buf
@@ -26,7 +25,7 @@ pub struct Func {
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), iter_ty: I32, comp_cnt: 0, buf_cnt: 0, tmp: false, backend: CPU, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), comp_cnt: 0, buf_cnt: 0, tmp: false, backend: CPU, ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -36,8 +35,6 @@ impl Func {
   pub fn find_buf(&self, name: &str) -> Option<&Buf> {
     self.bufs.iter().find(|c| &*c.name == name).map(|c| c.as_ref())
   }
-
-  pub fn iter(&self, level: u32) -> Expr { Iter(self.iter_ty, level) }
 
   pub fn new_comp_id(&self) -> u32 { (self.comp_cnt, self.p().comp_cnt += 1).0 }
 
@@ -241,7 +238,7 @@ impl Func {
     // wrapper函数接受void **p，从p[0], p[3], p[6], ...位置处读出实际函数的参数，以此调用实际函数
     write!(w, "void {f}({}){{{} {};{}}}void {f}_wrapper(void**p){{{f}({});}}\n",
       comma_sep(args.iter().map(|x| x.arg())),
-      self.iter_ty, i0_in(s.loop_dim), self.gen(ast, &s),
+      iter_ty(), i0_in(s.loop_dim), self.gen(ast, &s),
       comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 3 * i)))),
       f = self.name)?;
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
@@ -251,7 +248,7 @@ impl Func {
     match b {
       CPU => cmd.arg("-Ofast").arg("-march=native").arg("-fopenmp"),
       GPU => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options")
-        .arg("-Xcudafe").arg("\"--diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\""),
+        .arg("-Xcudafe").arg("\"--diag_suppress=declared_but_not_referenced --diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\""),
     };
     cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
     debug!("codegen: cmd = {:?}", cmd);
@@ -339,7 +336,7 @@ impl Func {
               let old_in_kern = mem::replace(&mut s.p().in_kern, true);
               if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
                 let param_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| x.0.arg()));
-                write!(f, "{{auto _kern=[=]__device__({}){{{} {};", param_buf, self.iter_ty, i0_in(s.loop_dim)).ok()?;
+                write!(f, "{{auto _kern=[=]__device__({}){{{} {};", param_buf, iter_ty(), i0_in(s.loop_dim)).ok()?;
               }
               let Extent(min, max, extent) = info.extent();
               debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.name(), info.level, min, tag.gpu_idx(), max);

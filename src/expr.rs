@@ -1,5 +1,7 @@
+use std::{mem, sync::atomic::{AtomicU8, Ordering}};
 use crate::*;
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Type { I8, U8, I16, U16, I32, U32, I64, U64, F32, F64, Void }
 
@@ -20,6 +22,14 @@ impl Type {
     }
   }
 }
+
+static ITER_TY: AtomicU8 = AtomicU8::new(I32 as _);
+
+pub fn iter_ty() -> Type { unsafe { mem::transmute(ITER_TY.load(Ordering::Relaxed)) } }
+
+pub fn set_iter_ty(ty: Type) { ITER_TY.store(ty as _, Ordering::Relaxed) }
+
+pub fn iter(i: u32) -> Expr { Iter(iter_ty(), i) }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -127,12 +137,12 @@ impl Expr {
   pub fn from_isl(f: &Func, e: AstExpr) -> Expr {
     match e.get_type() {
       // iter_ty是I32或I64都可以直接用as转换
-      AstExprType::Int => Val(f.iter_ty, e.get_val()?.get_num_si() as _),
+      AstExprType::Int => Val(iter_ty(), e.get_val()?.get_num_si() as _),
       AstExprType::Id => {
         let name = e.get_id()?.get_name()?.as_str();
         // from_isl只在代码生成阶段用到，ISL AST中的循环迭代器名字已经被设置成_i0, i0, _i1, i1...的形式
         if name.starts_with("i") {
-          Iter(f.iter_ty, name.get(1..)?.parse().ok()?)
+          Iter(iter_ty(), name.get(1..)?.parse().ok()?)
         } else {
           Param(f.find_comp(name)?.into())
         }
@@ -182,8 +192,16 @@ macro_rules! impl_other {
 pub trait IntoExpr: Sized + Clone {
   fn expr(self) -> Expr;
 
+  // 下面实现了操作符重载的操作符也在这里实现一遍，这样可以直接调用e.add()，不用use std::ops::Add
   // max_，min_是为了和std::cmp::Ord::max做出区分
-  impl_other!(LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt, Max max_, Min min_);
+  impl_other!(Add add, Sub sub, Mul mul, Div div, Rem rem,
+    LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt, Max max_, Min min_);
+
+  fn neg(self) -> Expr { Binary(BinOp::Sub, box [0.expr(), self.expr()]) }
+
+  fn not(self) -> Expr { Binary(BinOp::Ne, box [0.expr(), self.expr()]) }
+
+  fn select(self, t: impl IntoExpr, f: impl IntoExpr) -> Expr { Select(box [self.expr(), t.expr(), f.expr()]) }
 }
 
 impl IntoExpr for Expr { fn expr(self) -> Expr { self } }

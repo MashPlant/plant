@@ -70,8 +70,7 @@ impl Buf {
   // 创建一个identity访问自身的Comp，可用于Comp::cache
   pub fn load(&self) -> &Comp {
     let f = self.func;
-    f.comp(&format!("_load{}_{}", f.new_buf_id(), self.name), &self.sizes,
-      self.at((0..self.sizes.len() as u32).map(|i| f.iter(i))))
+    f.comp(&format!("_load{}_{}", f.new_buf_id(), self.name), &self.sizes, self.at((0..self.sizes.len() as u32).map(iter)))
       .set_inline(true).store(self).p().get()
   }
 

@@ -550,10 +550,8 @@ impl Comp {
     debug!("cache_identity: access_mut_idx = [{}]", comma_sep(access_mut_idx.iter()));
     debug_assert!(access_idx.len() == n_idx && copy_idx.len() == n_idx && access_mut_idx.len() == n_idx);
     // 这里只是做identity拷贝，是否用/怎样用thread变量对后续访问没有影响
-    let mut copy_iter = self.func.iter(i + 1);
-    for &(i, extent) in &threads {
-      copy_iter = copy_iter * extent + self.func.iter(i);
-    }
+    let mut copy_iter = iter(i + 1);
+    for &(i, extent) in &threads { copy_iter = copy_iter * extent + iter(i); }
     let mut extent = 1;
     let mut copy_iters = Vec::with_capacity(n_idx);
     for i in (0..n_idx).rev() {

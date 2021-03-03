@@ -19,6 +19,7 @@ xgboost = "0.1"
 scoped_threadpool = "0.1"
 num = { version = "0.3", default-features = false }
 cuda-runtime-sys = { version = "0.3.0-alpha", optional = true }
+expr-macro = { path = "expr-macro" }
 
 [dev-dependencies]
 test-case = "1"
