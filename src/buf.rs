@@ -20,7 +20,7 @@ pub struct Buf {
   pub ty: Type,
   pub kind: BufKind,
   pub loc: BufLoc,
-  pub sizes: Vec<Expr>,
+  pub sizes: Box<[Expr]>,
 }
 
 impl_try!(&Buf);
@@ -36,8 +36,7 @@ impl Hash for NameHashBuf {
 
 impl Func {
   // 默认loc为Host
-  pub fn buf<E: IntoExpr>(&self, name: &str, ty: Type, kind: BufKind, sizes: impl IntoIterator<Item=E>) -> &Buf {
-    let sizes = sizes.into_iter().map(|e| e.expr()).collect::<Vec<_>>();
+  pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: Box<[Expr]>) -> &Buf {
     debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty() && ty != Void);
     let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, sizes };
     debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
@@ -47,66 +46,71 @@ impl Func {
   }
 }
 
+#[derive(Debug)]
+pub struct AllocInfo {
+  pub alloc: P<Comp>,
+  pub free: Option<P<Comp>>,
+}
+
+impl_try!(AllocInfo);
+
 impl Buf {
-  pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
-    let mut idx = idx.into_iter();
-    let mut x = idx.next().expect("empty idx").expr();
-    let mut _cnt = 1; // 用于检查idx个数是否与sizes长度一致
+  pub fn at(&self, idx: Box<[Expr]>) -> Expr {
+    debug_assert_eq!(idx.len(), self.sizes.len());
+    let mut idx = idx.into_vec().into_iter();
+    let mut x = idx.next()?;
     // 构造(i0 * size1) + i1 ...
-    for (i, s) in idx.zip(self.sizes.iter().skip(1)) {
-      x = x * s + i;
-      _cnt += 1;
-    }
-    debug_assert_eq!(_cnt, self.sizes.len());
+    for (i, s) in idx.zip(self.sizes.iter().skip(1)) { x = x * s + i; }
     Load(self.into(), box x)
   }
 
   impl_setter!(set_loc loc BufLoc);
 
   pub fn clone(&self) -> &Buf {
-    self.func.buf(&format!("_clone{}_{}", self.func.new_buf_id(), self.name), self.ty, self.kind, &self.sizes)
+    self.func.buf(&format!("_clone{}_{}", self.func.new_buf_id(), self.name), self.ty, self.kind, self.sizes.clone())
   }
 
   // 创建一个identity访问自身的Comp，可用于Comp::cache
   pub fn load(&self) -> &Comp {
     let f = self.func;
-    f.comp(&format!("_load{}_{}", f.new_buf_id(), self.name), &self.sizes, self.at((0..self.sizes.len() as u32).map(iter)))
+    f.comp(&format!("_load{}_{}", f.new_buf_id(), self.name), self.sizes.clone(),
+      self.at((0..self.sizes.len() as u32).map(iter).collect()))
       .set_inline(true).store(self).p().get()
   }
 
-  // 在comp的循环层次at的开头/结尾放置Alloc/Free
-  // 开头/结尾是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在开头/结尾，alloc_at_func同理
-  pub fn alloc_at(&self, comp: &Comp, i: u32) -> &Buf {
+  // 在comp的循环层次at的前/后放置Alloc/Free
+  // 前/后是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在前/后，alloc_at_func同理
+  pub fn alloc_at(&self, comp: &Comp, i: u32) -> AllocInfo {
     debug_assert!(i < comp.loop_dim());
     let mut dom = project_static_dim(comp.schedule());
     let (n, i) = (dom.n_dim() as u32, i + 1);
     dom = dom.project_out(DimType::Set, i, n - i)?;
-    let (alloc, free) = self.mk_alloc(dom)?;
-    comp.root_comp(i).after_between_pred(&*alloc, i);
-    if let Some(x) = free { x.after_between_pred(comp.leaf_comp(i), i); }
-    self
+    let info = self.mk_alloc(dom);
+    comp.after_between_pred(&info.alloc, i);
+    if let Some(x) = info.free { x.after_between_pred(&comp, i); }
+    info
   }
 
   // 在函数的开头/结尾放置Alloc/Free
-  pub fn alloc_at_func(&self) -> &Buf {
+  pub fn alloc_at_func(&self) -> AllocInfo {
     let mut f = self.func;
-    let (_, free) = self.mk_alloc(f.ctx.space_set_alloc(0, 0)?.set_universe()?)?;
-    let idx = f.comps.len() - 1 - free.is_some() as usize;
+    let info = self.mk_alloc(f.ctx.space_set_alloc(0, 0)?.set_universe()?);
+    let idx = f.comps.len() - 1 - info.free.is_some() as usize;
     let c = f.comps.remove(idx);
     f.comps.insert(0, c);
-    self
+    info
   }
 
-  fn mk_alloc(&self, dom: Set) -> Option<(P<Comp>, Option<P<Comp>>)> {
+  fn mk_alloc(&self, dom: Set) -> AllocInfo {
     debug!("mk_alloc: dom = {}", dom);
     let f = self.func;
     let alloc = f.comp_raw(dom.copy()?.set_tuple_name(
-      cstr(&format!("_alloc{}_{}\0", f.new_comp_id(), self.name)))?, Alloc(self.into()));
+      cstr(&format!("_alloc{}_{}\0", f.new_comp_id(), self.name)))?, Alloc(self.into())).p();
     let free = if self.loc == Host || self.loc == BufLoc::Global {
       Some(f.comp_raw(dom.set_tuple_name(
         cstr(&format!("_free{}_{}\0", f.new_comp_id(), self.name)))?, Free(self.into())).p())
     } else { None };
-    Some((alloc.p(), free))
+    AllocInfo { alloc, free }
   }
 
   // 返回host Buf

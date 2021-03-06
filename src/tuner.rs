@@ -132,7 +132,7 @@ impl TimeEvaluator {
     self.p().data = Some(args.iter().map(|&b| {
       b.check_arg();
       let mut size = 1;
-      for s in &b.sizes {
+      for s in b.sizes.iter() {
         size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
       }
       let elem = b.ty.size();

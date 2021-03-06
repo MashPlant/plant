@@ -23,19 +23,18 @@ fn matmul(n: u32, m: u32, s: u32) {
   let (tile_i, tile_j, tile_k) = (8, 32, 2);
 
   let f = Func::new("matmul");
-  let (ref i, ref j, ref k) = (f.iter(0), f.iter(1), f.iter(2));
-  let a = f.buf("a", I32, In, &[n, s]);
-  let b = f.buf("b", I32, In, &[s, m]);
-  let c_init = f.comp("C_init", &[n, m], 0i32);
-  let c = f.comp("C", &[n, m, s], 0i32);
-  c.set_expr(a.at(&[i, k]) * b.at(&[k, j]) + c.at(&[i, j, &(k - 1)]));
+  let a = f.buf("a", I32, In, x![n, s]);
+  let b = f.buf("b", I32, In, x![s, m]);
+  let c_init = f.comp("C_init", x![n, m], x!(0));
+  let c = f.comp("C", x![n, m, s], x!(0));
+  c.set_expr(x!(a(i0, i2) * b(i2, i1) + c(i0, i1, i2 - 1)));
   c_init.tile(0, 1, tile_i, tile_j);
   c.tile_3(0, 1, 2, tile_i, tile_j, tile_k);
   c.after(c_init, 0);
   c.tag(0, Parallel);
-  let buf_c = f.buf("c", I32, Out, &[n, m]);
+  let buf_c = f.buf("c", I32, Out, x![n, m]);
   c_init.store(buf_c);
-  c.store_at(buf_c, &[i, j]);
+  c.store_at(buf_c, x![i0, i1]);
   f.set_tmp(true); // 避免测试留下文件
 
   let lib = f.codegen(&[a.into(), b.into(), buf_c.into()]).unwrap();

@@ -5,6 +5,7 @@ pub struct Comp {
   pub ctx: CtxRef,
   pub func: P<Func>,
   pub expr: Expr,
+  pub cond: Option<Expr>,
   // schedule将表示原始循环迭代范围的set映射到调度后的循环迭代范围的set，同时还包含循环间的顺序关系
   // in dim名字是Comp的名字，out dim名字是空的，#out = #in * 2 + 1
   // out dim分为static和dynamic dim，从循环层次i到包围它的static dim：i * 2；从循环层次i到它的dynamic dim：i * 2 + 1
@@ -35,43 +36,42 @@ pub trait CompBuilder {
   fn comp(self, f: &Func) -> &Comp;
 }
 
-impl<E1: IntoExpr, E2: IntoExpr, I: IntoIterator<Item=E1>> CompBuilder for (I, E2) {
+impl<E: IntoExpr> CompBuilder for (Box<[Expr]>, E) {
   fn comp(self, f: &Func) -> &Comp {
     let e = self.1.expr();
     f.comp(&f.auto_comp_name(&e), self.0, e)
   }
 }
 
-impl<E1: IntoExpr> CompBuilder for E1 {
+impl<E: IntoExpr> CompBuilder for E {
   fn comp(self, f: &Func) -> &Comp {
     let e = self.expr();
-    f.comp(&f.auto_comp_name(&e), EMPTY, e)
+    f.comp(&f.auto_comp_name(&e), <_>::default(), e)
   }
 }
 
 impl Func {
   // ubs = 每个循环变量的upper bound
-  pub fn comp<E: IntoExpr>(&self, name: &str, ubs: impl IntoIterator<Item=E>, expr: impl IntoExpr) -> &Comp {
-    // 很多时候调用方可以提供&[Expr]，这里的拷贝是多余的，但这点浪费可以忽略
-    let ubs = ubs.into_iter().map(|ub| ub.expr()).collect::<Vec<_>>();
-    let expr = expr.expr();
+  // 包括此处在内，很多接受Box<[Expr]>的函数其实接受&[Expr]就够了，但为了配合expr-macro，让用户方便一点，这点浪费可以接受
+  pub fn comp(&self, name: &str, ubs: Box<[Expr]>, e: Expr) -> &Comp {
+    let e = e.expr();
     let mut params = HashSet::default();
     // 收集ranges，expr中的所有Param
     let ref mut vis = |e: &Expr| if let &Param(x) = e { params.insert(x); };
-    for ub in &ubs { ub.visit(vis); }
-    expr.visit(vis);
+    for ub in ubs.iter() { ub.visit(vis); }
+    e.visit(vis);
     let s = format!("[{}] -> {{ {}[{}]: {} }}\0", comma_sep(params.iter().map(|c| c.name())),
       name, i0_in(ubs.len() as _), sep(ubs.iter().enumerate().map(|(i, ub)| fn2display(move |f|
         write!(f, "0 <= i{} < {}", i, ub))), " and "));
     debug!("comp: domain = {}", s);
-    self.comp_raw(self.ctx.set_read_from_str(cstr(&s))?, expr)
+    self.comp_raw(self.ctx.set_read_from_str(cstr(&s))?, e)
   }
 
   pub fn comp_raw(&self, domain: Set, expr: Expr) -> &Comp {
     // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
     let schedule = identity_schedule(domain.coalesce()?);
     debug!("comp_raw: initial identity schedule = {}", schedule);
-    let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, schedule, store: None, pred: None, succ: Vec::new(), tags: Vec::new(), inline: false };
+    let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, cond: None, schedule, store: None, pred: None, succ: Vec::new(), tags: Vec::new(), inline: false };
     debug_assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     if cfg!(debug_assertions) { comp.check_iter(&comp.expr); }
     let ret = comp.as_ref().p();
@@ -96,10 +96,8 @@ impl Comp {
   // 表示原始循环迭代范围的Set
   pub fn domain(&self) -> Set { self.schedule.copy()?.domain()? }
 
-  // 表示调度后循环迭代范围的Set，注意需要设置名字，schedule的out dim名字为空
-  pub fn schedule(&self) -> Set {
-    self.schedule.copy()?.range()?.set_tuple_name(self.name_cstr())?
-  }
+  // 表示调度后循环迭代范围的Set，名字为空，因为schedule的out dim名字为空
+  pub fn schedule(&self) -> Set { self.schedule.copy()?.range()? }
 
   // 输出[逗号分隔的params列表]
   pub fn params<'a>(&'a self) -> impl Display + 'a {
@@ -108,6 +106,7 @@ impl Comp {
   }
 
   impl_setter!(set_expr expr Expr);
+  impl_setter!(set_cond cond Option<Expr>);
   impl_setter!(set_inline inline bool);
 
   // 将自身作为一个Param表达式，Expr中直接通过它的名字使用它
@@ -116,20 +115,18 @@ impl Comp {
   // 如果只是用于普通运算，可以用as_param或at，as_param会往domain/schedule中引入一个参数，应该没有什么好处
   pub fn as_param(&self) -> Expr { Param(self.into()) }
 
-  pub fn at<E: IntoExpr>(&self, idx: impl IntoIterator<Item=E>) -> Expr {
-    let idx = idx.into_iter().map(|e| e.expr()).collect::<Box<[_]>>();
-    debug_assert_eq!(idx.len() as u32, self.orig_dim());
+  pub fn at(&self, idx: Box<[Expr]>) -> Expr {
+    debug_assert_eq!(self.orig_dim(), idx.len() as _);
     Access(self.into(), idx)
   }
 
-  pub(crate) fn access(&self, arg: &Comp, idx: &[Expr]) -> Map {
-    let s = format!("{} -> {{ {}[{}] -> {}[{}] }}\0", self.params(),
-      self.name(), i0_in(self.orig_dim()), arg.name(), comma_sep(idx.iter()));
+  pub(crate) fn access(&self, arg: &str, idx: &[Expr]) -> Map {
+    let s = format!("{} -> {{ [{}] -> {}[{}] }}\0", self.params(),
+      i0_in(self.orig_dim()), arg, comma_sep(idx.iter()));
     debug!("access: {}", s);
     self.ctx.map_read_from_str(cstr(&s))
       .expect("failed to parse access map, comp may have non-affine access")
-      .apply_domain(self.schedule.copy()?)?
-      .set_tuple_name(DimType::In, self.name_cstr())?
+      .apply_domain(self.schedule.copy()?.reset_tuple_id(DimType::In)?)?
       .detect_equalities()?
   }
 }
@@ -251,6 +248,7 @@ impl Comp {
       ctx: self.ctx,
       func: self.func,
       expr: self.expr.clone(),
+      cond: self.cond.clone(),
       schedule: ge.set_tuple_name(DimType::In, cstr(&name))?,
       store: if let Some(x) = &self.store { Some(x.copy()?.set_tuple_name(DimType::In, cstr(&name))?) } else { None },
       pred: None,
@@ -407,7 +405,8 @@ impl Comp {
   // identity store，即C[i, j, k, ...]保存在buf[i, j, k, ...]
   pub fn store(&self, buf: &Buf) -> &Comp {
     debug_assert_eq!(self.orig_dim(), buf.sizes.len() as _);
-    let store = identity_map(self.domain()).set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
+    let store = self.domain().identity()?.reset_tuple_id(DimType::In)?
+      .set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
     debug!("store: {}", store);
     self.p().store = Some(store);
     self
@@ -418,11 +417,10 @@ impl Comp {
     e.visit(&mut move |e| if let &Iter(_, x) = e { assert!(x < self.loop_dim()); })
   }
 
-  pub fn store_at<E: IntoExpr, I: Iterator<Item=E> + Clone>(&self, buf: &Buf, idx: impl IntoIterator<Item=E, IntoIter=I>) -> &Comp {
-    let idx = idx.into_iter();
-    debug_assert_eq!(idx.clone().count(), buf.sizes.len());
-    let s = format!("{{ {}[{}] -> {}[{}] }}\0", self.name(), i0_in(self.orig_dim()),
-      buf.name, comma_sep(idx.map(|e| {
+  pub fn store_at(&self, buf: &Buf, idx: Box<[Expr]>) -> &Comp {
+    debug_assert_eq!(idx.len(), buf.sizes.len());
+    let s = format!("{{ [{}] -> {}[{}] }}\0", i0_in(self.orig_dim()),
+      buf.name, comma_sep(idx.iter().map(|e| {
         let e = e.expr();
         if cfg!(debug_assertions) { self.check_iter(&e); }
         e
@@ -433,21 +431,23 @@ impl Comp {
   }
 
   // 会将self.expr中所有对src的访问下标都替换成cfg.access的列表，不管原来的下标是什么；若原来有src[i][j]和src[j][i]，会导致错误的结果
-  pub fn cache(&self, src: &Comp, i: u32, extent: u32, loc: BufLoc, cfg: &[CacheCfg]) -> CacheInfo {
+  pub fn cache(&self, src: &Comp, i: u32, extent: u32, cond: Option<Expr>, loc: BufLoc, cfg: &mut [CacheCfg]) -> CacheInfo {
     // 不使用CacheCfg的Debug来输出，因为希望用Display输出Expr
-    debug!("cache: extent = {}, cfg = [{}]", extent, comma_sep(cfg.iter().map(|CacheCfg { size, dst, src, access }|
-      fn2display(move |f| write!(f, "CacheCfg {{ size: {}, dst: {}, src: {}, access: {} }}", size, dst, src, access)))));
+    debug!("cache: extent = {}, cond = {}, cfg = [{}]", extent, comma_sep(cond.iter()),
+      comma_sep(cfg.iter().map(|CacheCfg { size, dst, src, access }|
+        fn2display(move |f| write!(f, "CacheCfg {{ size: {}, dst: {}, src: {}, access: {} }}", size, dst, src, access)))));
     if cfg!(debug_assertions) {
       assert_eq!(src.orig_dim(), cfg.len() as _);
       assert!(i < self.loop_dim());
       // dst和src不必满足self的迭代域，copy的comp_raw和store_at中会检查
-      for c in cfg { self.check_iter(&c.access); }
+      for c in cfg.iter() { self.check_iter(&c.access); }
     }
     let (f, src) = (self.func, src.p());
-    let i = i + 1;
     let name = format!("_cache{}_{}\0", f.new_buf_id(), src.name());
     let buf = f.buf(&name[..name.len() - 1], src.expr.ty(), Temp,
-      cfg.iter().map(|c| c.size)).set_loc(loc);
+      cfg.iter().map(|c| c.size.expr()).collect()).set_loc(loc);
+    buf.alloc_at(self, i);
+    let i = i + 1;
     let mut dom = project_static_dim(self.schedule());
     let n = dom.n_dim() as u32;
     dom = dom.project_out(DimType::Set, i, n - i)?;
@@ -462,9 +462,10 @@ impl Comp {
     dom = dom.add_constraint(cst)?;
     dom = dom.set_tuple_name(cstr(&name))?;
     debug!("cache: copy dom = {}", dom);
-    let copy = Access(src, cfg.iter().map(|c| c.src.clone()).collect());
+    let copy = Access(src, cfg.iter_mut().map(|c| c.src.replace0()).collect());
     debug!("cache: copy expr = {}", copy);
-    let copy = f.comp_raw(dom, copy).store_at(buf, cfg.iter().map(|c| &c.dst));
+    let copy = f.comp_raw(dom, copy)
+      .store_at(buf, cfg.iter_mut().map(|c| c.dst.replace0()).collect()).set_cond(cond);
     let sync = if loc == Shared {
       let sync1 = f.comp_raw(sync_dom.copy()?.set_tuple_name(cstr(&format!("_sync1{}", name)))?, Sync);
       let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, Sync);
@@ -474,7 +475,6 @@ impl Comp {
       self.after_between_pred(copy, i);
       None
     };
-    buf.alloc_at(self, (i - 1) as _);
     let buf_load = buf.load().p();
     self.p().expr.visit_mut(&mut move |e| match e {
       Access(c, idx) => if *c == src {
@@ -504,49 +504,71 @@ impl Comp {
     self.expr.visit(&mut |e| match e { Access(c, x) if *c == src.p() => { idx = x; } _ => {} });
     debug_assert!(!idx.is_empty(), "src not in self.expr");
     let n_idx = idx.len();
-    let access = self.access(src, idx);
+    let access = self.access("", idx);
     debug!("cache_identity: access = {}", access);
-    let mut access_idx = self.func.build_access_idx(identity_map(self.schedule()).union_map_from_map()?,
+    let mut access_idx = self.func.build_access_idx(self.schedule().identity()?,
       self.func.iter_list(access.dim(DimType::In) as _, true), *access);
+    debug!("cache_identity: access_idx = [{}]", comma_sep(access_idx.iter()));
     // access_mut将除了thread变量外，所有包裹i的变量置0，只留下thread变量+内层变量，这样下标的范围就是需要cache的范围
     let mut access_mut = access.set_tuple_name(DimType::In, None)?.set_tuple_name(DimType::Out, None)?;
-    for i in 0..=i {
-      if !in_threads(i) { access_mut = access_mut.fix_input_si(i * 2 + 1, 0)?.eliminate(DimType::In, i * 2 + 1, 1)?; }
+    let mut affs = access_mut.coalesce()?.pw_multi_aff_from_map()?;
+    for j in 0..affs.dim(DimType::Out) {
+      let aff = affs.get_pw_aff(j)?;
+      // 这两个函数用于从空开始逐个piece构建PwAff，但它们在ISL里没有公开，我不理解为什么，而且也没有别的方法了
+      extern "C" {
+        fn isl_pw_aff_alloc_size(space: Space, n: i32) -> Option<PwAff>;
+        fn isl_pw_aff_add_piece(pw: PwAff, set: Set, aff: Aff) -> Option<PwAff>;
+      }
+      let aff1 = unsafe { isl_pw_aff_alloc_size(aff.get_space()?, aff.n_piece())? };
+      aff.foreach_piece(&mut |set, mut aff| {
+        for i in 0..=i {
+          if !in_threads(i) { aff = aff.set_coefficient_si(DimType::In, (2 * i + 1) as _, 0)?; }
+        }
+        for &dim in &[DimType::Div, DimType::Param] {
+          for i in 0..aff.dim(dim) { aff = aff.set_coefficient_si(dim, i, 0)?; }
+        }
+        unsafe { aff1.write(isl_pw_aff_add_piece(aff1.read(), set, aff)?); }
+        Stat::Ok
+      })?;
+      affs = affs.set_pw_aff(j as _, aff1)?;
     }
+    access_mut = affs.map_from_pw_multi_aff()?;
     debug!("cache_identity: access_mut = {}", access_mut);
     let mut copy_map = format!("{}->{{", self.params());
     let mut copy_idx = vec![0; n_idx];
     copy_idx[n_idx - 1] = -1;
     let mut last_point = None::<Point>;
-    access_mut.copy()?.range()?.foreach_point(&mut |p| {
-      let mut mut_loc = n_idx - 1;
-      if let Some(x) = &last_point {
-        for i in 0..n_idx {
-          if !p.get_coordinate_val(DimType::Set, i as _)?.eq(*x.get_coordinate_val(DimType::Set, i as _)?)? {
-            mut_loc = i;
-            break;
+    access_mut.copy()?.range()?
+      .remove_dims(DimType::Param, 0, access_mut.dim(DimType::Param) as _)?
+      .foreach_point(&mut |p| {
+        let mut mut_loc = n_idx - 1;
+        if let Some(x) = &last_point {
+          for i in 0..n_idx {
+            if !p.get_coordinate_val(DimType::Set, i as _)?.eq(*x.get_coordinate_val(DimType::Set, i as _)?)? {
+              mut_loc = i;
+              break;
+            }
           }
         }
-      }
-      copy_idx[mut_loc] += 1;
-      for x in &mut copy_idx[mut_loc + 1..] { *x = 0; }
-      let _ = write!(copy_map, "{:?}->[{}];", copy_idx, comma_sep((0..n_idx).map(|i| {
-        let p = &p;
-        fn2display(move |f| write!(f, "{}", p.get_coordinate_val(DimType::Set, i as _).unwrap()))
-      })));
-      last_point = Some(p);
-      Stat::Ok
-    })?;
+        copy_idx[mut_loc] += 1;
+        for x in &mut copy_idx[mut_loc + 1..] { *x = 0; }
+        let _ = write!(copy_map, "{:?}->[{}];", copy_idx, comma_sep((0..n_idx).map(|i| {
+          let p = &p;
+          fn2display(move |f| write!(f, "{}", p.get_coordinate_val(DimType::Set, i as _).unwrap()))
+        })));
+        last_point = Some(p);
+        Stat::Ok
+      })?;
     if copy_map.ends_with(';') { copy_map.pop(); }
     copy_map.push_str("}\0");
-    let copy_map = self.ctx.map_read_from_str(cstr(&copy_map))?.coalesce()?
-      .set_tuple_name(DimType::In, self.name_cstr())?;
+    let copy_map = self.ctx.map_read_from_str(cstr(&copy_map))?.coalesce()?;
     debug!("cache_identity: copy_map = {}", copy_map);
-    let mut copy_idx = self.func.build_access_idx(identity_map(copy_map.copy()?.domain()?).union_map_from_map()?,
-      self.func.iter_list(n_idx as _, false), *copy_map);
     let copy_dom = copy_map.copy()?.domain()?;
-    let mut access_mut_idx = self.func.build_access_idx(self.schedule.copy()?.reverse()?.union_map_from_map()?,
-      self.func.iter_list(self.orig_dim(), false), *access_mut.apply_range(copy_map.reverse()?)?);
+    let mut copy_idx = self.func.build_access_idx(copy_dom.copy()?.identity()?,
+      self.func.iter_list(n_idx as _, false), *copy_map);
+    debug!("cache_identity: copy_idx = [{}]", comma_sep(copy_idx.iter()));
+    let mut access_mut_idx = self.func.build_access_idx(self.schedule.copy()?.reverse()?,
+      self.func.iter_list(self.orig_dim(), false), *access_mut.copy()?.apply_range(copy_map.copy()?.reverse()?)?);
     debug!("cache_identity: access_mut_idx = [{}]", comma_sep(access_mut_idx.iter()));
     debug_assert!(access_idx.len() == n_idx && copy_idx.len() == n_idx && access_mut_idx.len() == n_idx);
     // 这里只是做identity拷贝，是否用/怎样用thread变量对后续访问没有影响
@@ -563,9 +585,12 @@ impl Comp {
     }
     copy_iters.reverse();
     extent /= threads.iter().map(|x| x.1).product::<u32>();
+    let mut cond = self.func.build_cond(identity_schedule(copy_map.range()?),
+      self.func.iter_list(n_idx as _, true), access_mut.range()?);
+    debug!("cache_identity: cond = {}", cond);
     let mut cfg = Vec::with_capacity(n_idx);
-    for ((((copy_iter, size), mut access_idx), mut copy_idx), access_mut_idx) in copy_iters.iter()
-      .zip(access_idx.drain(..)).zip(copy_idx.drain(..)).zip(access_mut_idx.drain(..)) {
+    for ((((copy_iter, size), mut access_idx), copy_idx), access_mut_idx) in copy_iters.iter()
+      .zip(access_idx.drain(..)).zip(copy_idx.iter_mut()).zip(access_mut_idx.drain(..)) {
       // 一般不对Expr做任何简化，但这里要把0 % x简化成0，因为0 % x不符合ISL的语法(而(0) % x符合，这太离谱了)
       // 这里如果做后序遍历会更方便，但其他地方都是先序，没有什么必要专门写个后序遍历的函数
       access_idx.visit_mut(&mut move |e| match e {
@@ -575,10 +600,14 @@ impl Comp {
         *e = copy_iters[*x as usize].0.clone();
         false
       } else { true });
-      let src = copy_idx + access_idx;
+      let src = copy_idx.clone() + access_idx;
       cfg.push(CacheCfg { size: *size, dst: copy_iter.clone(), src, access: access_mut_idx });
     }
-    self.cache(src, i, extent, loc, &cfg)
+    cond.visit_mut(&mut |e| if let Iter(_, x) = e {
+      *e = copy_idx[*x as usize].clone();
+      false
+    } else { true });
+    self.cache(src, i, extent, Some(cond), loc, &mut cfg)
   }
 }
 
@@ -589,7 +618,6 @@ impl Comp {
   pub fn after<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
     debug!("after: setting {} after {}", self.name(), other.name());
     debug_assert!(self.pred.is_none());
-    debug_assert!(i <= self.loop_dim() && i <= other.loop_dim());
     let (mut this, mut other, i) = (self.p(), other.p(), i as usize);
     this.pred = Some(other);
     if other.succ.len() <= i { other.succ.resize(i + 1, None); }
@@ -623,21 +651,6 @@ impl Comp {
   pub fn before_between_pred<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
     other.after_between_pred(self, i);
     other
-  }
-
-  pub fn root_comp(&self, i: u32) -> &Comp {
-    let mut ret = self;
-    while let Some(p) = ret.pred {
-      if p.succ.get(i as usize) != Some(&Some(ret.p())) { break; }
-      ret = p.get();
-    }
-    ret
-  }
-
-  pub fn leaf_comp(&self, i: u32) -> &Comp {
-    let mut ret = self;
-    while let Some(&Some(ch)) = ret.succ.get(i as usize) { ret = ch.get(); }
-    ret
   }
 
   // 用schedule中的static dim来实现after的逻辑。可以直接使用它，但多个Comp间的关系不一定可以保留
@@ -709,21 +722,16 @@ pub(crate) fn map_set_eq(map: Map, pos: u32, k_in: i32, val: i32) -> Map {
   map.apply_range(trans)?
 }
 
-// 从set生成一对一的map，map的in dim名字为set名字，out dim名字为空
-// 注意ISL中名字是空字符串和名字是空指针被认为是不一样的，用reset_tuple_id将名字赋成空指针，或set_tuple_name传None
-pub(crate) fn identity_map(set: Set) -> Map {
-  set.get_space()?.add_dims(DimType::In, set.n_dim() as _)?
-    .set_tuple_name(DimType::In, set.get_tuple_name())?.reset_tuple_id(DimType::Out)?
-    .map_identity()?.intersect_domain(set)?
-}
-
+// 返回map的in_dim名字与dom名字相同，out_dim名字为空
+// out_dim = in_dim * 2 + 1，在0，2，4...，2 * in_dim位置为0，在1，3，5...，2 * in_dim - 1位置与in_dim相应位置相等
 pub(crate) fn identity_schedule(domain: Set) -> Map {
-  let n_dim = domain.n_dim() as u32;
-  let mut sch = identity_map(domain);
-  for i in 0..=n_dim { // 在0，2，4...，2 * n_dim下标处插入0
-    let pos = 2 * i;
-    sch = sch.insert_dims(DimType::Out, pos, 1)?;
-    sch = map_add_constraint(sch, pos, 0, 0);
+  let in_dim = domain.n_dim() as u32;
+  // set.identity()返回的out dim名字和in dim名字都是set名字
+  // 注意ISL中名字是空串和空指针被认为是不相等的，用reset_tuple_id或set_tuple_name传None将名字赋成空指针
+  let mut sch = domain.identity()?.reset_tuple_id(DimType::Out)?;
+  for i in 0..=in_dim { // 在0，2，4...，2 * in_dim下标处插入0
+    sch = sch.insert_dims(DimType::Out, 2 * i, 1)?;
+    sch = map_add_constraint(sch, 2 * i, 0, 0);
   }
   sch
 }
@@ -739,7 +747,7 @@ pub(crate) fn project_static_dim(mut set: Set) -> Set {
 
 pub(crate) fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
   let sch = build.get_schedule()?.map_from_union_map()?;
-  let map = sch.reverse()?;
+  let map = sch.reverse()?.reset_tuple_id(DimType::Out)?;
   let mut iter_map = map.pw_multi_aff_from_map()?;
   let index_aff = access.pw_multi_aff_from_map()?;
   iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;

@@ -1,4 +1,4 @@
-#![feature(box_syntax, box_patterns, try_trait, bindings_after_at, move_ref_pattern)]
+#![feature(box_syntax, box_patterns, try_trait, move_ref_pattern)]
 
 #[macro_use]
 extern crate log;
@@ -27,6 +27,8 @@ pub use func::*;
 pub use fmt::*;
 pub use tuner::*;
 pub use feature::*;
+
+pub use expr_macro::x;
 
 use ptr::*;
 use isl::*;

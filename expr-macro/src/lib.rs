@@ -1,12 +1,15 @@
 #![feature(box_syntax)]
 
+use quote::ToTokens;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{*, spanned::Spanned, punctuated::Punctuated};
 
 #[proc_macro]
 pub fn x(input: TokenStream) -> TokenStream {
-  quote::ToTokens::into_token_stream(expr(parse_macro_input!(input as Expr))).into()
+  if let Ok(e) = parse(input.clone()) { expr(e) } else {
+    array(parse_macro_input!(input with Punctuated::parse_terminated))
+  }.into_token_stream().into()
 }
 
 fn expr(e: Expr) -> Expr {
@@ -19,6 +22,13 @@ fn expr(e: Expr) -> Expr {
   }
   use Expr::*;
   match e {
+    Assign(x) => {
+      // 随便设计的一个语法，_ = e会忽略e的结构，调用(e).expr()
+      // 这里必须加括号，否则可能产生a + b.expr()这样的表达式，看起来和一般理解的AST不一样
+      let span = x.span();
+      method_call(x.attrs, ExprParen { attrs: <_>::default(), paren_token: <_>::default(), expr: x.right }.into(),
+        "expr", span, <_>::default())
+    }
     Binary(x) => {
       use BinOp::*;
       let op = match x.op {
@@ -36,8 +46,7 @@ fn expr(e: Expr) -> Expr {
         _ => panic!("block expr size must be 1"),
       }
     }
-    Call(mut x) => {
-      for e in &mut x.args { unsafe { std::ptr::write(e, expr(std::ptr::read(e))); } }
+    Call(x) => {
       let span = x.span();
       let f = x.func.as_ref();
       if let Some((f, ret)) = (|| match f {
@@ -55,10 +64,10 @@ fn expr(e: Expr) -> Expr {
           attrs: x.attrs,
           func: box ident("call", span),
           paren_token: x.paren_token,
-          args: punct![ty(ret), ExprLit { attrs: <_>::default(), lit: LitStr::new(&f.to_string(), span).into() }.into(), slice(x.args)],
+          args: punct![ty(ret), ExprLit { attrs: <_>::default(), lit: LitStr::new(&f.to_string(), span).into() }.into(), array(x.args)],
         }.into()
       } else {
-        method_call(x.attrs, *x.func, "at", span, punct![slice(x.args)])
+        method_call(x.attrs, *x.func, "at", span, punct![array(x.args)])
       }
     }
     Cast(x) => method_call(x.attrs, expr(*x.expr), "cast", x.as_token.span, punct![ty(&x.ty)]),
@@ -100,14 +109,10 @@ fn ident(s: &str, span: Span) -> Expr {
   ExprPath { attrs: <_>::default(), qself: <_>::default(), path: Ident::new(s, span).into() }.into()
 }
 
-fn slice(idx: Punctuated<Expr, Token![,]>) -> Expr {
-  ExprReference {
-    attrs: <_>::default(),
-    and_token: <_>::default(),
-    raw: <_>::default(),
-    mutability: <_>::default(),
-    expr: box ExprArray { attrs: <_>::default(), bracket_token: <_>::default(), elems: idx }.into(),
-  }.into()
+fn array(mut idx: Punctuated<Expr, Token![,]>) -> Expr {
+  for e in &mut idx { unsafe { std::ptr::write(e, expr(std::ptr::read(e))); } }
+  method_call(<_>::default(), ExprArray { attrs: <_>::default(), bracket_token: <_>::default(), elems: idx }.into(),
+    "into", Span::call_site(), <_>::default())
 }
 
 fn method_call(attrs: Vec<Attribute>, receiver: Expr, s: &str, span: Span, args: Punctuated<Expr, Token![,]>) -> Expr {

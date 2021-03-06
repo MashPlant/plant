@@ -64,13 +64,9 @@ pub struct Call {
   pub args: Box<[Expr]>,
 }
 
-pub fn call<E: IntoExpr>(ret: Type, name: &str, args: impl IntoIterator<Item=E>) -> Expr {
-  let args = args.into_iter().map(|e| e.expr()).collect();
+pub fn call(ret: Type, name: &str, args: Box<[Expr]>) -> Expr {
   Call(box Call { ret, name: name.into(), args })
 }
-
-// 可用于Func::comp，Comp::at等接受impl Expr的slice的函数，直接传&[]会报错无法推断类型
-pub const EMPTY: &[Expr] = &[];
 
 // 逻辑非用x != 0表示，取负用0 - x表示，不在Unary中提供
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -134,6 +130,9 @@ impl Expr {
     e
   }
 
+  // 将自身替换为0，返回自身原来的值，可以为无用但无法移动的Expr省去一次拷贝
+  pub fn replace0(&mut self) -> Expr { mem::replace(self, Val(I8, 0)) }
+
   pub fn from_isl(f: &Func, e: AstExpr) -> Expr {
     match e.get_type() {
       // iter_ty是I32或I64都可以直接用as转换
@@ -157,8 +156,7 @@ impl Expr {
             let buf = f.find_buf(name)?;
             let mut idx = Vec::with_capacity(n as usize - 1);
             for i in 1..n { idx.push(Expr::from_isl(f, e.get_op_arg(i)?)); }
-            buf.at(idx)
-            // Load(buf.into(), idx.into())
+            buf.at(idx.into())
           }
           Cond | Select => Expr::Select(box [Expr::from_isl(f, e.get_op_arg(0)?),
             Expr::from_isl(f, e.get_op_arg(1)?), Expr::from_isl(f, e.get_op_arg(2)?)]),

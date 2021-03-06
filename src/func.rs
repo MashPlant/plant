@@ -54,7 +54,7 @@ impl Func {
   impl_setter!(set_backend backend Backend);
 
   // 设置domain/schedule中的params的取值范围
-  pub fn set_constraint(&self, csts: &[Expr]) -> Unit {
+  pub fn set_constraint(&self, csts: Box<[Expr]>) -> Unit {
     self.align_schedule();
     let s = format!("{} -> {{: {}}}\0", self.comps[0].params(), sep(csts.iter(), " and "));
     debug!("set_constraint: {}", s);
@@ -78,8 +78,8 @@ impl Func {
       for i in orig_dim..max_dim { sch = map_add_constraint(sch, i, 0, 0); }
       sch = sch.align_params(all_params.copy()?)?;
       c.schedule.write(sch);
-      if let Some(store) = &c.store {
-        store.write(store.read().align_params(all_params.copy()?)?);
+      if let Some(x) = &c.store {
+        x.write(x.read().align_params(all_params.copy()?)?);
       }
     }
     Unit
@@ -98,19 +98,34 @@ impl Func {
     iters
   }
 
-  pub(crate) fn build_access_idx(&self, sch: UnionMap, iters: IdList, access: MapRef) -> Vec<Expr> {
+  pub(crate) fn build_access_idx(&self, sch: Map, iters: IdList, access: MapRef) -> Vec<Expr> {
     let mut access_idx = Vec::with_capacity(access.dim(DimType::Out) as _);
-    (|| { // 用lambda包起来才能用?操作符
-      self.ctx.ast_build_alloc()?.set_iterators(iters)?.set_at_each_domain(&mut |_, build: AstBuildRef| {
-        let access = access_to_expr(build, access.copy()?);
-        for i in 1..access.get_op_n_arg() {
-          access_idx.push(Expr::from_isl(self, access.get_op_arg(i)?));
-        }
-        None // 这里不是为了构建AST，返回None即可
-      })?.ast_from_schedule(sch)
-    })();
+    self.build_impl(sch, iters, |_, b| {
+      let access = access_to_expr(b, access.copy()?);
+      for i in 1..access.get_op_n_arg() {
+        access_idx.push(Expr::from_isl(self, access.get_op_arg(i)?));
+      }
+      None // 这里不是为了构建AST，返回None即可
+    });
     debug_assert_eq!(access_idx.len(), access.dim(DimType::Out) as _);
     access_idx
+  }
+
+  pub(crate) fn build_cond(&self, sch: Map, iters: IdList, cond: Set) -> Expr {
+    let mut ret = None::<Expr>;
+    self.build_impl(sch, iters, |n, b| {
+      debug!("sch = {}, cond = {}, expr = {}", b.get_schedule()?, cond, b.expr_from_set(cond.copy()?)?.to_C_str()?);
+      // sch可能是不连续的，这个函数会被调用多次，每次在不同限制下简化cond，结果需要与起来
+      let cond = Expr::from_isl(self, b.expr_from_set(cond.copy()?)?);
+      ret = Some(if let Some(x) = &ret { x.land(cond) } else { cond });
+      Some(n) // 这里需要返回Some，否则调用一次就失败了
+    });
+    ret?
+  }
+
+  fn build_impl(&self, sch: Map, iters: IdList, mut f: impl FnMut(AstNode, AstBuildRef) -> Option<AstNode>) -> Option<AstNode> {
+    let sch = sch.reset_tuple_id(DimType::In)?.reset_tuple_id(DimType::Out)?.union_map_from_map()?;
+    self.ctx.ast_build_alloc()?.set_iterators(iters)?.set_at_each_domain(&mut |n, b| f(n, b))?.ast_from_schedule(sch)
   }
 }
 
@@ -121,6 +136,7 @@ impl Func {
 pub struct CompInfo {
   // store的目标位置，以Load表示
   pub store: Option<Expr>,
+  pub cond: Option<Expr>,
   pub expr: Expr,
   pub comp: P<Comp>,
 }
@@ -191,8 +207,8 @@ impl Func {
     }
     let mut union_sch = None;
     for c in self.sch_comps() {
-      // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环，identity_map保证这一点
-      let sch = identity_map(c.schedule()).union_map_from_map()?;
+      // out dim名字必须是空的，ISL才会生成不完美嵌套的循环，否则只能生成多个完美嵌套的循环
+      let sch = c.schedule().identity()?.set_tuple_name(DimType::In, c.name_cstr())?.union_map_from_map()?;
       union_sch = Some(if let Some(x) = union_sch { sch.union(x)? } else { sch });
     }
     let union_sch = union_sch?;
@@ -281,22 +297,19 @@ impl Func {
     let expr = n.user_get_expr()?;
     let name = expr.get_op_arg(0)?.get_id()?.get_name()?;
     let comp = self.find_comp(&name)?;
-    let store = if let Some(store) = comp.store.as_ref() {
-      let access = store.copy()?.apply_domain(comp.schedule.copy()?)?
-        .set_tuple_name(DimType::In, comp.name_cstr())?;
+    let store = if let Some(x) = comp.store.as_ref() {
+      let access = x.copy()?.apply_domain(comp.schedule.copy()?.reset_tuple_id(DimType::In)?)?;
       Some(Expr::from_isl(self, access_to_expr(build, access)))
     } else { None };
     // 创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
-    let access_self = access_to_expr(build, identity_map(comp.domain())
-      .apply_domain(comp.schedule.copy()?)?
-      .set_tuple_name(DimType::In, comp.name_cstr())?);
+    let access_self = access_to_expr(build, comp.schedule.copy()?.reverse()?);
     let op_n = access_self.get_op_n_arg();
     let mut iter_map = Vec::with_capacity(op_n as usize - 1);
     for i in 1..op_n {
       iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?));
     }
     debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
-    let expr = comp.expr.modify(move |e| match e {
+    let ref replace_idx = move |e: &mut Expr| match e {
       Access(arg, idx) => {
         *e = access_comp(build, &comp, arg, idx);
         debug!("visit_comp: replaced access = {}", e);
@@ -307,8 +320,10 @@ impl Func {
         false
       }
       _ => true
-    });
-    let ci = box CompInfo { store, expr, comp: comp.into() };
+    };
+    let cond = comp.cond.as_ref().map(|e| e.modify(replace_idx));
+    let expr = comp.expr.modify(replace_idx);
+    let ci = box CompInfo { store, cond, expr, comp: comp.into() };
     let n = n.set_annotation(self.ctx.id_alloc(None, ci.as_ref() as *const _ as _)?)?;
     info.push(ci);
     n
@@ -325,14 +340,15 @@ impl Func {
           let cond = n.for_get_cond()?.to_C_str()?;
           let inc = n.for_get_inc()?.to_C_str()?;
           let body = n.for_get_body()?;
-          match s.info.get(&*n) {
+          let info = s.info.get(&*n)?;
+          match info {
             // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
             // 循环变量是在for外定义的，需要private指令避免不同线程间循环变量干扰
-            Some(ForInfo { tag: Some(Parallel), .. }) => write!(f, "\n#pragma omp parallel for private({})\n", i0_in(s.loop_dim)).ok()?,
+            ForInfo { tag: Some(Parallel), .. } => write!(f, "\n#pragma omp parallel for private({})\n", i0_in(s.loop_dim)).ok()?,
             // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
             // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
             // 这导致了Comp::tag的注释中描述的问题
-            Some(info @ ForInfo { tag: Some(tag), .. }) => {
+            ForInfo { tag: Some(tag), .. } => {
               let old_in_kern = mem::replace(&mut s.p().in_kern, true);
               if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
                 let param_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| x.0.arg()));
@@ -364,7 +380,7 @@ impl Func {
           // 我修改了ISL的代码，使它不消除任何循环，而经过align_schedule，所有计算都有相同的循环层数，保存在CodegenState::loop_dim中
           // 如果直接生成代码，变量定义也会包裹在循环中，其他位置无法访问，所以对于degenerate的循环，不能用作用域包裹
           // 但这样又会导致循环变量重复定义，解决方案是在函数开头定义所有循环变量(见codegen函数)，这里只是赋值
-          if n.for_is_degenerate()? {
+          if n.for_is_degenerate()? && info.tag != Some(Parallel) {
             write!(f, "{}={};{}", it, init, self.gen(body, s)).ok()?;
           } else {
             write!(f, "for({it}={};{};{it}+={}){{{}}}", init, cond, inc, self.gen(body, s), it = it).ok()?;
@@ -383,8 +399,9 @@ impl Func {
         }
         AstNodeType::User => {
           let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);
-          if let Some(store) = &comp.store {
-            write!(f, "{}={};", store, comp.expr).ok()?;
+          if let Some(x) = &comp.cond { write!(f, "if({}){{", x).ok()?; }
+          if let Some(x) = &comp.store {
+            write!(f, "{}={};", x, comp.expr).ok()?;
           } else {
             // 没有store的comp表示成一个标量定义，如果类型是void就只写右手项
             if comp.expr.ty() == Void {
@@ -393,6 +410,7 @@ impl Func {
               write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr).ok()?;
             }
           }
+          if comp.cond.is_some() { f.write_str("}").ok()?; }
         }
         ty => debug_panic!("invalid ast node type: {:?}", ty),
       }
@@ -482,7 +500,8 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
     }
     AstNodeType::User => if s.in_kern {
       let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);
-      if let Some(store) = &comp.store { extract_buf_expr(store, s); }
+      if let Some(x) = &comp.store { extract_buf_expr(x, s); }
+      if let Some(x) = &comp.cond { extract_buf_expr(x, s); }
       extract_buf_expr(&comp.expr, s);
     }
     ty => debug_panic!("invalid ast node type: {:?}", ty),
@@ -497,8 +516,10 @@ fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Exp
     (Some(x), _) => Some(x.copy()?), (None, true) => None,
     (None, false) => return arg.as_param(),
   };
-  let mut access = comp.access(arg, idx);
-  if let Some(x) = store { access = access.apply_range(x)?; }
+  let mut access = comp.access(arg.name(), idx);
+  if let Some(x) = store {
+    access = access.reset_tuple_id(DimType::Out)?.apply_range(x)?;
+  }
   debug!("access_comp: access = {}", access);
   let access = access_to_expr(build, access);
   if arg.inline {
