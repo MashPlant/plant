@@ -80,7 +80,7 @@ impl Expr {
           if p1 >= pred { f.write_str(")")?; }
           return Ok(());
         }
-      };
+      }
       match self {
         &Val(ty, x) => match ty {
           I8 => Display::fmt(&(x as i8), f),

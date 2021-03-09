@@ -1,7 +1,8 @@
 use libloading::{Library, Symbol};
 use scoped_threadpool::Pool;
 use xgboost::{parameters::{*, learning::*}, DMatrix, Booster};
-use std::{mem, time::{Instant, Duration}, ops::{Deref, DerefMut}, cmp::Ordering};
+use setjmp::*;
+use std::{mem::{self, MaybeUninit}, time::{Instant, Duration}, ops::{Deref, DerefMut, Index}, cmp::Ordering, fs::File, io::Write};
 use crate::*;
 
 pub struct ConfigSpace {
@@ -84,11 +85,12 @@ pub struct ConfigEntity {
   pub choices: Box<[u32]>,
 }
 
-impl ConfigEntity {
+impl Index<&str> for ConfigEntity {
+  type Output = u32;
   // 返回name选项的取值
-  pub fn get(&self, name: &str) -> u32 {
+  fn index(&self, name: &str) -> &Self::Output {
     let (idx, (_, e)) = self.space.iter().enumerate().find(|(_, &(n, _))| &*n == name).unwrap();
-    e[self.choices[idx] as usize]
+    &e[self.choices[idx] as usize]
   }
 }
 
@@ -116,8 +118,16 @@ pub struct TimeEvaluator {
 
 pub type WrapperFn = fn(*const *mut u8);
 
+static mut EVAL_JMP_BUF: MaybeUninit<sigjmp_buf> = MaybeUninit::uninit();
+
 impl TimeEvaluator {
   pub fn new(n_discard: u32, n_repeat: u32, timeout: Duration) -> Self {
+    // 捕获SIGSEGV信号，eval时可以检测运行错误而不终止程序
+    unsafe extern "C" fn handler(_: libc::c_int) {
+      // 发生SIGSEGV时跳转到eval中的一个位置并让sigsetjmp返回1
+      siglongjmp(EVAL_JMP_BUF.as_mut_ptr(), 1);
+    }
+    unsafe { libc::signal(libc::SIGSEGV, handler as _); }
     TimeEvaluator { n_discard, n_repeat, timeout, data: None }
   }
 
@@ -148,22 +158,29 @@ impl TimeEvaluator {
     }).collect());
   }
 
-  // 返回(耗时，!是否超时)，如果超时了，耗时取一次运行的值
-  pub fn eval(&self, f: WrapperFn) -> (Duration, bool) {
+  // 返回(耗时，!是否超时)，耗时单位为秒，如果超时了，耗时取一次运行的值
+  // 如果发生运行错误，返回耗时inf
+  pub fn eval(&self, f: WrapperFn) -> (f32, bool) {
     let data = self.data.as_ref()
       .expect("call TimeEvaluator::init or manually init TimeEvaluator::data first").as_ptr() as _;
     let t0 = Instant::now();
-    // 预运行一次，用它判断是否超时
-    f(data);
+    // 预运行一次，用它判断是否超时和运行错误
+    let re = unsafe { sigsetjmp(EVAL_JMP_BUF.as_mut_ptr(), 1) };
+    if re == 0 { // 正常控制流下sigsetjmp返回0
+      f(data);
+    } else { // 执行上一行f(data)时发生SIGSEGV，跳转到handler，再跳转到sigsetjmp，且返回值为1
+      warn!("eval: seg fault");
+      return (f32::INFINITY, false);
+    }
     let elapsed = Instant::now().duration_since(t0);
     if elapsed < self.timeout {
       // 预运行剩余次数
       for _ in 1..self.n_discard { f(data); }
       let t0 = Instant::now();
       for _ in 0..self.n_repeat { f(data); }
-      (Instant::now().duration_since(t0) / self.n_repeat, true)
+      (Instant::now().duration_since(t0).as_secs_f32() / self.n_repeat as f32, true)
     } else {
-      (elapsed, false)
+      (elapsed.as_secs_f32(), false)
     }
   }
 }
@@ -174,13 +191,22 @@ pub struct Tuner {
   pub batch_size: u32,
   pub evaluator: TimeEvaluator,
   pub policy: TunerPolicy,
-  // 记录当前最优的配置和这个配置下的耗时
-  pub best: (ConfigEntity, Duration),
+  // 记录当前最优的配置和这个配置下的耗时，单位为秒
+  pub best: (ConfigEntity, f32),
+  pub best_reporter: Option<Box<dyn FnMut(&(ConfigEntity, f32))>>,
   pub pool: Pool,
   // 理论上libs只是Tuner::eval中的局部变量，放在这里只是为了避免重复申请内存
   // Symbol的生命周期参数表示它来自的Library的生命周期，这里是.1借用.0，没法提供这个参数，就用'static
   // 实际上Symbol不持有指向Library的引用，且它们只会一起使用，所以这是安全的
   pub libs: Vec<(Library, Symbol<'static, WrapperFn>)>,
+}
+
+pub fn file_best_reporter(beg: Instant, path: &str) -> impl FnMut(&(ConfigEntity, f32)) {
+  let mut f = File::create(path).unwrap();
+  move |(cfg, time)| {
+    writeln!(f, "{:?}: best cfg {} time = {}s", Instant::now().duration_since(beg), cfg, time)
+      .and_then(|_| f.flush()).unwrap();
+  }
 }
 
 pub enum TunerPolicy {
@@ -193,14 +219,14 @@ pub enum TunerPolicy {
 impl Tuner {
   pub fn new(space: Box<ConfigSpace>, policy: TunerPolicy) -> Tuner {
     const DEFAULT_BATCH: u32 = 16;
-    // !0即无符号全1，相当于无穷大的耗时
-    let best = (ConfigEntity { space: space.as_ref().r(), choices: <_>::default() }, Duration::from_secs(!0));
+    let best = (ConfigEntity { space: space.as_ref().r(), choices: <_>::default() }, f32::INFINITY);
     Tuner {
       space,
       batch_size: DEFAULT_BATCH,
       evaluator: TimeEvaluator::new(1, 3, Duration::from_secs(1)),
       policy,
       best,
+      best_reporter: None,
       pool: Pool::new(DEFAULT_BATCH),
       libs: Vec::with_capacity(DEFAULT_BATCH as _),
     }
@@ -213,6 +239,10 @@ impl Tuner {
     self.p().pool = Pool::new(batch_size);
     self.p().libs.reserve(batch_size as _);
     self
+  }
+
+  pub fn set_best_reporter(&self, f: impl FnMut(&(ConfigEntity, f32)) + 'static) {
+    self.p().best_reporter = Some(box f);
   }
 
   // 尝试n_trial个配置取值
@@ -292,17 +322,18 @@ impl Tuner {
     for (idx, ((_l, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
       let (elapsed, ok) = self.evaluator.eval(*f);
       if ok {
-        info!("eval: {}, {:?}", cfg, elapsed);
+        info!("eval: {}, {}s", cfg, elapsed);
       } else {
-        warn!("eval: {} time out, {:?}", cfg, elapsed);
+        warn!("eval: {} time out, {}s", cfg, elapsed);
       }
       if elapsed < self.best.1 {
         self.p().best.1 = elapsed;
         self.p().best.0 = cfg.clone();
       }
-      if let Some(cost) = cost.as_mut() { cost[idx] = elapsed.as_secs_f32(); }
+      if let Some(cost) = cost.as_mut() { cost[idx] = elapsed; }
     }
-    info!("eval: best cfg {} time = {:?}", self.best.0, self.best.1);
+    info!("eval: best cfg {} time = {}s", self.best.0, self.best.1);
+    if let Some(x) = &mut self.p().best_reporter { x(&self.best); }
   }
 }
 
