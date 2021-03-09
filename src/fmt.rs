@@ -21,6 +21,10 @@ pub fn sep<T: Display>(it: impl Iterator<Item=T> + Clone, sep: &'static str) -> 
 
 pub fn comma_sep<T: Display>(it: impl Iterator<Item=T> + Clone) -> impl Display { sep(it, ",") }
 
+pub fn opt<'a, T: Display>(x: &'a Option<T>) -> impl Display + 'a {
+  fn2display(move |f| if let Some(x) = x { x.fmt(f) } else { f.write_str("None") })
+}
+
 impl Type {
   pub fn as_str(self) -> &'static str {
     match self {
@@ -79,16 +83,16 @@ impl Expr {
       };
       match self {
         &Val(ty, x) => match ty {
-          I8 => write!(f, "{}", x as i8),
-          U8 => write!(f, "{}", x as u8),
-          I16 => write!(f, "{}", x as i16),
-          U16 => write!(f, "{}", x as u16),
-          I32 => write!(f, "{}", x as i32),
-          U32 => write!(f, "{}", x as u32),
-          I64 => write!(f, "{}", x as i64),
-          U64 | Void => write!(f, "{}", x), // Void应该是不可能的
-          F32 => write!(f, "{}", f32::from_bits(x as _)),
-          F64 => write!(f, "{}", f64::from_bits(x)),
+          I8 => Display::fmt(&(x as i8), f),
+          U8 => Display::fmt(&(x as u8), f),
+          I16 => Display::fmt(&(x as i16), f),
+          U16 => Display::fmt(&(x as u16), f),
+          I32 => Display::fmt(&(x as i32), f),
+          U32 => Display::fmt(&(x as u32), f),
+          I64 => Display::fmt(&(x as i64), f),
+          U64 | Void => Display::fmt(&x, f), // Void应该是不可能的
+          F32 => Display::fmt(&f32::from_bits(x as _), f),
+          F64 => Display::fmt(&f64::from_bits(x), f),
         },
         &Iter(_, x) => write!(f, "i{}", x),
         &Param(x) => f.write_str(x.name()),
@@ -146,7 +150,7 @@ impl Expr {
 }
 
 impl Display for Expr {
-  fn fmt(&self, f: &mut Formatter) -> FmtResult { write!(f, "{}", self.show(13)) }
+  fn fmt(&self, f: &mut Formatter) -> FmtResult { self.show(14).fmt(f) }
 }
 
 impl DimTag {

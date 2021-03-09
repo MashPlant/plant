@@ -28,17 +28,18 @@ pub use fmt::*;
 pub use tuner::*;
 pub use feature::*;
 
-pub use expr_macro::x;
-
-use ptr::*;
-use isl::*;
-use std::fmt::{*, Result as FmtResult};
 pub use expr::{Type::*, Expr::*};
 pub use comp::DimTag::*;
 pub use buf::{BufKind::*, BufLoc::*};
 pub use Backend::*;
 pub use tuner::{Loss::*, TunerPolicy::*};
 pub use feature::Feature::*;
+
+pub use ptr::*;
+pub use isl::*;
+pub use expr_macro::*;
+
+use std::fmt::{*, Result as FmtResult};
 
 // AHash::default()的文档说它会生成相同的初始状态，但只是一次运行每次调用相同，多次运行状态不一定相同automate
 // 我希望多次运行中，HashSet/Map有完全一致的表现(迭代顺序不变)，所以手动实现一个

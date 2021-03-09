@@ -60,9 +60,9 @@ impl Func {
     let ref mut vis = |e: &Expr| if let &Param(x) = e { params.insert(x); };
     for ub in ubs.iter() { ub.visit(vis); }
     e.visit(vis);
-    let s = format!("[{}] -> {{ {}[{}]: {} }}\0", comma_sep(params.iter().map(|c| c.name())),
+    let s = format!("[{}]->{{{}[{}]:{}}}\0", comma_sep(params.iter().map(|c| c.name())),
       name, i0_in(ubs.len() as _), sep(ubs.iter().enumerate().map(|(i, ub)| fn2display(move |f|
-        write!(f, "0 <= i{} < {}", i, ub))), " and "));
+        write!(f, "0<=i{}<{}", i, ub))), "&&"));
     debug!("comp: domain = {}", s);
     self.comp_raw(self.ctx.set_read_from_str(cstr(&s))?, e)
   }
@@ -99,9 +99,9 @@ impl Comp {
   // 表示调度后循环迭代范围的Set，名字为空，因为schedule的out dim名字为空
   pub fn schedule(&self) -> Set { self.schedule.copy()?.range()? }
 
-  // 输出[逗号分隔的params列表]
+  // 输出[逗号分隔的params列表]->
   pub fn params<'a>(&'a self) -> impl Display + 'a {
-    fn2display(move |f| write!(f, "[{}]", comma_sep((0..self.schedule.dim(DimType::Param) as u32)
+    fn2display(move |f| write!(f, "[{}]->", comma_sep((0..self.schedule.dim(DimType::Param) as u32)
       .map(|i| self.schedule.get_dim_name(DimType::Param, i).unwrap()))))
   }
 
@@ -120,9 +120,34 @@ impl Comp {
     Access(self.into(), idx)
   }
 
+  // 长度为orig_dim的列表，每个元素用调度后的下标表示调度前的下标
+  pub fn iter_map(&self) -> Vec<Expr> {
+    let mut ret = Vec::new();
+    (|| { // 在lambda表达式里才能用?操作符
+      // project_static_dim_map省去也可以，写了后懒得去掉了，而且去掉无用的维度速度应该会快一点
+      let sch = project_static_dim_map(self.schedule.copy()?.reset_tuple_id(DimType::In)?);
+      // 与Func::visit_comp中一样，创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
+      ret = self.func.build_access_idx(sch.copy()?.range()?.identity()?,
+        self.func.iter_list(self.loop_dim(), false), *sch.reverse()?);
+      Unit
+    })();
+    ret
+  }
+
+  // 长度为loop_dim的列表，每个元素用调度前的下标表示调度后的下标
+  pub fn iter_map_rev(&self) -> Vec<Expr> {
+    let mut ret = Vec::new();
+    (|| {
+      let sch = project_static_dim_map(self.schedule.copy()?.reset_tuple_id(DimType::In)?);
+      ret = self.func.build_access_idx(sch.copy()?.domain()?.identity()?,
+        self.func.iter_list(self.loop_dim(), false), *sch);
+      Unit
+    })();
+    ret
+  }
+
   pub(crate) fn access(&self, arg: &str, idx: &[Expr]) -> Map {
-    let s = format!("{} -> {{ [{}] -> {}[{}] }}\0", self.params(),
-      i0_in(self.orig_dim()), arg, comma_sep(idx.iter()));
+    let s = format!("{}{{[{}]->{}[{}]}}\0", self.params(), i0_in(self.orig_dim()), arg, comma_sep(idx.iter()));
     debug!("access: {}", s);
     self.ctx.map_read_from_str(cstr(&s))
       .expect("failed to parse access map, comp may have non-affine access")
@@ -158,7 +183,7 @@ impl Comp {
   pub fn split(&self, i: u32, factor: u32) -> &Comp {
     debug_assert!(i < self.loop_dim());
     let (n, i) = (self.sch_dim(), i * 2 + 1);
-    let s = format!("{{ [{}] -> [{}]: i{i0} = floor(i{i} / {f}) and i{i1} = i{i} % {f} }}\0", i0_in(n),
+    let s = format!("{{[{}]->[{}]:i{i0}=floor(i{i}/{f})&&i{i1}=i{i}%{f}}}\0", i0_in(n),
       comma_sep((0..n + 2).map(|x| fn2display(move |f|
         if x == i + 1 { f.write_str("0") } else {
           write!(f, "i{}", if x < i { x } else if x == i { n } else if x == i + 2 { n + 1 } else { x - 2 })
@@ -194,7 +219,7 @@ impl Comp {
       assert_eq!(old, new);
     }
     let n = self.sch_dim();
-    let s = format!("{{ [{}] -> [{}] }}\0", i0_in(n),
+    let s = format!("{{[{}]->[{}]}}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", map.iter().find(|&&(old, _)| x == old * 2 + 1)
           .map(|&(_, new)| new * 2 + 1).unwrap_or(x))
@@ -207,7 +232,7 @@ impl Comp {
     debug_assert!(i < j);
     debug_assert!(i < self.loop_dim() && j < self.loop_dim());
     let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
-    let s = format!("{{ [{}] -> [{}]: i{j1} = {f} * i{i} + i{j} }}\0", i0_in(n),
+    let s = format!("{{[{}]->[{}]:i{j1}={f}*i{i}+i{j}}}\0", i0_in(n),
       comma_sep((0..n).map(|x| fn2display(move |f|
         write!(f, "i{}", if x < j { x } else if x == j { n } else { x - 1 })))),
       j1 = n, f = factor, i = i, j = j);
@@ -418,22 +443,20 @@ impl Comp {
   }
 
   pub fn store_at(&self, buf: &Buf, idx: Box<[Expr]>) -> &Comp {
-    debug_assert_eq!(idx.len(), buf.sizes.len());
-    let s = format!("{{ [{}] -> {}[{}] }}\0", i0_in(self.orig_dim()),
-      buf.name, comma_sep(idx.iter().map(|e| {
-        let e = e.expr();
-        if cfg!(debug_assertions) { self.check_iter(&e); }
-        e
-      })));
+    if cfg!(debug_assertions) {
+      assert_eq!(idx.len(), buf.sizes.len());
+      for e in idx.iter() { self.check_iter(e); }
+    }
+    let s = format!("{{[{}]->{}[{}]}}\0", i0_in(self.orig_dim()), buf.name, comma_sep(idx.iter()));
     debug!("store_at: {}", s);
     self.p().store = Some(self.ctx.map_read_from_str(cstr(&s))?);
     self
   }
 
   // 会将self.expr中所有对src的访问下标都替换成cfg.access的列表，不管原来的下标是什么；若原来有src[i][j]和src[j][i]，会导致错误的结果
-  pub fn cache(&self, src: &Comp, i: u32, extent: u32, cond: Option<Expr>, loc: BufLoc, cfg: &mut [CacheCfg]) -> CacheInfo {
+  pub fn cache(&self, src: &Comp, i: u32, loc: BufLoc, extent: u32, cond: Option<Expr>, cfg: &mut [CacheCfg]) -> CacheInfo {
     // 不使用CacheCfg的Debug来输出，因为希望用Display输出Expr
-    debug!("cache: extent = {}, cond = {}, cfg = [{}]", extent, comma_sep(cond.iter()),
+    debug!("cache: extent = {}, cond = {}, cfg = [{}]", extent, opt(&cond),
       comma_sep(cfg.iter().map(|CacheCfg { size, dst, src, access }|
         fn2display(move |f| write!(f, "CacheCfg {{ size: {}, dst: {}, src: {}, access: {} }}", size, dst, src, access)))));
     if cfg!(debug_assertions) {
@@ -534,29 +557,24 @@ impl Comp {
     }
     access_mut = affs.map_from_pw_multi_aff()?;
     debug!("cache_identity: access_mut = {}", access_mut);
-    let mut copy_map = format!("{}->{{", self.params());
-    let mut copy_idx = vec![0; n_idx];
-    copy_idx[n_idx - 1] = -1;
-    let mut last_point = None::<Point>;
+    let mut copy_map = format!("{}{{", self.params());
+    let mut idx_map = vec![HashMap::default(); n_idx];
     access_mut.copy()?.range()?
       .remove_dims(DimType::Param, 0, access_mut.dim(DimType::Param) as _)?
       .foreach_point(&mut |p| {
-        let mut mut_loc = n_idx - 1;
-        if let Some(x) = &last_point {
-          for i in 0..n_idx {
-            if !p.get_coordinate_val(DimType::Set, i as _)?.eq(*x.get_coordinate_val(DimType::Set, i as _)?)? {
-              mut_loc = i;
-              break;
-            }
-          }
+        let _ = copy_map.write_str("[");
+        for (i, idx_map) in idx_map.iter_mut().enumerate() {
+          let idx = p.get_coordinate_val(DimType::Set, i as _)?.get_num_si();
+          let id = idx_map.len();
+          let id = *idx_map.entry(idx).or_insert(id);
+          let _ = write!(copy_map, "{}{}", if i == 0 { "" } else { "," }, id);
         }
-        copy_idx[mut_loc] += 1;
-        for x in &mut copy_idx[mut_loc + 1..] { *x = 0; }
-        let _ = write!(copy_map, "{:?}->[{}];", copy_idx, comma_sep((0..n_idx).map(|i| {
-          let p = &p;
-          fn2display(move |f| write!(f, "{}", p.get_coordinate_val(DimType::Set, i as _).unwrap()))
-        })));
-        last_point = Some(p);
+        let _ = copy_map.write_str("]->[");
+        for i in 0..idx_map.len() {
+          let idx = p.get_coordinate_val(DimType::Set, i as _)?.get_num_si();
+          let _ = write!(copy_map, "{}{}", if i == 0 { "" } else { "," }, idx);
+        }
+        let _ = copy_map.write_str("];");
         Stat::Ok
       })?;
     if copy_map.ends_with(';') { copy_map.pop(); }
@@ -584,9 +602,10 @@ impl Comp {
       extent *= size;
     }
     copy_iters.reverse();
+    debug!("cache_identity: copy_iters = [{}]", comma_sep(copy_iters.iter().map(|x| &x.0)));
     extent /= threads.iter().map(|x| x.1).product::<u32>();
     let mut cond = self.func.build_cond(identity_schedule(copy_map.range()?),
-      self.func.iter_list(n_idx as _, true), access_mut.range()?);
+      self.func.iter_list(n_idx as _, true), *access_mut.range()?);
     debug!("cache_identity: cond = {}", cond);
     let mut cfg = Vec::with_capacity(n_idx);
     for ((((copy_iter, size), mut access_idx), copy_idx), access_mut_idx) in copy_iters.iter()
@@ -603,11 +622,8 @@ impl Comp {
       let src = copy_idx.clone() + access_idx;
       cfg.push(CacheCfg { size: *size, dst: copy_iter.clone(), src, access: access_mut_idx });
     }
-    cond.visit_mut(&mut |e| if let Iter(_, x) = e {
-      *e = copy_idx[*x as usize].clone();
-      false
-    } else { true });
-    self.cache(src, i, extent, Some(cond), loc, &mut cfg)
+    cond.replace_iter(&copy_idx);
+    self.cache(src, i, loc, extent, Some(cond), &mut cfg)
   }
 }
 
@@ -745,11 +761,10 @@ pub(crate) fn project_static_dim(mut set: Set) -> Set {
   set
 }
 
-pub(crate) fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
-  let sch = build.get_schedule()?.map_from_union_map()?;
-  let map = sch.reverse()?.reset_tuple_id(DimType::Out)?;
-  let mut iter_map = map.pw_multi_aff_from_map()?;
-  let index_aff = access.pw_multi_aff_from_map()?;
-  iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;
-  build.access_from_pw_multi_aff(iter_map)?
+// 对map的range做project_static_dim
+fn project_static_dim_map(mut map: Map) -> Map {
+  let n = map.dim(DimType::Out) as u32;
+  debug_assert_eq!(n % 2, 1);
+  for i in 0..n / 2 { map = map.project_out(DimType::Out, i, 1)?; }
+  map
 }

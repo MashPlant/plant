@@ -56,7 +56,7 @@ impl Func {
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: Box<[Expr]>) -> Unit {
     self.align_schedule();
-    let s = format!("{} -> {{: {}}}\0", self.comps[0].params(), sep(csts.iter(), " and "));
+    let s = format!("{}{{:{}}}\0", self.comps[0].params(), sep(csts.iter(), "&&"));
     debug!("set_constraint: {}", s);
     self.p().func_ctx = Some(self.ctx.basic_set_read_from_str(cstr(&s))?);
     Unit
@@ -99,22 +99,19 @@ impl Func {
   }
 
   pub(crate) fn build_access_idx(&self, sch: Map, iters: IdList, access: MapRef) -> Vec<Expr> {
-    let mut access_idx = Vec::with_capacity(access.dim(DimType::Out) as _);
+    let mut access_idx = Vec::new();
     self.build_impl(sch, iters, |_, b| {
-      let access = access_to_expr(b, access.copy()?);
-      for i in 1..access.get_op_n_arg() {
-        access_idx.push(Expr::from_isl(self, access.get_op_arg(i)?));
-      }
+      debug_assert!(access_idx.is_empty()); // 应该恰好访问一次
+      access_idx = self.iter_map(b, access.copy()?);
       None // 这里不是为了构建AST，返回None即可
     });
     debug_assert_eq!(access_idx.len(), access.dim(DimType::Out) as _);
     access_idx
   }
 
-  pub(crate) fn build_cond(&self, sch: Map, iters: IdList, cond: Set) -> Expr {
+  pub(crate) fn build_cond(&self, sch: Map, iters: IdList, cond: SetRef) -> Expr {
     let mut ret = None::<Expr>;
     self.build_impl(sch, iters, |n, b| {
-      debug!("sch = {}, cond = {}, expr = {}", b.get_schedule()?, cond, b.expr_from_set(cond.copy()?)?.to_C_str()?);
       // sch可能是不连续的，这个函数会被调用多次，每次在不同限制下简化cond，结果需要与起来
       let cond = Expr::from_isl(self, b.expr_from_set(cond.copy()?)?);
       ret = Some(if let Some(x) = &ret { x.land(cond) } else { cond });
@@ -126,6 +123,14 @@ impl Func {
   fn build_impl(&self, sch: Map, iters: IdList, mut f: impl FnMut(AstNode, AstBuildRef) -> Option<AstNode>) -> Option<AstNode> {
     let sch = sch.reset_tuple_id(DimType::In)?.reset_tuple_id(DimType::Out)?.union_map_from_map()?;
     self.ctx.ast_build_alloc()?.set_iterators(iters)?.set_at_each_domain(&mut |n, b| f(n, b))?.ast_from_schedule(sch)
+  }
+
+  fn iter_map(&self, build: AstBuildRef, access: Map) -> Vec<Expr> {
+    let e = access_to_expr(build, access);
+    let n = e.get_op_n_arg();
+    let mut ret = Vec::with_capacity(n as usize - 1);
+    for i in 1..n { ret.push(Expr::from_isl(self, e.get_op_arg(i).unwrap())); }
+    ret
   }
 }
 
@@ -297,21 +302,16 @@ impl Func {
     let expr = n.user_get_expr()?;
     let name = expr.get_op_arg(0)?.get_id()?.get_name()?;
     let comp = self.find_comp(&name)?;
-    let store = if let Some(x) = comp.store.as_ref() {
+    let store = if let Some(x) = &comp.store {
       let access = x.copy()?.apply_domain(comp.schedule.copy()?.reset_tuple_id(DimType::In)?)?;
       Some(Expr::from_isl(self, access_to_expr(build, access)))
     } else { None };
     // 创建一个在新domain中访问原domain的下标的expr，从而得到每个原下标用新下标的表示形式
-    let access_self = access_to_expr(build, comp.schedule.copy()?.reverse()?);
-    let op_n = access_self.get_op_n_arg();
-    let mut iter_map = Vec::with_capacity(op_n as usize - 1);
-    for i in 1..op_n {
-      iter_map.push(Expr::from_isl(self, access_self.get_op_arg(i)?));
-    }
+    let iter_map = self.iter_map(build, comp.schedule.copy()?.reverse()?);
     debug!("visit_comp: comp = {}, iter_map = [{}]", comp.name(), comma_sep(iter_map.iter()));
     let ref replace_idx = move |e: &mut Expr| match e {
       Access(arg, idx) => {
-        *e = access_comp(build, &comp, arg, idx);
+        *e = access_comp(build, comp, arg, idx);
         debug!("visit_comp: replaced access = {}", e);
         false
       }
@@ -509,6 +509,15 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
   Unit
 }
 
+fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
+  let sch = build.get_schedule()?.map_from_union_map()?;
+  let map = sch.reverse()?.reset_tuple_id(DimType::Out)?;
+  let mut iter_map = map.pw_multi_aff_from_map()?;
+  let index_aff = access.pw_multi_aff_from_map()?;
+  iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;
+  build.access_from_pw_multi_aff(iter_map)?
+}
+
 fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {
   // 访问有store的计算，转化为访问对应内存；没有store且inline，计算出访问的下标后把下标代入表达式中
   // 没有store且不inline，返回Param表达式，这个表达式之后只会用于输出计算的名字
@@ -521,18 +530,12 @@ fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Exp
     access = access.reset_tuple_id(DimType::Out)?.apply_range(x)?;
   }
   debug!("access_comp: access = {}", access);
-  let access = access_to_expr(build, access);
   if arg.inline {
-    debug_assert_eq!(arg.orig_dim() + 1, access.get_op_n_arg() as _);
-    let mut idx = Vec::with_capacity(arg.orig_dim() as _);
-    for i in 1..access.get_op_n_arg() {
-      idx.push(Expr::from_isl(&comp.func, access.get_op_arg(i)?));
-    }
-    arg.expr.modify(move |e| if let Iter(_, x) = &e {
-      *e = idx[*x as usize].clone();
-      false
-    } else { true })
+    // inline的Comp的expr中可能还有对别的Comp的访问，但这没法处理了，因为需要arg下的build才能构造表达式，现在只有comp下的build
+    let mut e = arg.expr.clone();
+    e.replace_iter(&comp.func.iter_map(build, access));
+    e
   } else {
-    Expr::from_isl(&comp.func, access)
+    Expr::from_isl(&comp.func, access_to_expr(build, access))
   }
 }

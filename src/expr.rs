@@ -130,6 +130,13 @@ impl Expr {
     e
   }
 
+  pub fn replace_iter(&mut self, iter_map: &[Expr]) {
+    self.visit_mut(&mut |e| if let Iter(_, x) = e {
+      *e = iter_map[*x as usize].clone();
+      false // 停止访问，iter_map中的Iter不应该再被替换
+    } else { true })
+  }
+
   // 将自身替换为0，返回自身原来的值，可以为无用但无法移动的Expr省去一次拷贝
   pub fn replace0(&mut self) -> Expr { mem::replace(self, Val(I8, 0)) }
 
