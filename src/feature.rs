@@ -204,7 +204,11 @@ pub struct TouchExtractor {
 
 pub fn parallel_level(tag: Option<DimTag>) -> u32 {
   if let Some(tag) = tag {
-    match tag { GPUBlockX | GPUBlockY | GPUBlockZ => 2, GPUThreadX | GPUThreadY | GPUThreadZ | Parallel => 1 }
+    match tag {
+      GPUBlockX | GPUBlockY | GPUBlockZ => 2,
+      GPUThreadX | GPUThreadY | GPUThreadZ | Parallel => 1,
+      Vectorize => 0,
+    }
   } else { 0 }
 }
 

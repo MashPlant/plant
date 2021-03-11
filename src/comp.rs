@@ -23,7 +23,7 @@ pub struct Comp {
 impl_try!(&Comp);
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum DimTag { Parallel, GPUBlockX, GPUBlockY, GPUBlockZ, GPUThreadX, GPUThreadY, GPUThreadZ }
+pub enum DimTag { Parallel, Vectorize, GPUBlockX, GPUBlockY, GPUBlockZ, GPUThreadX, GPUThreadY, GPUThreadZ }
 
 // 将Comp传给接受impl IntoExpr的地方时，是将它作为Param表达式，而非Access表达式
 // 用法区别请看Comp::as_param的注释

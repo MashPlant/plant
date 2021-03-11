@@ -43,7 +43,7 @@ impl Func {
     let desc = match e {
       Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
       Binary(..) => "binary", Select(..) => "select", Call(..) => "call", Access(..) => "access", Load(..) => "load",
-      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Opaque(..) => "opaque",
+      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Vector(..) => "vector", Opaque(..) => "opaque",
     };
     format!("_{}{}", desc, self.new_comp_id())
   }
@@ -149,7 +149,7 @@ pub struct CompInfo {
 #[derive(Debug)]
 pub struct ForInfo {
   // 包含这个for的任意一个Comp
-  pub comp: P<Comp>,
+  pub comp: P<CompInfo>,
   // 这个for对应schedule中的哪个dynamic dim
   // 一个for可能出现在多个Comp中，但在不同的Comp中它必须拥有相同的dynamic dim
   pub level: u32,
@@ -165,7 +165,7 @@ pub struct ForInfo {
 
 impl ForInfo {
   // todo: 虽然for在不同的Comp中有相同的dynamic dim，但上下界不一定相同，目前kern的启动参数和提取feature用到上下界
-  pub fn extent(&self) -> Extent { self.comp.extent(self.level) }
+  pub fn extent(&self) -> Extent { self.comp.comp.extent(self.level) }
 }
 
 #[derive(Default)]
@@ -345,6 +345,38 @@ impl Func {
             // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
             // 循环变量是在for外定义的，需要private指令避免不同线程间循环变量干扰
             ForInfo { tag: Some(Parallel), .. } => write!(f, "\n#pragma omp parallel for private({})\n", i0_in(s.loop_dim)).ok()?,
+            // 我本来无意实现vectorize，相信编译器可以自动完成这件事，而且更加可靠和有效
+            // 但经实验，至少在clang 11.0.0上#pragma vectorize与手动vectorize还是有差距，具体例子是kij的gemm micro kernel
+            ForInfo { tag: Some(Vectorize), .. } => {
+              let Extent(min, _, extent) = info.extent();
+              let (comp, i) = (info.comp, info.level);
+              // 应该确实只有这个计算在这个维度有Vectorize标记，只能处理这种简单情形
+              debug_assert_eq!(comp.comp.tags.get(i as usize).copied().flatten(), Some(Vectorize));
+              debug_assert!(comp.cond.is_none() && comp.store.is_some());
+              // 只处理Load中的两种情形：下标中有i，且系数为1；下标中没有i。前者用Vector表达式包起来，后者不变，会自动broadcast
+              // 其余情景也不保证报错，可能默默放过去产生错误结果
+              let ref mut replace_idx = move |e: &mut Expr| if let Load(_, idx) = e {
+                fn vis_idx(e: &Expr, i: u32, stride: i64) -> i64 {
+                  match e {
+                    &Iter(_, x) if x == i => stride,
+                    Binary(BinOp::Mul, box [Val(ty, x), y]) | Binary(BinOp::Mul, box [y, Val(ty, x)]) =>
+                      vis_idx(y, i, stride * ty.val_i64(*x)),
+                    _ => e.args().iter().map(|x| vis_idx(x, i, stride)).sum(),
+                  }
+                }
+                let k = vis_idx(idx, i, 1);
+                debug_assert!(k == 0 || k == 1);
+                if k == 1 {
+                  *e = Vector(e.ty(), extent.get_num_si() as _, box e.replace0());
+                }
+                false
+              } else { true };
+              let store = comp.store.as_ref()?;
+              store.p().visit_mut(replace_idx);
+              comp.expr.p().visit_mut(replace_idx);
+              write!(f, "{}={};{}={};", it, min, store, comp.expr).ok()?;
+              return Unit; // 跳过下面的for生成
+            }
             // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
             // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
             // 这导致了Comp::tag的注释中描述的问题
@@ -355,7 +387,7 @@ impl Func {
                 write!(f, "{{auto _kern=[=]__device__({}){{{} {};", param_buf, iter_ty(), i0_in(s.loop_dim)).ok()?;
               }
               let Extent(min, max, extent) = info.extent();
-              debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.name(), info.level, min, tag.gpu_idx(), max);
+              debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.comp.name(), info.level, min, tag.gpu_idx(), max);
               let old_cfg = s.p().kern_cfg[(*tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
               debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
               write!(f, "i{i}={idx}+{min};\
@@ -447,7 +479,7 @@ fn extract_tags(n: AstNodeRef, loops: &mut Vec<AstNodeRef>, info: &mut HashMap<A
           info.entry(l).and_modify(|old| {
             if old.tag.is_none() { old.tag = tag; } else { debug_assert!(tag.is_none(), "duplicate tag"); }
             debug_assert_eq!(old.level, i as _);
-          }).or_insert(ForInfo { comp: comp.comp, level: i as _, tag, used_buf: <_>::default(), local_buf: <_>::default() });
+          }).or_insert(ForInfo { comp, level: i as _, tag, used_buf: <_>::default(), local_buf: <_>::default() });
         }
       }
     }

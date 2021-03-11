@@ -123,6 +123,7 @@ static mut EVAL_JMP_BUF: MaybeUninit<sigjmp_buf> = MaybeUninit::uninit();
 impl TimeEvaluator {
   pub fn new(n_discard: u32, n_repeat: u32, timeout: Duration) -> Self {
     // 捕获SIGSEGV信号，eval时可以检测运行错误而不终止程序
+    // 这并不是很可靠的机制，似乎多线程下就不能正常捕获
     unsafe extern "C" fn handler(_: libc::c_int) {
       // 发生SIGSEGV时跳转到eval中的一个位置并让sigsetjmp返回1
       siglongjmp(EVAL_JMP_BUF.as_mut_ptr(), 1);
@@ -299,7 +300,7 @@ impl Tuner {
 
   // 若cost为Some，它应是和batch长度一样的slice，会把每个配置的耗时依次保存在其中
   pub fn eval(&self, batch: &[ConfigEntity], mut cost: Option<&mut [f32]>) {
-    if let Some(cost) = cost.as_ref() { debug_assert_eq!(cost.len(), batch.len()); }
+    if let Some(cost) = &cost { debug_assert_eq!(cost.len(), batch.len()); }
     if self.evaluator.data.is_none() {
       // 默认在第一次运行前设置为随机值
       self.evaluator.init(&(self.space.template)(&batch[0]).0);
@@ -320,6 +321,7 @@ impl Tuner {
     });
     // 与AstInfo的注释描述的不同，这里用_l或者_都可以，都会在for body的末尾析构，为了统一性还是不用_
     for (idx, ((_l, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
+      info!("before eval: {}", cfg); // 用于调试，最终还是没有找到捕获SIGSEGV的可靠方法，也许只能靠多进程，但我不愿意这样
       let (elapsed, ok) = self.evaluator.eval(*f);
       if ok {
         info!("eval: {}, {}s", cfg, elapsed);
@@ -330,7 +332,7 @@ impl Tuner {
         self.p().best.1 = elapsed;
         self.p().best.0 = cfg.clone();
       }
-      if let Some(cost) = cost.as_mut() { cost[idx] = elapsed; }
+      if let Some(cost) = &mut cost { cost[idx] = elapsed; }
     }
     info!("eval: best cfg {} time = {}s", self.best.0, self.best.1);
     if let Some(x) = &mut self.p().best_reporter { x(&self.best); }

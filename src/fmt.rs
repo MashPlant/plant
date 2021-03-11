@@ -143,6 +143,10 @@ impl Expr {
           _ => write!(f, "/*free({})*/", x.name), // 不实际执行free
         }
         Sync => f.write_str("__syncthreads()"),
+        Vector(ty, n, x) => {
+          match **x { Load(..) => {} _ => debug_panic!("vector operand must be load: {}", x) }
+          write!(f, "*({} __attribute__((vector_size({})))*)&{}", ty, n * ty.size() as u32, x)
+        }
         Opaque(_, x) => f.write_str(x),
       }
     })

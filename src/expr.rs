@@ -51,6 +51,7 @@ pub enum Expr {
   Alloc(P<Buf>),
   Free(P<Buf>),
   Sync,
+  Vector(Type, u32, Box<Expr>),
   // 一段直接用于输出的字符串，不考虑它的内部结构
   Opaque(Type, R<str>),
 }
@@ -86,7 +87,7 @@ impl Expr {
   pub fn ty(&self) -> Type {
     use BinOp::*;
     match self {
-      &Val(ty, _) | &Iter(ty, _) | &Cast(ty, _) | &Call(box Call { ret: ty, .. }) | &Opaque(ty, _) => ty,
+      &Val(ty, _) | &Iter(ty, _) | &Cast(ty, _) | &Call(box Call { ret: ty, .. }) | &Vector(ty, ..) | &Opaque(ty, _) => ty,
       Param(comp) | Access(comp, _) => comp.expr.ty(),
       Unary(_, x) => x.ty(),
       Binary(op, box [l, _]) => if (Add <= *op && *op <= Rem) || (Max <= *op && *op <= Min) { l.ty() } else { I32 }
@@ -102,7 +103,7 @@ impl Expr {
 
   pub fn args(&self) -> &[Expr] {
     match self {
-      Unary(_, x) | Cast(_, x) | Load(_, x) => std::slice::from_ref(x),
+      Unary(_, x) | Cast(_, x) | Load(_, x) | Vector(.., x) => std::slice::from_ref(x),
       Binary(_, x) => x.as_ref(),
       Select(x) => x.as_ref(),
       Call(box Call { args, .. }) | Access(_, args) => args,
