@@ -28,7 +28,7 @@ pub use fmt::*;
 pub use tuner::*;
 pub use feature::*;
 
-pub use expr::{Type::*, Expr::*};
+pub use expr::Expr::*;
 pub use comp::DimTag::*;
 pub use buf::{BufKind::*, BufLoc::*};
 pub use Backend::*;
@@ -38,6 +38,7 @@ pub use feature::Feature::*;
 pub use ptr::*;
 pub use isl::*;
 pub use expr_macro::*;
+pub use plant_runtime::*;
 
 use std::fmt::{*, Result as FmtResult};
 
@@ -78,37 +79,5 @@ pub fn init_log(filter: &str) {
 pub struct Unit;
 impl_try!(Unit);
 
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Backend { CPU, GPU }
-
-pub const CC: &str = "clang";
+pub const CC: &str = "clang++";
 pub const NVCC: &str = "nvcc";
-
-// 虽然有很多开源的随机数实现，但用自己的还是方便一点
-#[derive(Debug, Clone, Copy)]
-pub struct XorShiftRng(pub u64);
-
-impl XorShiftRng {
-  pub fn gen(&self) -> u64 {
-    let mut x = self.p().get().0;
-    x ^= x << 13;
-    x ^= x >> 7;
-    x ^= x << 17;
-    self.p().get().0 = x;
-    x
-  }
-
-  // 返回0.0~1.0间的浮点数
-  pub fn gen_f32(&self) -> f32 {
-    self.gen() as u32 as f32 * (1.0 / u32::MAX as f32)
-  }
-
-  pub unsafe fn fill(&self, ty: Type, p: *mut u8) {
-    let x = self.gen();
-    match ty {
-      I8 | U8 => *p = x as _, I16 | U16 => *(p as *mut u16) = x as _,
-      I32 | U32 => *(p as *mut u32) = x as _, I64 | U64 | Void => *(p as *mut u64) = x as _, // Void应该是不可能的
-      F32 => *(p as *mut f32) = x as u32 as f32 * (1.0 / u32::MAX as f32), F64 => *(p as *mut f64) = x as f64 * (1.0 / u64::MAX as f64),
-    }
-  }
-}

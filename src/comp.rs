@@ -201,6 +201,24 @@ impl Comp {
     self.split(i, extent / n_parts)
   }
 
+  // 将循环层次i和i + 1合并成一个循环
+  // 循环i + 1的static dim被丢弃；after，tag之类的都不会特殊处理，调用fuse前应保证它们不存在
+  pub fn fuse(&self, i: u32) -> &Comp {
+    debug_assert!(i + 1 < self.loop_dim());
+    // min1 <= i1 < max1, min2 <= i2 < max2, 令j = (i1 - min1) * (max2 - min2) + (i2 - min2)
+    // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2 (这由ISL自己推导)
+    let Extent(min1, _, _) = self.extent(i);
+    let Extent(min2, _, extent2) = self.extent(i + 1);
+    let (n, i) = (self.sch_dim(), i * 2 + 1);
+    let s = format!("{{[{}]->[{}]:i{n}=(i{i1}-{min1})*{extent2}+(i{i2}-{min2})}}\0", i0_in(n),
+      comma_sep((0..n - 2).map(|x| fn2display(move |f|
+        write!(f, "i{}", if x < i || x == i + 1 { x } else if x == i { n } else { x + 2 })
+      ))),
+      n = n, i1 = i, i2 = i + 2, min1 = min1, min2 = min2, extent2 = extent2);
+    debug!("fuse: {}", s);
+    self.apply_sch_raw(&s)
+  }
+
   // 交换循环层次i和j
   // reorder和reorder_n都不会处理它们的tag，调用前应保证tag不存在
   pub fn reorder(&self, i: u32, j: u32) -> &Comp {
@@ -291,37 +309,6 @@ impl Comp {
     Some(ret.get())
   }
 
-  // 将循环层次i和i + 1合并成一个循环
-  // 循环i + 1的static dim被丢弃；after，tag之类的都不会特殊处理，调用fuse前应保证它们不存在
-  pub fn fuse(&self, i: u32) -> &Comp {
-    debug_assert!(i < self.loop_dim());
-    // min1 <= i1 < max1, min2 <= i2 < max2, 令j = (i1 - min1) * (max2 - min2) + (i2 - min2)
-    // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2 (这由ISL自己推导)
-    let Bound(_, min1, _) = self.extract_bound(i);
-    let Bound(zero2, min2, max2) = self.extract_bound(i + 1);
-    let (n, pos) = (self.sch_dim(), i * 2 + 1);
-    let min1 = min1.add_dims(DimType::In, 2)?;
-    let i1 = zero2.copy()?.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
-    let i2 = zero2.copy()?.set_coefficient_si(DimType::In, (pos + 2) as _, 1)?.pw_aff_from_aff()?;
-    let j = zero2.set_coefficient_si(DimType::In, pos as _, 1)?.pw_aff_from_aff()?;
-    let mut trans = i1.sub(min1)?.mul(max2.sub(min2.copy()?)?)?.add(i2.sub(min2)?)?.eq_map(j)?
-      .add_dims(DimType::In, n - pos - 3)?.add_dims(DimType::Out, n - pos - 5)?;
-    // 设置其他维度为恒等映射
-    for i in 0..n - 2 {
-      if i == pos { continue; }
-      // out dim比in dim少2，pos + 1和pos + 2在out dim中不存在，所以i >= pos时in_pos要+ 2
-      let in_pos = if i < pos { i } else { i + 2 };
-      let cst = trans.get_space()?.local_space_from_space()?.constraint_alloc_equality()?
-        .set_coefficient_si(DimType::In, in_pos as _, -1)?
-        .set_coefficient_si(DimType::Out, i as _, 1)?;
-      trans = trans.add_constraint(cst)?;
-    }
-    debug!("fuse: trans = {}", trans);
-    self.schedule.write(self.schedule.read().apply_range(trans.align_params(self.schedule.get_space()?)?)?);
-    debug!("fuse: schedule = {}", self.schedule);
-    self
-  }
-
   // 提取循环层次i的迭代范围，Bound的意义见Bound自身的注释
   pub fn extract_bound(&self, i: u32) -> Bound {
     debug_assert!(i < self.loop_dim());
@@ -355,7 +342,7 @@ impl Comp {
         }
       }
     }
-    let (min, max) = (min?, max?);
+    let (min, max) = (min?.intersect_domain(dom.copy()?)?.coalesce()?, max?.intersect_domain(dom.copy()?)?.coalesce()?);
     let zero = dom.get_space()?.aff_zero_on_domain_space()?;
     let one = zero.copy()?.set_constant_si(1)?.pw_aff_from_aff()?;
     let max = max.add(one)?; // max += 1，循环范围是min <= i < max
@@ -373,7 +360,7 @@ impl Comp {
   pub fn apply_sch_raw(&self, s: &str) -> &Comp {
     debug_assert!(s.ends_with('\0'));
     let t = self.ctx.map_read_from_str(cstr(&s))?.align_params(self.schedule.get_space()?)?;
-    self.schedule.write(self.schedule.read().apply_range(t)?.detect_equalities()?);
+    self.schedule.write(self.schedule.read().apply_range(t)?.coalesce()?.detect_equalities()?);
     self
   }
 }

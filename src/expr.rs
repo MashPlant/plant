@@ -1,28 +1,6 @@
 use std::{mem, sync::atomic::{AtomicU8, Ordering}};
 use crate::*;
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Type { I8, U8, I16, U16, I32, U32, I64, U64, F32, F64, Void }
-
-impl Type {
-  pub fn size(self) -> usize {
-    match self {
-      I8 | U8 => 1, I16 | U16 => 2,
-      I32 | U32 | F32 => 4, I64 | U64 | Void | F64 => 8, // Void应该是不可能的
-    }
-  }
-
-  // 将Expr::Val中的值转化为i64
-  pub fn val_i64(self, x: u64) -> i64 {
-    match self {
-      I8 => x as i8 as _, U8 => x as u8 as _, I16 => x as i16 as _, U16 => x as u16 as _,
-      I32 => x as i32 as _, U32 => x as u32 as _, I64 | U64 | Void => x as _, // Void应该是不可能的
-      F32 => f32::from_bits(x as _) as _, F64 => f64::from_bits(x) as _,
-    }
-  }
-}
-
 static ITER_TY: AtomicU8 = AtomicU8::new(I32 as _);
 
 pub fn iter_ty() -> Type { unsafe { mem::transmute(ITER_TY.load(Ordering::Relaxed)) } }

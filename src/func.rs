@@ -19,13 +19,15 @@ pub struct Func {
   pub tmp: bool,
   // 默认为CPU
   pub backend: Backend,
+  // 用户自定义的额外编译参数
+  pub compile_args: Vec<R<str>>,
   // Ctx必须在所有引用Ctx的成员析构后析构
   pub ctx: Ctx,
 }
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), comp_cnt: 0, buf_cnt: 0, tmp: false, backend: CPU, ctx: Ctx::new() }
+    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), comp_cnt: 0, buf_cnt: 0, tmp: false, backend: CPU, compile_args: Vec::new(), ctx: Ctx::new() }
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -52,6 +54,11 @@ impl Func {
 
   impl_setter!(set_tmp tmp bool);
   impl_setter!(set_backend backend Backend);
+
+  pub fn compile_arg(&self, args: &str) -> &Self {
+    self.p().compile_args.push(args.r());
+    self
+  }
 
   // 设置domain/schedule中的params的取值范围
   pub fn set_constraint(&self, csts: Box<[Expr]>) -> Unit {
@@ -126,6 +133,7 @@ impl Func {
   }
 
   fn iter_map(&self, build: AstBuildRef, access: Map) -> Vec<Expr> {
+    debug!("iter_map: access = {}", access);
     let e = access_to_expr(build, access);
     let n = e.get_op_n_arg();
     let mut ret = Vec::with_capacity(n as usize - 1);
@@ -154,11 +162,11 @@ pub struct ForInfo {
   // 一个for可能出现在多个Comp中，但在不同的Comp中它必须拥有相同的dynamic dim
   pub level: u32,
   pub tag: Option<DimTag>,
-  // used_buf和local_buf用于GPU代码生成，分别表示kern中使用的所有Buf和kern中自己分配的Buf
+  // used_buf和local_buf用于Parallel和GPU代码生成，分别表示kern中使用的所有Buf和kern中自己分配的Buf
   // 只有非kern循环和kern循环交界处的kern循环的ForInfo中才有内容
   // 如果一个Buf被使用，但不是自己分配的，就作为参数传给kern
-  // 代码生成中使用extended lambda来生成kern，可以自动捕获使用的标量，所以不收集它们
-  // 其实也可以自动捕获使用的指针，但经实验这样会丢失restrict信息，导致kern效率降低，所以还是手动收集它们
+  // 代码生成中使用lambda来生成kern，可以自动捕获使用的标量，所以不收集它们
+  // 经实验，lambda捕获的指针会丢失restrict信息，导致kern效率降低，所以需要手动收集它们
   pub used_buf: HashSet<NameHashBuf>,
   pub local_buf: HashSet<NameHashBuf>,
 }
@@ -166,6 +174,21 @@ pub struct ForInfo {
 impl ForInfo {
   // todo: 虽然for在不同的Comp中有相同的dynamic dim，但上下界不一定相同，目前kern的启动参数和提取feature用到上下界
   pub fn extent(&self) -> Extent { self.comp.comp.extent(self.level) }
+
+  // 捕获Buf和循环变量
+  fn capture<'a>(&'a self, loop_dim: u32) -> impl Display + 'a {
+    fn2display(move |f| {
+      // 先把捕获的变量赋值给临时变量，再把临时变量赋值给同名的变量，这是因为C/C++中不能写int x = x;
+      for x in self.used_buf.difference(&self.local_buf).map(|x| &x.0) {
+        // Buf::arg()输出的名字已经确定了，所以不能用于定义临时变量，而且它也不需要这些类型信息
+        write!(f, "{}{}*__{x}={x};{}=__{x};", if x.kind == In { "const " } else { "" }, x.ty, x.arg(), x = x.name)?;
+      }
+      write!(f, "{} {};", iter_ty(), comma_sep((0..loop_dim).map(|i|
+        fn2display(move |f| if i < self.level {
+          write!(f, "__i{0}=i{0},i{0}=__i{0}", i)
+        } else { write!(f, "i{}", i) }))))
+    })
+  }
 }
 
 #[derive(Default)]
@@ -250,14 +273,14 @@ impl Func {
       let (f, path) = NamedTempFile::new()?.into_parts();
       (f, path.keep()?)
     } else {
-      let path = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if b == CPU { "c" } else { "cu" });
+      let path = Path::new(".").with_file_name(self.name.as_ref()).with_extension(if b == CPU { "cpp" } else { "cu" });
       (File::create(&path)?, path)
     };
     let mut w = BufWriter::new(f);
-    w.write_all(include_bytes!("inc.h"))?;
+    w.write_all(include_bytes!("../runtime/src/inc.h"))?;
     // 生成名为{self.name}的实际函数和名为{self.name}_wrapper的wrapper函数
     // wrapper函数接受void **p，从p[0], p[3], p[6], ...位置处读出实际函数的参数，以此调用实际函数
-    write!(w, "void {f}({}){{{} {};{}}}void {f}_wrapper(void**p){{{f}({});}}\n",
+    write!(w, "extern \"C\" void {f}({}){{{} {};{}}}extern \"C\" void {f}_wrapper(void**p){{{f}({});}}\n",
       comma_sep(args.iter().map(|x| x.arg())),
       iter_ty(), i0_in(s.loop_dim), self.gen(ast, &s),
       comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 3 * i)))),
@@ -265,17 +288,20 @@ impl Func {
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
     let so_path = path.with_extension("so");
     let mut cmd = Command::new(if b == CPU { CC } else { NVCC });
-    cmd.arg("-x").arg(if b == CPU { "c" } else { "cu" }).arg(&path);
+    cmd.arg("-x").arg(if b == CPU { "c++" } else { "cu" }).arg(&path);
     match b {
-      CPU => cmd.arg("-Ofast").arg("-march=native").arg("-fopenmp"),
+      CPU => cmd.arg("-Ofast").arg("-march=native").arg("-pthread"),
       GPU => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options")
         .arg("-Xcudafe").arg("\"--diag_suppress=declared_but_not_referenced --diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\""),
     };
     cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
+    for x in &self.compile_args { cmd.arg(&**x); }
     debug!("codegen: cmd = {:?}", cmd);
     let status = cmd.status()?;
     debug_assert!(status.success());
-    let lib = Library::new(&so_path).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let map_err = |e| io::Error::new(io::ErrorKind::Other, e);
+    let lib = Library::new(&so_path).map_err(map_err)?;
+    unsafe { **lib.get::<*mut usize>(b"parallel_launch\0").map_err(map_err)? = parallel_launch as _; };
     if self.tmp { fs::remove_file(path)?; }
     fs::remove_file(so_path)?;
     Ok(lib)
@@ -341,78 +367,79 @@ impl Func {
           let inc = n.for_get_inc()?.to_C_str()?;
           let body = n.for_get_body()?;
           let info = s.info.get(&*n)?;
-          match info {
-            // todo: 支持更复杂的parallel模式，比如#pragma omp parallel，每个线程自己同步
-            // 循环变量是在for外定义的，需要private指令避免不同线程间循环变量干扰
-            ForInfo { tag: Some(Parallel), .. } => write!(f, "\n#pragma omp parallel for private({})\n", i0_in(s.loop_dim)).ok()?,
-            // 我本来无意实现vectorize，相信编译器可以自动完成这件事，而且更加可靠和有效
-            // 但经实验，至少在clang 11.0.0上#pragma vectorize与手动vectorize还是有差距，具体例子是kij的gemm micro kernel
-            ForInfo { tag: Some(Vectorize), .. } => {
-              let Extent(min, _, extent) = info.extent();
-              let (comp, i) = (info.comp, info.level);
-              // 应该确实只有这个计算在这个维度有Vectorize标记，只能处理这种简单情形
-              debug_assert_eq!(comp.comp.tags.get(i as usize).copied().flatten(), Some(Vectorize));
-              debug_assert!(comp.cond.is_none() && comp.store.is_some());
-              // 只处理Load中的两种情形：下标中有i，且系数为1；下标中没有i。前者用Vector表达式包起来，后者不变，会自动broadcast
-              // 其余情景也不保证报错，可能默默放过去产生错误结果
-              let ref mut replace_idx = move |e: &mut Expr| if let Load(_, idx) = e {
-                fn vis_idx(e: &Expr, i: u32, stride: i64) -> i64 {
-                  match e {
-                    &Iter(_, x) if x == i => stride,
-                    Binary(BinOp::Mul, box [Val(ty, x), y]) | Binary(BinOp::Mul, box [y, Val(ty, x)]) =>
-                      vis_idx(y, i, stride * ty.val_i64(*x)),
-                    _ => e.args().iter().map(|x| vis_idx(x, i, stride)).sum(),
+          if let Some(tag) = info.tag {
+            let Extent(min, max, extent) = info.extent();
+            match tag {
+              Parallel => {
+                write!(f, "{{auto _kern=[=](i32 _i,i32 _t){{{}\
+                  {} _q=({extent}-1+_t)/_t,_s=min({extent},_q*_i)+{min},_e=min({extent},_q*(_i+1))+{min};\
+                  for({it}=_s;{it}<_e;++{it}){{{}}}}};\
+                  parallel_launch([](void*_p,i32 _i,i32 _t){{(*(decltype(_kern)*)_p)(_i,_t);}},&_kern);}}",
+                  info.capture(s.loop_dim), iter_ty(), self.gen(body, s),
+                  extent = extent, min = min, it = it).ok()?;
+              }
+              // 我本来无意实现vectorize，相信编译器可以自动完成这件事，而且更加可靠和有效
+              // 但经实验，至少在clang 11.0.0上#pragma vectorize与手动vectorize还是有差距，具体例子是kij的gemm micro kernel
+              Vectorize => {
+                let (comp, i, extent) = (info.comp, info.level, extent.get_num_si() as _);
+                // 应该确实只有这个计算在这个维度有Vectorize标记，只能处理这种简单情形
+                debug_assert_eq!(comp.comp.tags.get(i as usize).copied().flatten(), Some(Vectorize));
+                debug_assert!(comp.cond.is_none() && comp.store.is_some());
+                // 只处理Load中的两种情形：下标中有i，且系数为1；下标中没有i。前者用Vector表达式包起来，后者不变，会自动broadcast
+                // 其余情景也不保证报错，可能默默放过去产生错误结果
+                let ref mut replace_idx = move |e: &mut Expr| if let Load(_, idx) = e {
+                  fn vis_idx(e: &Expr, i: u32, stride: i64) -> i64 {
+                    match e {
+                      &Iter(_, x) if x == i => stride,
+                      Binary(BinOp::Mul, box [Val(ty, x), y]) | Binary(BinOp::Mul, box [y, Val(ty, x)]) =>
+                        vis_idx(y, i, stride * ty.val_i64(*x)),
+                      _ => e.args().iter().map(|x| vis_idx(x, i, stride)).sum(),
+                    }
                   }
-                }
-                let k = vis_idx(idx, i, 1);
-                debug_assert!(k == 0 || k == 1);
-                if k == 1 {
-                  *e = Vector(e.ty(), extent.get_num_si() as _, box e.replace0());
-                }
-                false
-              } else { true };
-              let store = comp.store.as_ref()?;
-              store.p().visit_mut(replace_idx);
-              comp.expr.p().visit_mut(replace_idx);
-              write!(f, "{}={};{}={};", it, min, store, comp.expr).ok()?;
-              return Unit; // 跳过下面的for生成
-            }
-            // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
-            // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
-            // 这导致了Comp::tag的注释中描述的问题
-            ForInfo { tag: Some(tag), .. } => {
-              let old_in_kern = mem::replace(&mut s.p().in_kern, true);
-              if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
-                let param_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| x.0.arg()));
-                write!(f, "{{auto _kern=[=]__device__({}){{{} {};", param_buf, iter_ty(), i0_in(s.loop_dim)).ok()?;
+                  let k = vis_idx(idx, i, 1);
+                  debug_assert!(k == 0 || k == 1);
+                  if k == 1 { *e = Vector(e.ty(), extent, box e.replace0()); }
+                  false
+                } else { true };
+                let store = comp.store.as_ref()?;
+                store.p().visit_mut(replace_idx);
+                comp.expr.p().visit_mut(replace_idx);
+                // 加上向量类型的0值，如果右端是标量则可以转化成向量
+                let ty = comp.expr.ty();
+                write!(f, "{}={};{}=({})+(vec({},{})){{}};", it, min, store, comp.expr, ty, extent).ok()?;
               }
-              let Extent(min, max, extent) = info.extent();
-              debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.comp.name(), info.level, min, tag.gpu_idx(), max);
-              let old_cfg = s.p().kern_cfg[(*tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
-              debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
-              write!(f, "i{i}={idx}+{min};\
-                assume({min}<=i{i}&&i{i}<={max});\
-                if({init}<=i{i}&&{cond}){{{body}}}", i = info.level, idx = tag.gpu_idx(),
-                min = min, max = max, init = init, cond = cond, body = self.gen(body, &*s)).ok()?;
-              s.p().in_kern = old_in_kern;
-              if !old_in_kern {
-                fn fmt<'a>(c: &'a [Option<Box<str>>]) -> impl Display + 'a {
-                  // 用lambda表达式会报声明周期错误，所以用函数定义
-                  comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
+              // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
+              // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
+              // 这导致了Comp::tag的注释中描述的问题
+              _ => { // 必然是GPU相关的tag
+                let old_in_kern = mem::replace(&mut s.p().in_kern, true);
+                if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
+                  write!(f, "{{auto _kern=[=]__device__{{{}", info.capture(s.loop_dim)).ok()?;
                 }
-                let arg_buf = comma_sep(info.used_buf.difference(&info.local_buf).map(|x| &x.0.name));
-                write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}",
-                  fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..]), arg_buf).ok()?;
-                s.p().kern_cfg = Default::default();
+                debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.comp.name(), info.level, min, tag.gpu_idx(), max);
+                let old_cfg = s.p().kern_cfg[(tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
+                debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
+                write!(f, "i{i}={idx}+{min};\
+                  assume({min}<=i{i}&&i{i}<={max});\
+                  if({init}<=i{i}&&{cond}){{{body}}}", i = info.level, idx = tag.gpu_idx(),
+                  min = min, max = max, init = init, cond = cond, body = self.gen(body, &*s)).ok()?;
+                s.p().in_kern = old_in_kern;
+                if !old_in_kern {
+                  fn fmt<'a>(c: &'a [Option<Box<str>>]) -> impl Display + 'a {
+                    // 用lambda表达式会报声明周期错误，所以用函数定义
+                    comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
+                  }
+                  write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern);}}", fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..])).ok()?;
+                  s.p().kern_cfg = Default::default();
+                }
               }
-              return Unit; // 跳过下面的for生成
             }
-            _ => {}
+            return Unit; // 跳过下面的for生成
           }
           // 我修改了ISL的代码，使它不消除任何循环，而经过align_schedule，所有计算都有相同的循环层数，保存在CodegenState::loop_dim中
           // 如果直接生成代码，变量定义也会包裹在循环中，其他位置无法访问，所以对于degenerate的循环，不能用作用域包裹
           // 但这样又会导致循环变量重复定义，解决方案是在函数开头定义所有循环变量(见codegen函数)，这里只是赋值
-          if n.for_is_degenerate()? && info.tag != Some(Parallel) {
+          if n.for_is_degenerate()? {
             write!(f, "{}={};{}", it, init, self.gen(body, s)).ok()?;
           } else {
             write!(f, "for({it}={};{};{it}+={}){{{}}}", init, cond, inc, self.gen(body, s), it = it).ok()?;
@@ -507,7 +534,7 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
       s.info.get_mut(&n).unwrap();
       let old_in_kern = s.in_kern;
       let info = s.info.get_mut(&n).filter(|x|
-        Some(GPUBlockX) <= x.tag && x.tag <= Some(GPUThreadZ)).map(|x| x.p());
+        x.tag == Some(Parallel) || Some(GPUBlockX) <= x.tag && x.tag <= Some(GPUThreadZ)).map(|x| x.p());
       if info.is_some() { s.in_kern = true; }
       if s.in_kern {
         extract_buf_isl(n.for_get_init()?, s);
@@ -543,11 +570,8 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
 
 fn access_to_expr(build: AstBuildRef, access: Map) -> AstExpr {
   let sch = build.get_schedule()?.map_from_union_map()?;
-  let map = sch.reverse()?.reset_tuple_id(DimType::Out)?;
-  let mut iter_map = map.pw_multi_aff_from_map()?;
-  let index_aff = access.pw_multi_aff_from_map()?;
-  iter_map = index_aff.pullback_pw_multi_aff(iter_map)?;
-  build.access_from_pw_multi_aff(iter_map)?
+  let access = access.apply_domain(sch.reset_tuple_id(DimType::In)?)?;
+  build.access_from_pw_multi_aff(access.pw_multi_aff_from_map()?)?
 }
 
 fn access_comp(build: AstBuildRef, comp: &Comp, arg: &Comp, idx: &[Expr]) -> Expr {

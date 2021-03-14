@@ -22,13 +22,6 @@ fn expr(e: Expr) -> Expr {
   }
   use Expr::*;
   match e {
-    Assign(x) => {
-      // 随便设计的一个语法，_ = e会忽略e的结构，调用(e).expr()
-      // 这里必须加括号，否则可能产生a + b.expr()这样的表达式，看起来和一般理解的AST不一样
-      let span = x.span();
-      method_call(x.attrs, ExprParen { attrs: <_>::default(), paren_token: <_>::default(), expr: x.right }.into(),
-        "expr", span, <_>::default())
-    }
     Binary(x) => {
       use BinOp::*;
       let op = match x.op {
@@ -78,11 +71,18 @@ fn expr(e: Expr) -> Expr {
       let span = x.span();
       method_call(x.attrs.clone(), x.into(), "expr", span, <_>::default())
     }
-    Paren(x) => ExprParen {
-      attrs: x.attrs,
-      paren_token: x.paren_token,
-      expr: box expr(*x.expr),
-    }.into(),
+    Paren(x) => if let Paren(_) = *x.expr {
+      // 随便设计的一个语法，((e))会忽略e的结构，调用(e).expr()
+      // 这里必须加括号，否则可能产生a + b.expr()这样的表达式，和一般理解的AST不一样
+      let span = x.span();
+      method_call(x.attrs, *x.expr, "expr", span, <_>::default())
+    } else {
+      ExprParen {
+        attrs: x.attrs,
+        paren_token: x.paren_token,
+        expr: box expr(*x.expr),
+      }.into()
+    }
     Path(x) => {
       let id = x.path.get_ident().expect("path expr must be single variable name").to_string();
       let span = x.span();

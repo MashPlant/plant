@@ -25,16 +25,6 @@ pub fn opt<'a, T: Display>(x: &'a Option<T>) -> impl Display + 'a {
   fn2display(move |f| if let Some(x) = x { x.fmt(f) } else { f.write_str("None") })
 }
 
-impl Type {
-  pub fn as_str(self) -> &'static str {
-    match self {
-      I8 => "i8", U8 => "u8", I16 => "i16", U16 => "u16",
-      I32 => "i32", U32 => "u32", I64 => "i64", U64 => "u64",
-      F32 => "f32", F64 => "f64", Void => "void"
-    }
-  }
-}
-
 impl UnOp {
   pub fn as_str(self) -> &'static str {
     match self {
@@ -52,10 +42,6 @@ impl BinOp {
       Max => "max", Min => "min", // 以call格式输出
     }
   }
-}
-
-impl Display for Type {
-  fn fmt(&self, f: &mut Formatter) -> FmtResult { f.write_str(self.as_str()) }
 }
 
 impl Display for UnOp {
@@ -135,8 +121,13 @@ impl Expr {
           }
         }
         Alloc(x) => match x.loc {
-          Host | Global => write!(f, "{ty}*__restrict__ {}=({ty}*){}malloc({})", x.name, if x.loc == Global { "cuda_" } else { "" }, x.bytes(), ty = x.ty),
-          Local | Shared => write!(f, "{} {} {}[{}]", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems()),
+          Host => {
+            write!(f, "{}=({}*)", x.arg(), x.ty)?;
+            if let Some(a) = x.align { write!(f, "aligned_alloc({},{})", a, x.bytes()) } else { write!(f, "malloc({})", x.bytes()) }
+          }
+          Global => write!(f, "{}=({ty}*)cuda_malloc({})", x.arg(), x.bytes(), ty = x.ty),
+          Local | Shared => write!(f, "{} {} {}[{}]{}", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems(),
+            fn2display(move |f| if let Some(a) = x.align { write!(f, "__attribute__((aligned({})))", a) } else { Ok(()) })),
         }
         Free(x) => match x.loc {
           Host | Global => write!(f, "{}({})", if x.loc == Host { "free" } else { "cudaFree" }, x.name),
@@ -145,7 +136,7 @@ impl Expr {
         Sync => f.write_str("__syncthreads()"),
         Vector(ty, n, x) => {
           match **x { Load(..) => {} _ => debug_panic!("vector operand must be load: {}", x) }
-          write!(f, "*({} __attribute__((vector_size({})))*)&{}", ty, n * ty.size() as u32, x)
+          write!(f, "*(vec({},{})*)&{}", ty, n, x)
         }
         Opaque(_, x) => f.write_str(x),
       }
