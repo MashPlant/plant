@@ -136,7 +136,9 @@ impl Expr {
         Sync => f.write_str("__syncthreads()"),
         Vector(ty, n, x) => {
           match **x { Load(..) => {} _ => debug_panic!("vector operand must be load: {}", x) }
-          write!(f, "*(vec({},{})*)&{}", ty, n, x)
+          // (vec &)和*(vec *)&生成的代码不同，前者会生成非对齐的访存，后者会生成对齐的访存，例如movups vs movaps
+          // 对齐的内存上两种指令速度其实没有差别，非对齐的内存上前者慢一些，后者直接seg fault，所以用前者总是不差
+          write!(f, "(vec({},{})&){}", ty, n, x)
         }
         Opaque(_, x) => f.write_str(x),
       }

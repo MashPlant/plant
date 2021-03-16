@@ -378,6 +378,12 @@ impl Func {
                   info.capture(s.loop_dim), iter_ty(), self.gen(body, s),
                   extent = extent, min = min, it = it).ok()?;
               }
+              Unroll => {
+                // 编译器不总是会自动unroll，有时候还是需要人给一些hint
+                // 循环和下面生成for一样，但现在有tag就会跳过for生成，而且我懒得改代码了，所以复制过来
+                write!(f, "\n#pragma unroll\n\
+                  for({it}={};{};{it}+={}){{{}}}", init, cond, inc, self.gen(body, s), it = it).ok()?;
+              }
               // 我本来无意实现vectorize，相信编译器可以自动完成这件事，而且更加可靠和有效
               // 但经实验，至少在clang 11.0.0上#pragma vectorize与手动vectorize还是有差距，具体例子是kij的gemm micro kernel
               Vectorize => {
