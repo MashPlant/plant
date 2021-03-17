@@ -175,14 +175,17 @@ impl ForInfo {
   // todo: 虽然for在不同的Comp中有相同的dynamic dim，但上下界不一定相同，目前kern的启动参数和提取feature用到上下界
   pub fn extent(&self) -> Extent { self.comp.comp.extent(self.level) }
 
-  // 捕获Buf和循环变量
-  fn capture<'a>(&'a self, loop_dim: u32) -> impl Display + 'a {
+  fn capture_buf<'a>(&'a self) -> impl Display + 'a {
+    comma_sep(self.used_buf.difference(&self.local_buf).map(|x| x.0.arg()))
+  }
+
+  fn capture_buf_arg<'a>(&'a self) -> impl Display + 'a {
+    comma_sep(self.used_buf.difference(&self.local_buf).map(|x| &x.0.name))
+  }
+
+  fn capture_iter<'a>(&'a self, loop_dim: u32) -> impl Display + 'a {
     fn2display(move |f| {
       // 先把捕获的变量赋值给临时变量，再把临时变量赋值给同名的变量，这是因为C/C++中不能写int x = x;
-      for x in self.used_buf.difference(&self.local_buf).map(|x| &x.0) {
-        // Buf::arg()输出的名字已经确定了，所以不能用于定义临时变量，而且它也不需要这些类型信息
-        write!(f, "{}{}*__{x}={x};{}=__{x};", if x.kind == In { "const " } else { "" }, x.ty, x.arg(), x = x.name)?;
-      }
       write!(f, "{} {};", iter_ty(), comma_sep((0..loop_dim).map(|i|
         fn2display(move |f| if i < self.level {
           write!(f, "__i{0}=i{0},i{0}=__i{0}", i)
@@ -347,8 +350,29 @@ impl Func {
       }
       _ => true
     };
-    let cond = comp.cond.as_ref().map(|e| e.modify(replace_idx));
-    let expr = comp.expr.modify(replace_idx);
+    // 将多次常数乘法合并。本来我也以为编译器可以自动完成，但经实验是否合并会影响到编译器的alias判断，某些情况下对性能有很大影响
+    let optimize_mul = |mut e| {
+      fn optimize_mul(e: &mut Expr, stride: i64) {
+        match e {
+          Binary(BinOp::Mul, box [Val(ty, x), y]) | Binary(BinOp::Mul, box [y, Val(ty, x)]) => {
+            optimize_mul(y, stride * ty.val_i64(*x));
+            *e = y.replace0();
+          }
+          Binary(BinOp::Add, box [l, r]) | Binary(BinOp::Sub, box [l, r]) => {
+            optimize_mul(l, stride);
+            optimize_mul(r, stride);
+          }
+          _ => {
+            for x in e.args_mut() { optimize_mul(x, 1); }
+            if stride != 1 { *e = e.replace0() * stride; }
+          }
+        }
+      }
+      (optimize_mul(&mut e, 1), e).1
+    };
+    let store = store.map(optimize_mul);
+    let cond = comp.cond.as_ref().map(|e| optimize_mul(e.modify(replace_idx)));
+    let expr = optimize_mul(comp.expr.modify(replace_idx));
     let ci = box CompInfo { store, cond, expr, comp: comp.into() };
     let n = n.set_annotation(self.ctx.id_alloc(None, ci.as_ref() as *const _ as _)?)?;
     info.push(ci);
@@ -370,13 +394,17 @@ impl Func {
           if let Some(tag) = info.tag {
             let Extent(min, max, extent) = info.extent();
             match tag {
+              // 这里读取了num_thread，所以生成带Parallel的程序前就需要调用parallel_init
               Parallel => {
-                write!(f, "{{auto _kern=[=](i32 _i,i32 _t){{{}\
-                  {} _q=({extent}-1+_t)/_t,_s=min({extent},_q*_i)+{min},_e=min({extent},_q*(_i+1))+{min};\
-                  for({it}=_s;{it}<_e;++{it}){{{}}}}};\
-                  parallel_launch([](void*_p,i32 _i,i32 _t){{(*(decltype(_kern)*)_p)(_i,_t);}},&_kern);}}",
-                  info.capture(s.loop_dim), iter_ty(), self.gen(body, s),
-                  extent = extent, min = min, it = it).ok()?;
+                write!(f, "{{auto _kern=[=](u32 _i){{\
+                  [=]({}){{{}\
+                  __builtin_assume(_i<{th});\
+                  {} _s=min({extent},({extent}-1+{th})/{th}*_i)+{min},_e=min({extent},({extent}-1+{th})/{th}*(_i+1))+{min};\
+                  for({it}=_s;{it}<_e;++{it}){{{}}}\
+                  }}({});}};\
+                  parallel_launch([](void*_p,u32 _i){{(*(decltype(_kern)*)_p)(_i);}},&_kern);}}",
+                  info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(), self.gen(body, s), info.capture_buf_arg(),
+                  th = parallel_num_thread(), extent = extent, min = min, it = it).ok()?;
               }
               Unroll => {
                 // 编译器不总是会自动unroll，有时候还是需要人给一些hint
@@ -420,7 +448,7 @@ impl Func {
               _ => { // 必然是GPU相关的tag
                 let old_in_kern = mem::replace(&mut s.p().in_kern, true);
                 if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
-                  write!(f, "{{auto _kern=[=]__device__{{{}", info.capture(s.loop_dim)).ok()?;
+                  write!(f, "{{auto _kern=[=]__device__({}){{{}", info.capture_buf(), info.capture_iter(s.loop_dim)).ok()?;
                 }
                 debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.comp.name(), info.level, min, tag.gpu_idx(), max);
                 let old_cfg = s.p().kern_cfg[(tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
@@ -435,7 +463,8 @@ impl Func {
                     // 用lambda表达式会报声明周期错误，所以用函数定义
                     comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
                   }
-                  write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern);}}", fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..])).ok()?;
+                  // 这里假定_kern,后一定有内容，即至少用到了一个Buf，否则这程序也没什么意义
+                  write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}", fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..]), info.capture_buf_arg()).ok()?;
                   s.p().kern_cfg = Default::default();
                 }
               }

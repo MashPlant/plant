@@ -13,9 +13,9 @@ using f64 = double;
 #define min(x, y) ({ auto _x = x; auto _y = y; _x > _y ? _y : _x; })
 #define floord(x, y) ((x) / (y))
 #define vec(t, n) t __attribute__((vector_size(n * sizeof(t))))
-extern "C" { void (*parallel_launch)(void (*)(void *, i32, i32), void *); }
+extern "C" { void (*parallel_launch)(void (*)(void *, u32), void *); }
 #ifdef __CUDACC__
-template <typename F> __global__ void exec_kern(F f) { f(); }
+template <typename F, typename... Args> __global__ void exec_kern(F f, Args... args) { f(args...); }
 #define cuda_malloc(size) ({ void *_x; cudaMalloc(&_x, size); _x; })
 [[noreturn]] __device__ void unreachable() {}
 #define assume(x) if (!(x)) unreachable()

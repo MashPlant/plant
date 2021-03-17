@@ -74,6 +74,17 @@ impl XorShiftRng {
   }
 }
 
-extern "C" {
-  pub fn parallel_launch(f: extern "C" fn(*mut u8, i32, i32), args: *mut u8);
+// 返回parallel线程数，在调用parallel_init前是0
+pub fn parallel_num_thread() -> u32 {
+  extern "C" { static num_thread: u32; }
+  unsafe { num_thread }
 }
+
+// 传0则自动检测系统核心数，传非0值则配置线程数为参数值
+// 用户需保证调用parallel_launch前调用了parallel_init
+pub fn parallel_init(th: u32) {
+  extern "C" { fn parallel_init(th: u32); }
+  unsafe { parallel_init(th); }
+}
+
+extern "C" { pub fn parallel_launch(f: extern "C" fn(*mut u8, u32), args: *mut u8); }
