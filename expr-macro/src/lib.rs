@@ -133,7 +133,7 @@ fn ty(ty: &Type) -> Expr {
     Type::Path(x) => {
       let ty = match x.path.get_ident().unwrap_or_else(|| err!()).to_string().as_str() {
         "i8" => "I8", "u8" => "U8", "i16" => "I16", "u16" => "U16", "i32" => "I32", "u32" => "U32",
-        "i64" => "I64", "u64" => "U64", "f32" => "F32", "f64" => "F64", "void" => "Void", _ => err!(),
+        "i64" => "I64", "u64" => "U64", "f32" => "F32", "f64" => "F64", "void" | "()" => "Void", _ => err!(),
       };
       ident(ty, x.span())
     }

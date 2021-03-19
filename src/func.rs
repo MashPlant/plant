@@ -285,19 +285,20 @@ impl Func {
     // wrapper函数接受void **p，从p[0], p[3], p[6], ...位置处读出实际函数的参数，以此调用实际函数
     write!(w, "extern \"C\" void {f}({}){{{} {};{}}}extern \"C\" void {f}_wrapper(void**p){{{f}({});}}\n",
       comma_sep(args.iter().map(|x| x.arg())),
-      iter_ty(), i0_in(s.loop_dim), self.gen(ast, &s),
+      iter_ty(), i0_in(s.loop_dim), self.gen(*ast, &s),
       comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 3 * i)))),
       f = self.name)?;
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
     let so_path = path.with_extension("so");
     let mut cmd = Command::new(if b == CPU { CC } else { NVCC });
-    cmd.arg("-x").arg(if b == CPU { "c++" } else { "cu" }).arg(&path);
-    match b {
-      CPU => cmd.arg("-Ofast").arg("-march=native").arg("-pthread"),
-      GPU => cmd.arg("-O3").arg("-use_fast_math").arg("-extended-lambda").arg("--compiler-options")
-        .arg("-Xcudafe").arg("\"--diag_suppress=declared_but_not_referenced --diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\""),
-    };
-    cmd.arg("-fPIC").arg("-shared").arg("-o").arg(&so_path);
+    if b == CPU {
+      cmd.arg("-x").arg("c++").arg(&path).arg("-Ofast").arg("-march=native").arg("-pthread").arg("-fPIC").arg("-shared");
+    } else {
+      cmd.arg("-x").arg("cu").arg(&path).arg("-O3").arg("-use_fast_math").arg("-extended-lambda")
+        .arg("-Xcudafe").arg("\"--diag_suppress=declared_but_not_referenced --diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\"")
+        .arg("-Xcompiler").arg("-fPIC").arg("-Xcompiler").arg("-shared");
+    }
+    cmd.arg("-o").arg(&so_path);
     for x in &self.compile_args { cmd.arg(&**x); }
     debug!("codegen: cmd = {:?}", cmd);
     let status = cmd.status()?;
@@ -381,7 +382,7 @@ impl Func {
 
   // 实际上会修改s中的内容，为了规避借用检查，使用不可变引用
   // 访问/修改s.in_kern来实现在第一个进入GPU的for处生成代码，访问/修改s.kern_cfg来获取kern的启动参数
-  fn gen<'a>(&'a self, n: AstNode, s: &'a CodegenState) -> impl Display + 'a {
+  fn gen<'a>(&'a self, n: AstNodeRef, s: &'a CodegenState) -> impl Display + 'a {
     let work = move |f: &mut Formatter| {
       match n.get_type() {
         AstNodeType::For => {
@@ -389,8 +390,8 @@ impl Func {
           let init = n.for_get_init()?.to_C_str()?;
           let cond = n.for_get_cond()?.to_C_str()?;
           let inc = n.for_get_inc()?.to_C_str()?;
-          let body = n.for_get_body()?;
-          let info = s.info.get(&*n)?;
+          let body = *n.for_get_body()?;
+          let info = s.info.get(&n)?;
           if let Some(tag) = info.tag {
             let Extent(min, max, extent) = info.extent();
             match tag {
@@ -412,6 +413,12 @@ impl Func {
                 write!(f, "\n#pragma unroll\n\
                   for({it}={};{};{it}+={}){{{}}}", init, cond, inc, self.gen(body, s), it = it).ok()?;
               }
+              UnrollExplicit => {
+                let min = min.get_num_si();
+                for i in min..min + extent.get_num_si() {
+                  write!(f, "{}={};{}", it, i, self.gen(body, s)).ok()?;
+                }
+              }
               // 我本来无意实现vectorize，相信编译器可以自动完成这件事，而且更加可靠和有效
               // 但经实验，至少在clang 11.0.0上#pragma vectorize与手动vectorize还是有差距，具体例子是kij的gemm micro kernel
               Vectorize => {
@@ -421,7 +428,7 @@ impl Func {
                 debug_assert!(comp.cond.is_none() && comp.store.is_some());
                 // 只处理Load中的两种情形：下标中有i，且系数为1；下标中没有i。前者用Vector表达式包起来，后者不变，会自动broadcast
                 // 其余情景也不保证报错，可能默默放过去产生错误结果
-                let ref mut replace_idx = move |e: &mut Expr| if let Load(_, idx) = e {
+                let ref replace_idx = move |e: &mut Expr| if let Load(_, idx) = e {
                   fn vis_idx(e: &Expr, i: u32, stride: i64) -> i64 {
                     match e {
                       &Iter(_, x) if x == i => stride,
@@ -435,12 +442,15 @@ impl Func {
                   if k == 1 { *e = Vector(e.ty(), extent, box e.replace0()); }
                   false
                 } else { true };
-                let store = comp.store.as_ref()?;
-                store.p().visit_mut(replace_idx);
-                comp.expr.p().visit_mut(replace_idx);
-                // 加上向量类型的0值，如果右端是标量则可以转化成向量
+                let store = comp.store.as_ref()?.modify(replace_idx);
+                let expr = comp.expr.modify(replace_idx);
                 let ty = comp.expr.ty();
-                write!(f, "{}={};{}=({})+(vec({},{})){{}};", it, min, store, comp.expr, ty, extent).ok()?;
+                // CUDA device code中无法使用自定义的向量，只能用预先定义好的，已经在inc.h中using了，不在这个范围内会编译失败
+                if self.backend == CPU {
+                  write!(f, "using {ty}x{} __attribute__((vector_size({})))={ty};", extent, extent * ty.size() as u32, ty = ty).ok()?;
+                }
+                // 加上向量类型的0值，如果右端是标量则可以转化成向量
+                write!(f, "{}={};{}=({})+{}x{}{{}};", it, min, store, expr, ty, extent).ok()?;
               }
               // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
               // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
@@ -483,13 +493,13 @@ impl Func {
         AstNodeType::If => {
           let cond = n.if_get_cond()?.to_C_str()?;
           let t = n.if_get_then()?;
-          write!(f, "if({}){{{}}}", cond, self.gen(t, s)).ok()?;
-          if let Some(e) = n.if_get_else() { write!(f, "else{{{}}}", self.gen(e, s)).ok()?; }
+          write!(f, "if({}){{{}}}", cond, self.gen(*t, s)).ok()?;
+          if let Some(e) = n.if_get_else() { write!(f, "else{{{}}}", self.gen(*e, s)).ok()?; }
         }
         AstNodeType::Block => {
           // block node不需要{}包裹，因为if，for已经有{}了，而且用{}包裹会让一些局部变量无法访问
           let ch = n.block_get_children()?;
-          for i in 0..ch.n_ast_node() { write!(f, "{}", self.gen(ch.get_ast_node(i)?, s)).ok()?; }
+          for i in 0..ch.n_ast_node() { write!(f, "{}", self.gen(*ch.get_ast_node(i)?, s)).ok()?; }
         }
         AstNodeType::User => {
           let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);

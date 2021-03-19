@@ -123,11 +123,16 @@ impl Expr {
         Alloc(x) => match x.loc {
           Host => {
             write!(f, "{}=({}*)", x.arg(), x.ty)?;
-            if let Some(a) = x.align { write!(f, "aligned_alloc({},{})", a, x.bytes()) } else { write!(f, "malloc({})", x.bytes()) }
+            if let Some(a) = x.align { write!(f, "aligned_alloc({},{})", a, x.bytes())? } else { write!(f, "malloc({})", x.bytes())? }
+            if x.zero_init { write!(f, ";memset({},0,{})", x.name, x.bytes()) } else { Ok(()) }
           }
-          Global => write!(f, "{}=({ty}*)cuda_malloc({})", x.arg(), x.bytes(), ty = x.ty),
-          Local | Shared => write!(f, "{} {} {}[{}]{}", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems(),
-            fn2display(move |f| if let Some(a) = x.align { write!(f, "__attribute__((aligned({})))", a) } else { Ok(()) })),
+          Global => {
+            write!(f, "{}=({ty}*)cuda_malloc({})", x.arg(), x.bytes(), ty = x.ty)?;
+            if x.zero_init { write!(f, ";cudaMemset({},0,{})", x.name, x.bytes()) } else { Ok(()) }
+          }
+          Local | Shared => write!(f, "{} {} {}[{}]{}{}", if x.loc == Shared { "__shared__" } else { "" }, x.ty, x.name, x.elems(),
+            fn2display(move |f| if let Some(a) = x.align { write!(f, "__attribute__((aligned({})))", a) } else { Ok(()) }),
+            if x.zero_init { "={}" } else { "" }),
         }
         Free(x) => match x.loc {
           Host | Global => write!(f, "{}({})", if x.loc == Host { "free" } else { "cudaFree" }, x.name),
@@ -138,7 +143,7 @@ impl Expr {
           match **x { Load(..) => {} _ => debug_panic!("vector operand must be load: {}", x) }
           // (vec &)和*(vec *)&生成的代码不同，前者会生成非对齐的访存，后者会生成对齐的访存，例如movups vs movaps
           // 对齐的内存上两种指令速度其实没有差别，非对齐的内存上前者慢一些，后者直接seg fault，所以用前者总是不差
-          write!(f, "(vec({},{})&){}", ty, n, x)
+          write!(f, "({}x{}&){}", ty, n, x)
         }
         Opaque(_, x) => f.write_str(x),
       }

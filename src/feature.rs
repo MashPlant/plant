@@ -207,7 +207,7 @@ pub fn parallel_level(tag: Option<DimTag>) -> u32 {
     match tag {
       GPUBlockX | GPUBlockY | GPUBlockZ => 2,
       GPUThreadX | GPUThreadY | GPUThreadZ | Parallel => 1,
-      Vectorize | Unroll => 0,
+      Unroll | UnrollExplicit | Vectorize => 0,
     }
   } else { 0 }
 }

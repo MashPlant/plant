@@ -23,7 +23,18 @@ pub struct Comp {
 impl_try!(&Comp);
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum DimTag { Parallel, Unroll, Vectorize, GPUBlockX, GPUBlockY, GPUBlockZ, GPUThreadX, GPUThreadY, GPUThreadZ }
+pub enum DimTag {
+  Parallel,
+  Unroll,
+  UnrollExplicit,
+  Vectorize,
+  GPUBlockX,
+  GPUBlockY,
+  GPUBlockZ,
+  GPUThreadX,
+  GPUThreadY,
+  GPUThreadZ,
+}
 
 // 将Comp传给接受impl IntoExpr的地方时，是将它作为Param表达式，而非Access表达式
 // 用法区别请看Comp::as_param的注释
@@ -206,11 +217,11 @@ impl Comp {
   pub fn fuse(&self, i: u32) -> &Comp {
     debug_assert!(i + 1 < self.loop_dim());
     // min1 <= i1 < max1, min2 <= i2 < max2, 令j = (i1 - min1) * (max2 - min2) + (i2 - min2)
-    // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2 (这由ISL自己推导)
+    // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2
     let Extent(min1, _, _) = self.extent(i);
     let Extent(min2, _, extent2) = self.extent(i + 1);
     let (n, i) = (self.sch_dim(), i * 2 + 1);
-    let s = format!("{{[{}]->[{}]:i{n}=(i{i1}-{min1})*{extent2}+(i{i2}-{min2})}}\0", i0_in(n),
+    let s = format!("{{[{}]->[{}]:i{n}=(i{i1}-{min1})*{extent2}+(i{i2}-{min2})&&i{i1}=floor(i{n}/{extent2})+{min1}&&i{i2}=i{n}%{extent2}+{min2}}}\0", i0_in(n),
       comma_sep((0..n - 2).map(|x| fn2display(move |f|
         write!(f, "i{}", if x < i || x == i + 1 { x } else if x == i { n } else { x + 2 })
       ))),

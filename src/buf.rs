@@ -16,6 +16,7 @@ pub struct Buf {
   pub ty: Type,
   pub kind: BufKind,
   pub loc: BufLoc,
+  pub zero_init: bool,
   pub align: Option<NonZeroU32>,
   pub sizes: Box<[Expr]>,
 }
@@ -35,7 +36,7 @@ impl Func {
   // 默认loc为Host
   pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: Box<[Expr]>) -> &Buf {
     debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty() && ty != Void);
-    let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, align: None, sizes };
+    let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, zero_init: false, align: None, sizes };
     debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
     let ret = buf.as_ref().p();
     self.p().bufs.push(buf);
@@ -62,6 +63,7 @@ impl Buf {
   }
 
   impl_setter!(set_loc loc BufLoc);
+  impl_setter!(set_zero_init zero_init bool);
 
   pub fn set_align(&self, align: u32) -> &Self {
     self.p().align = NonZeroU32::new(align);
