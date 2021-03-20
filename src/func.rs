@@ -162,6 +162,10 @@ pub struct ForInfo {
   // 一个for可能出现在多个Comp中，但在不同的Comp中它必须拥有相同的dynamic dim
   pub level: u32,
   pub tag: Option<DimTag>,
+  // Comp::fuse往往导致生成的代码非常糟糕，尽量避免使用
+  // 作为替代，允许连续多个循环标记同一个tag，例如Parallel或GPUBlockX，这也是fuse唯一的实际用途
+  // fuse_extent记录内层同一个tag的循环extent的累乘，借助它从"fuse"的变量中恢复出本层循环变量
+  pub fuse_extent: i64,
   // used_buf和local_buf用于Parallel和GPU代码生成，分别表示kern中使用的所有Buf和kern中自己分配的Buf
   // 只有非kern循环和kern循环交界处的kern循环的ForInfo中才有内容
   // 如果一个Buf被使用，但不是自己分配的，就作为参数传给kern
@@ -200,13 +204,13 @@ pub struct CodegenState {
   pub info: HashMap<AstNodeRef, ForInfo>,
   // 经过align_schedule，所有计算循环层次相同，都是loop_dim
   pub loop_dim: u32,
-  // 以下都是codegen过程中的临时值，in_kern表示当前是否在GPU内核中
+  // 以下都是codegen过程中的临时值，in_kern表示当前是否在kern中，kern指Parallel或GPU用到的lambda表达式
   in_kern: bool,
-  // used_buf和local_buf与ForInfo中的意义相同，是借用这里保存一下，填好后放进第一个进入GPU的for的ForInfo中
+  // used_buf和local_buf与ForInfo中的意义相同，是借用这里保存一下，填好后放进第一个进入kern的ForInfo中
   used_buf: HashSet<NameHashBuf>,
   local_buf: HashSet<NameHashBuf>,
-  // kern的启动参数，6对应<<<dim3(...), dim3(...)>>>中的6个参数，如果是None就填1
-  kern_cfg: [Option<Box<str>>; 6],
+  // kern的启动参数，6对应<<<dim3(...), dim3(...)>>>中的6个参数，如果不存在就填1
+  kern_cfg: [i64; 6],
 }
 
 // AstNode树中的user node的annotation中的指针指向Vec<Box<CompInfo>>中的内容，所以把它放在这里
@@ -258,8 +262,7 @@ impl Func {
     self.ctx.options_set_ast_build_group_coscheduled(1)?;
     let ast = build.ast_from_schedule(union_sch)?;
     debug!("build_ast: ast = {}", ast);
-    let mut s = CodegenState::default();
-    s.loop_dim = self.comps[0].loop_dim();
+    let mut s = CodegenState { loop_dim: self.comps[0].loop_dim(), kern_cfg: [1; 6], ..<_>::default() };
     // 实现上必须访问两次才能提取used_buf和local_buf信息，extract_tags只给for加tag
     // 有了tag后，extract_buf才能提取信息并保存到第一个进入GPU的ForInfo中
     extract_tags(*ast, &mut Vec::new(), &mut s.info);
@@ -393,19 +396,31 @@ impl Func {
           let body = *n.for_get_body()?;
           let info = s.info.get(&n)?;
           if let Some(tag) = info.tag {
-            let Extent(min, max, extent) = info.extent();
+            let Extent(min, max, ex) = info.extent();
+            let ex = ex.get_num_si();
+            let gen_it = |f: &mut Formatter, idx|
+              write!(f, "{it}={idx}/{fuse_ex}%{ex}+{min};\
+                assume({min}<={it}&&{it}<={max});\
+                if({init}<={it}&&{cond}){{{body}}}",
+                it = it, idx = idx, ex = ex, fuse_ex = info.fuse_extent,
+                min = min, max = max, init = init, cond = cond, body = self.gen(body, s)).ok();
             match tag {
               // 这里读取了num_thread，所以生成带Parallel的程序前就需要调用parallel_init
               Parallel => {
-                write!(f, "{{auto _kern=[=](u32 _i){{\
-                  [=]({}){{{}\
-                  __builtin_assume(_i<{th});\
-                  {} _s=min({extent},({extent}-1+{th})/{th}*_i)+{min},_e=min({extent},({extent}-1+{th})/{th}*(_i+1))+{min};\
-                  for({it}=_s;{it}<_e;++{it}){{{}}}\
-                  }}({});}};\
-                  parallel_launch([](void*_p,u32 _i){{(*(decltype(_kern)*)_p)(_i);}},&_kern);}}",
-                  info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(), self.gen(body, s), info.capture_buf_arg(),
-                  th = parallel_num_thread(), extent = extent, min = min, it = it).ok()?;
+                let old_in_kern = mem::replace(&mut s.p().in_kern, true);
+                if !old_in_kern {
+                  write!(f, "{{auto _kern=[=](u32 _i){{\
+                    [=]({}){{{}assume(_i<{th});\
+                    {} _s=min({ex},({ex}-1+{th})/{th}*_i),_e=min({ex},({ex}-1+{th})/{th}*(_i+1)),_par;\
+                    for(_par=_s;_par<_e;++_par){{",
+                    info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(),
+                    th = parallel_num_thread(), ex = info.fuse_extent * ex).ok()?;
+                }
+                gen_it(f, "_par")?;
+                s.p().in_kern = old_in_kern;
+                if !old_in_kern {
+                  write!(f, "}}({});}};parallel_launch([](void*_p,u32 _i){{(*(decltype(_kern)*)_p)(_i);}},&_kern);}}", info.capture_buf_arg()).ok()?;
+                }
               }
               Unroll => {
                 // 编译器不总是会自动unroll，有时候还是需要人给一些hint
@@ -415,14 +430,14 @@ impl Func {
               }
               UnrollExplicit => {
                 let min = min.get_num_si();
-                for i in min..min + extent.get_num_si() {
+                for i in min..min + ex {
                   write!(f, "{}={};{}", it, i, self.gen(body, s)).ok()?;
                 }
               }
               // 我本来无意实现vectorize，相信编译器可以自动完成这件事，而且更加可靠和有效
               // 但经实验，至少在clang 11.0.0上#pragma vectorize与手动vectorize还是有差距，具体例子是kij的gemm micro kernel
               Vectorize => {
-                let (comp, i, extent) = (info.comp, info.level, extent.get_num_si() as _);
+                let (comp, i, ex) = (info.comp, info.level, ex as _);
                 // 应该确实只有这个计算在这个维度有Vectorize标记，只能处理这种简单情形
                 debug_assert_eq!(comp.comp.tags.get(i as usize).copied().flatten(), Some(Vectorize));
                 debug_assert!(comp.cond.is_none() && comp.store.is_some());
@@ -439,7 +454,7 @@ impl Func {
                   }
                   let k = vis_idx(idx, i, 1);
                   debug_assert!(k == 0 || k == 1);
-                  if k == 1 { *e = Vector(e.ty(), extent, box e.replace0()); }
+                  if k == 1 { *e = Vector(e.ty(), ex, box e.replace0()); }
                   false
                 } else { true };
                 let store = comp.store.as_ref()?.modify(replace_idx);
@@ -447,35 +462,27 @@ impl Func {
                 let ty = comp.expr.ty();
                 // CUDA device code中无法使用自定义的向量，只能用预先定义好的，已经在inc.h中using了，不在这个范围内会编译失败
                 if self.backend == CPU {
-                  write!(f, "using {ty}x{} __attribute__((vector_size({})))={ty};", extent, extent * ty.size() as u32, ty = ty).ok()?;
+                  write!(f, "using {ty}x{} __attribute__((vector_size({})))={ty};", ex, ex * ty.size() as u32, ty = ty).ok()?;
                 }
                 // 加上向量类型的0值，如果右端是标量则可以转化成向量
-                write!(f, "{}={};{}=({})+{}x{}{{}};", it, min, store, expr, ty, extent).ok()?;
+                write!(f, "{}={};{}=({})+{}x{}{{}};", it, min, store, expr, ty, ex).ok()?;
               }
               // 生成GPU代码的逻辑是：遇到第一个GPU tag的循环维度，在这里生成kern和kern调用
               // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
               // 这导致了Comp::tag的注释中描述的问题
               _ => { // 必然是GPU相关的tag
                 let old_in_kern = mem::replace(&mut s.p().in_kern, true);
-                if !old_in_kern { // 第一个进入GPU的for，在这里生成代码
+                if !old_in_kern {
                   write!(f, "{{auto _kern=[=]__device__({}){{{}", info.capture_buf(), info.capture_iter(s.loop_dim)).ok()?;
                 }
-                debug!("gen: GPU idx for Comp {} loop {}: {} <= {} < {}", info.comp.comp.name(), info.level, min, tag.gpu_idx(), max);
-                let old_cfg = s.p().kern_cfg[(tag as usize - GPUBlockX as usize)].replace(extent.to_str()?.as_str().into());
-                debug_assert!(old_cfg.is_none(), "duplicate gpu tag"); // 嵌套中的多个循环标记了同一个gpu idx，不合法
-                write!(f, "i{i}={idx}+{min};\
-                  assume({min}<=i{i}&&i{i}<={max});\
-                  if({init}<=i{i}&&{cond}){{{body}}}", i = info.level, idx = tag.gpu_idx(),
-                  min = min, max = max, init = init, cond = cond, body = self.gen(body, &*s)).ok()?;
+                s.p().kern_cfg[(tag as usize - GPUBlockX as usize)] *= ex;
+                gen_it(f, tag.gpu_idx())?;
                 s.p().in_kern = old_in_kern;
                 if !old_in_kern {
-                  fn fmt<'a>(c: &'a [Option<Box<str>>]) -> impl Display + 'a {
-                    // 用lambda表达式会报声明周期错误，所以用函数定义
-                    comma_sep(c.iter().map(|s| s.as_deref().unwrap_or("1")))
-                  }
                   // 这里假定_kern,后一定有内容，即至少用到了一个Buf，否则这程序也没什么意义
-                  write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}", fmt(&s.kern_cfg[..3]), fmt(&s.kern_cfg[3..]), info.capture_buf_arg()).ok()?;
-                  s.p().kern_cfg = Default::default();
+                  write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}", comma_sep(s.kern_cfg[..3].iter()),
+                    comma_sep(s.kern_cfg[3..].iter()), info.capture_buf_arg()).ok()?;
+                  s.p().kern_cfg = [1; 6];
                 }
               }
             }
@@ -545,14 +552,21 @@ fn extract_tags(n: AstNodeRef, loops: &mut Vec<AstNodeRef>, info: &mut HashMap<A
     }
     AstNodeType::User => {
       let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);
-      for i in 0..comp.comp.loop_dim() as usize {
-        if let Some(&l) = loops.get(i) {
-          let tag = comp.comp.tags.get(i).copied().flatten();
-          info.entry(l).and_modify(|old| {
-            if old.tag.is_none() { old.tag = tag; } else { debug_assert!(tag.is_none(), "duplicate tag"); }
-            debug_assert_eq!(old.level, i as _);
-          }).or_insert(ForInfo { comp, level: i as _, tag, used_buf: <_>::default(), local_buf: <_>::default() });
-        }
+      debug_assert!(comp.comp.loop_dim() as usize <= loops.len());
+      let (mut last_tag, mut fuse_extent) = (None, 1);
+      for (i, &l) in loops.iter().enumerate().take(comp.comp.loop_dim() as usize).rev() {
+        let tag = comp.comp.tags.get(i).copied().flatten();
+        let fuse_extent1 = if tag == last_tag { fuse_extent } else { 1 };
+        info.entry(l).and_modify(|old| {
+          if old.tag.is_none() {
+            old.tag = tag;
+            old.fuse_extent = fuse_extent1;
+          } else { debug_assert!(tag.is_none(), "duplicate tag"); }
+          debug_assert_eq!(old.level, i as _);
+        }).or_insert(ForInfo { comp, level: i as _, tag, fuse_extent: fuse_extent1, used_buf: <_>::default(), local_buf: <_>::default() });
+        let ex = comp.comp.extent(i as _).2.get_num_si();
+        if tag == last_tag { fuse_extent *= ex; } else { fuse_extent = ex; }
+        last_tag = tag;
       }
     }
     ty => debug_panic!("invalid ast node type: {:?}", ty),

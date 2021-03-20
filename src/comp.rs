@@ -425,6 +425,11 @@ impl Comp {
     self
   }
 
+  pub fn tags(&self, i: impl IntoIterator<Item=u32>, tag: DimTag) -> &Comp {
+    for i in i { self.tag(i, tag); }
+    self
+  }
+
   // identity store，即C[i, j, k, ...]保存在buf[i, j, k, ...]
   pub fn store(&self, buf: &Buf) -> &Comp {
     debug_assert_eq!(self.orig_dim(), buf.sizes.len() as _);

@@ -130,10 +130,11 @@ fn method_call(attrs: Vec<Attribute>, receiver: Expr, s: &str, span: Span, args:
 fn ty(ty: &Type) -> Expr {
   macro_rules! err { () => { panic!("unknown type {:?}", ty) }; }
   match ty {
+    Type::Tuple(x) if x.elems.is_empty() => ident("Void", x.span()),
     Type::Path(x) => {
       let ty = match x.path.get_ident().unwrap_or_else(|| err!()).to_string().as_str() {
         "i8" => "I8", "u8" => "U8", "i16" => "I16", "u16" => "U16", "i32" => "I32", "u32" => "U32",
-        "i64" => "I64", "u64" => "U64", "f32" => "F32", "f64" => "F64", "void" | "()" => "Void", _ => err!(),
+        "i64" => "I64", "u64" => "U64", "f32" => "F32", "f64" => "F64", "void" => "Void", _ => err!(),
       };
       ident(ty, x.span())
     }
