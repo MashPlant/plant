@@ -204,8 +204,8 @@ pub struct CodegenState {
   pub info: HashMap<AstNodeRef, ForInfo>,
   // 经过align_schedule，所有计算循环层次相同，都是loop_dim
   pub loop_dim: u32,
-  // 以下都是codegen过程中的临时值，in_kern表示当前是否在kern中，kern指Parallel或GPU用到的lambda表达式
-  in_kern: bool,
+  // 当前在Parallel或GPU kern内时cur_kern为对应的tag，否则为None
+  cur_kern: Option<DimTag>,
   // used_buf和local_buf与ForInfo中的意义相同，是借用这里保存一下，填好后放进第一个进入kern的ForInfo中
   used_buf: HashSet<NameHashBuf>,
   local_buf: HashSet<NameHashBuf>,
@@ -398,17 +398,19 @@ impl Func {
           if let Some(tag) = info.tag {
             let Extent(min, max, ex) = info.extent();
             let ex = ex.get_num_si();
-            let gen_it = |f: &mut Formatter, idx|
-              write!(f, "{it}={idx}/{fuse_ex}%{ex}+{min};\
+            let gen_it = |f: &mut Formatter, idx, last_kern|
+              write!(f, "{it}={idx}{div}{rem}+{min};\
                 assume({min}<={it}&&{it}<={max});\
                 if({init}<={it}&&{cond}){{{body}}}",
-                it = it, idx = idx, ex = ex, fuse_ex = info.fuse_extent,
-                min = min, max = max, init = init, cond = cond, body = self.gen(body, s)).ok();
+                it = it, idx = idx, min = min, max = max, init = init, cond = cond, body = self.gen(body, s),
+                div = fn2display(|f| if info.fuse_extent != 1 { write!(f, "/{}", info.fuse_extent) } else { Ok(()) }),
+                // 本tag的最外层循环不需要取模，只有内层的需要
+                rem = fn2display(|f| if last_kern == Some(tag) { write!(f, "%{}", ex) } else { Ok(()) })).ok();
             match tag {
               // 这里读取了num_thread，所以生成带Parallel的程序前就需要调用parallel_init
               Parallel => {
-                let old_in_kern = mem::replace(&mut s.p().in_kern, true);
-                if !old_in_kern {
+                let last_kern = mem::replace(&mut s.p().cur_kern, Some(tag));
+                if last_kern.is_none() {
                   write!(f, "{{auto _kern=[=](u32 _i){{\
                     [=]({}){{{}assume(_i<{th});\
                     {} _s=min({ex},({ex}-1+{th})/{th}*_i),_e=min({ex},({ex}-1+{th})/{th}*(_i+1)),_par;\
@@ -416,10 +418,10 @@ impl Func {
                     info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(),
                     th = parallel_num_thread(), ex = info.fuse_extent * ex).ok()?;
                 }
-                gen_it(f, "_par")?;
-                s.p().in_kern = old_in_kern;
-                if !old_in_kern {
-                  write!(f, "}}({});}};parallel_launch([](void*_p,u32 _i){{(*(decltype(_kern)*)_p)(_i);}},&_kern);}}", info.capture_buf_arg()).ok()?;
+                gen_it(f, "_par", last_kern)?;
+                s.p().cur_kern = last_kern;
+                if last_kern.is_none() {
+                  write!(f, "}}}}({});}};parallel_launch([](void*_p,u32 _i){{(*(decltype(_kern)*)_p)(_i);}},&_kern);}}", info.capture_buf_arg()).ok()?;
                 }
               }
               Unroll => {
@@ -471,14 +473,14 @@ impl Func {
               // kern将包括这个循环下的所有内容，如果某内层循环有GPU tag，不会生成for，而是使用GPU index，否则按照正常代码一样生成
               // 这导致了Comp::tag的注释中描述的问题
               _ => { // 必然是GPU相关的tag
-                let old_in_kern = mem::replace(&mut s.p().in_kern, true);
-                if !old_in_kern {
+                let last_kern = mem::replace(&mut s.p().cur_kern, Some(tag));
+                if last_kern.is_none() {
                   write!(f, "{{auto _kern=[=]__device__({}){{{}", info.capture_buf(), info.capture_iter(s.loop_dim)).ok()?;
                 }
                 s.p().kern_cfg[(tag as usize - GPUBlockX as usize)] *= ex;
-                gen_it(f, tag.gpu_idx())?;
-                s.p().in_kern = old_in_kern;
-                if !old_in_kern {
+                gen_it(f, tag.gpu_idx(), last_kern)?;
+                s.p().cur_kern = last_kern;
+                if last_kern.is_none() {
                   // 这里假定_kern,后一定有内容，即至少用到了一个Buf，否则这程序也没什么意义
                   write!(f, "}};exec_kern<<<dim3({}),dim3({})>>>(_kern,{});}}", comma_sep(s.kern_cfg[..3].iter()),
                     comma_sep(s.kern_cfg[3..].iter()), info.capture_buf_arg()).ok()?;
@@ -590,25 +592,25 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
   let extract_buf_isl = move |e: AstExpr, s: &mut CodegenState| extract_buf_expr(&Expr::from_isl(f, e), s);
   match n.get_type() {
     AstNodeType::For => {
-      s.info.get_mut(&n).unwrap();
-      let old_in_kern = s.in_kern;
-      let info = s.info.get_mut(&n).filter(|x|
-        x.tag == Some(Parallel) || Some(GPUBlockX) <= x.tag && x.tag <= Some(GPUThreadZ)).map(|x| x.p());
-      if info.is_some() { s.in_kern = true; }
-      if s.in_kern {
+      let last_kern = s.cur_kern;
+      let mut info = s.info.get_mut(&n)?.p();
+      let cur_kern = info.tag.filter(|&x| x == Parallel || GPUBlockX <= x && x <= GPUThreadZ);
+      // extract_buf()只用到cur_kern是否为Some，不关心其具体值，gen()会关心
+      if cur_kern.is_some() { s.cur_kern = cur_kern; }
+      if cur_kern.is_some() {
         extract_buf_isl(n.for_get_init()?, s);
         extract_buf_isl(n.for_get_cond()?, s);
         extract_buf_isl(n.for_get_inc()?, s);
       }
       extract_buf(f, *n.for_get_body()?, s)?;
-      if let (Some(mut info), false) = (info, old_in_kern) {
+      if cur_kern.is_some() && last_kern.is_none() {
         info.used_buf = mem::replace(&mut s.used_buf, <_>::default());
         info.local_buf = mem::replace(&mut s.local_buf, <_>::default());
       }
-      s.in_kern = old_in_kern;
+      s.cur_kern = last_kern;
     }
     AstNodeType::If => {
-      if s.in_kern { extract_buf_isl(n.if_get_cond()?, s); }
+      if s.cur_kern.is_some() { extract_buf_isl(n.if_get_cond()?, s); }
       extract_buf(f, *n.if_get_then()?, s)?;
       if let Some(e) = n.if_get_else() { extract_buf(f, *e, s)?; }
     }
@@ -616,7 +618,7 @@ fn extract_buf(f: &Func, n: AstNodeRef, s: &mut CodegenState) -> Unit {
       let ch = n.block_get_children()?;
       for i in 0..ch.n_ast_node() { extract_buf(f, *ch.get_ast_node(i)?, s)?; }
     }
-    AstNodeType::User => if s.in_kern {
+    AstNodeType::User => if s.cur_kern.is_some() {
       let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);
       if let Some(x) = &comp.store { extract_buf_expr(x, s); }
       if let Some(x) = &comp.cond { extract_buf_expr(x, s); }

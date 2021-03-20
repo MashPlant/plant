@@ -67,10 +67,8 @@ impl Func {
   pub fn comp(&self, name: &str, ubs: Box<[Expr]>, e: Expr) -> &Comp {
     let e = e.expr();
     let mut params = HashSet::default();
-    // 收集ranges，expr中的所有Param
-    let ref mut vis = |e: &Expr| if let &Param(x) = e { params.insert(x); };
-    for ub in ubs.iter() { ub.visit(vis); }
-    e.visit(vis);
+    for ub in ubs.iter() { ub.collect_params(&mut params); }
+    e.collect_params(&mut params);
     let s = format!("[{}]->{{{}[{}]:{}}}\0", comma_sep(params.iter().map(|c| c.name())),
       name, i0_in(ubs.len() as _), sep(ubs.iter().enumerate().map(|(i, ub)| fn2display(move |f|
         write!(f, "0<=i{}<{}", i, ub))), "&&"));
@@ -450,7 +448,9 @@ impl Comp {
       assert_eq!(idx.len(), buf.sizes.len());
       for e in idx.iter() { self.check_iter(e); }
     }
-    let s = format!("{{[{}]->{}[{}]}}\0", i0_in(self.orig_dim()), buf.name, comma_sep(idx.iter()));
+    let mut params = HashSet::default();
+    for idx in idx.iter() { idx.collect_params(&mut params); }
+    let s = format!("[{}]->{{[{}]->{}[{}]}}\0", comma_sep(params.iter().map(|c| c.name())), i0_in(self.orig_dim()), buf.name, comma_sep(idx.iter()));
     debug!("store_at: {}", s);
     self.p().store = Some(self.ctx.map_read_from_str(cstr(&s))?);
     self

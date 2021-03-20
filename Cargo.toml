@@ -24,3 +24,21 @@ setjmp = { git = "https://github.com/MashPlant/setjmp.rs" }
 
 [dev-dependencies]
 test-case = "1"
+
+[[bin]]
+name = "gemm_cpu"
+path = "bench/gemm_cpu.rs"
+
+[[bin]]
+name = "conv_cpu"
+path = "bench/conv_cpu.rs"
+
+[[bin]]
+name = "gemm_gpu"
+path = "bench/gemm_gpu.rs"
+required-features = ["gpu-runtime"]
+
+[[bin]]
+name = "conv_gpu"
+path = "bench/conv_gpu.rs"
+required-features = ["gpu-runtime"]

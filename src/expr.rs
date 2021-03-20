@@ -119,6 +119,10 @@ impl Expr {
   // 将自身替换为0，返回自身原来的值，可以为无用但无法移动的Expr省去一次拷贝
   pub fn replace0(&mut self) -> Expr { mem::replace(self, Val(I8, 0)) }
 
+  pub(crate) fn collect_params(&self, params: &mut HashSet<P<Comp>>) {
+    self.visit(&mut |e| if let &Param(x) = e { params.insert(x); })
+  }
+
   pub fn from_isl(f: &Func, e: AstExpr) -> Expr {
     match e.get_type() {
       // iter_ty是I32或I64都可以直接用as转换
