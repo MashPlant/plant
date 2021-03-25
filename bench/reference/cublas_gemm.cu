@@ -1,5 +1,5 @@
 // nvcc cublas_gemm.cu -lcublas -O3 && ./a.out 500 500
-#include "common.hpp"
+#include "common.h"
 #include <cublas_v2.h>
 
 int main(int argc, char **argv) {

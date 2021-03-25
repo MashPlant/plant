@@ -1,5 +1,5 @@
 // clang++ mkl_gemm.cpp -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -fopenmp -Ofast -march=native && ./a.out 500 500
-#include "common.hpp"
+#include "common.h"
 #include <mkl.h>
 
 int main(int argc, char **argv) {

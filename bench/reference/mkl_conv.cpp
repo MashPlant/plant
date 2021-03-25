@@ -1,5 +1,5 @@
 // clang++ mkl_conv.cpp -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lmkldnn -fopenmp -Ofast -march=native && ./a.out 200 200
-#include "common.hpp"
+#include "common.h"
 #include <mkldnn.hpp>
 
 using namespace mkldnn;

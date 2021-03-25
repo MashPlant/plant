@@ -1,8 +1,15 @@
-#include <algorithm>
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#if __cplusplus
+#define STATIC_RESTRICT
+#else
+#define STATIC_RESTRICT static restrict
+#endif
 
 unsigned seed = 19260817;
 
@@ -10,7 +17,7 @@ float gen() {
   seed ^= seed << 13;
   seed ^= seed >> 17;
   seed ^= seed << 5;
-  return (seed / float(-1u)) - 0.5;
+  return (seed / (float) (-1u)) - 0.5;
 }
 
 float *alloc(size_t size) { return (float *) aligned_alloc(128, size); }
@@ -18,25 +25,37 @@ float *alloc(size_t size) { return (float *) aligned_alloc(128, size); }
 void print_diff(const float *x, const float *y, int n) {
   float diff = 0;
   for (int i = 0; i < n; ++i)
-    diff = std::max(diff, std::abs(((float *) x)[i] - ((float *) y)[i]));
+    diff = fmaxf(diff, fabsf(x[i] - y[i]));
   printf("max diff = %.12f\n", diff);
 }
 
-template<typename F>
-void run(int argc, char **argv, F f) {
+double get_time() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec + tv.tv_usec / 1000000.0;
+}
+
+void run_c(int argc, char **argv, void (*f)(void *, int), void *f_data) {
   if (argc < 2) {
     printf("usage: %s <repeat times>", argv[0]);
     exit(1);
   }
   for (int i = 1; i < argc; ++i) {
-    using namespace std::chrono;
     int rep = atoi(argv[i]);
-    auto beg = high_resolution_clock::now();
-    f(rep);
-    auto end = high_resolution_clock::now();
-    printf("avg time: %8lfs\n", duration_cast<duration<double>>(end - beg).count() / rep);
+    double beg = get_time();
+    f(f_data, rep);
+    double end = get_time();
+    printf("avg time: %8lfs\n", (end - beg) / rep);
   }
 }
+
+#if __cplusplus
+#include <chrono>
+template<typename F>
+void run(int argc, char **argv, F f) {
+  run_c(argc, argv, [](void *f_data, int rep){ ((F *)f_data)(rep); }, &f);
+}
+#endif
 
 const int M = 2048;
 const int N = 2048;
