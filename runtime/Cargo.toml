@@ -8,7 +8,6 @@ edition = "2018"
 gpu-runtime = ["cuda-runtime-sys"]
 
 [dependencies]
-ptr = { git = "https://github.com/MashPlant/ptr" }
 num = { version = "0.3", default-features = false }
 cuda-runtime-sys = { version = "0.3.0-alpha", optional = true }
 

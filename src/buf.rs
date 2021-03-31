@@ -21,7 +21,7 @@ pub struct Buf {
   pub sizes: Box<[Expr]>,
 }
 
-impl_try!(&Buf);
+impl_try!(P<Buf>);
 
 // 用Buf::name做hash，仍然用Buf地址判等；作用是在HashSet/Map<Buf>中保证稳定的顺序
 // 这一点之所以成立，还因为我使用了AHasher的默认初值作为HashSet/Map的初始状态，这是固定的值，没有任何随机性
@@ -34,13 +34,13 @@ impl Hash for NameHashBuf {
 
 impl Func {
   // 默认loc为Host
-  pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: Box<[Expr]>) -> &Buf {
+  pub fn buf(&self, name: &str, ty: Type, kind: BufKind, sizes: Box<[Expr]>) -> P<Buf> {
     debug_assert!(self.find_buf(name).is_none() && !sizes.is_empty() && ty != Void);
     let buf = box Buf { func: self.into(), name: name.into(), ty, kind, loc: Host, zero_init: false, align: None, sizes };
     debug!("buf: create buf {}, sizes = [{}]", name, comma_sep(buf.sizes.iter()));
     let ret = buf.as_ref().p();
     self.p().bufs.push(buf);
-    ret.get()
+    ret
   }
 }
 
@@ -65,33 +65,33 @@ impl Buf {
   impl_setter!(set_loc loc BufLoc);
   impl_setter!(set_zero_init zero_init bool);
 
-  pub fn set_align(&self, align: u32) -> &Self {
+  pub fn set_align(&self, align: u32) -> P<Buf> {
     self.p().align = NonZeroU32::new(align);
-    self
+    self.p()
   }
 
-  pub fn clone(&self) -> &Buf {
+  pub fn clone(&self) -> P<Buf> {
     self.func.buf(&format!("_clone{}_{}", self.func.new_buf_id(), self.name), self.ty, self.kind, self.sizes.clone())
   }
 
   // 创建一个identity访问自身的Comp，可用于Comp::cache
-  pub fn load(&self) -> &Comp {
+  pub fn load(&self) -> P<Comp> {
     let f = self.func;
     f.comp(&format!("_load{}_{}", f.new_buf_id(), self.name), self.sizes.clone(),
       self.at((0..self.sizes.len() as u32).map(iter).collect()))
-      .set_inline(true).store(self).p().get()
+      .set_inline(true).store(self.p())
   }
 
   // 在comp的循环层次at的前/后放置Alloc/Free
   // 前/后是当前的，不保证之后添加新的计算后这对Alloc/Free仍然在前/后，alloc_at_func同理
-  pub fn alloc_at(&self, comp: &Comp, i: u32) -> AllocInfo {
+  pub fn alloc_at(&self, comp: P<Comp>, i: u32) -> AllocInfo {
     debug_assert!(i < comp.loop_dim());
     let mut dom = project_static_dim(comp.schedule());
     let (n, i) = (dom.n_dim() as u32, i + 1);
     dom = dom.project_out(DimType::Set, i, n - i)?;
     let info = self.mk_alloc(dom);
-    comp.after_between_pred(&info.alloc, i);
-    if let Some(x) = info.free { x.after_between_pred(&comp, i); }
+    comp.after_between_pred(info.alloc, i);
+    if let Some(x) = info.free { x.after_between_pred(comp, i); }
     info
   }
 
@@ -118,7 +118,7 @@ impl Buf {
   }
 
   // 返回host Buf
-  pub fn auto_transfer(&self) -> &Buf {
+  pub fn auto_transfer(&self) -> P<Buf> {
     debug_assert_ne!(self.kind, Temp);
     let host = self.clone().p();
     self.set_loc(BufLoc::Global);
@@ -132,7 +132,7 @@ impl Buf {
       f.comps.insert(0, c);
     }
     self.alloc_at_func();
-    host.get()
+    host
   }
 
   // 检查本Buf是否可以作为函数参数
@@ -157,5 +157,41 @@ impl Buf {
   // 输出字节数
   pub fn bytes<'a>(&'a self) -> impl Display + 'a {
     fn2display(move |f| write!(f, "{}*sizeof({})", self.elems(), self.ty))
+  }
+
+  pub fn elems_val(&self) -> usize {
+    let mut size = 1;
+    for s in self.sizes.iter() {
+      size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("size must be Val") };
+    }
+    size
+  }
+
+  pub fn bytes_val(&self) -> usize { self.elems_val() * self.ty.size() }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ArrayInit<'a> { None, Zero, Rand(&'a XorShiftRng), Data(&'a [u8]) }
+
+impl Buf {
+  pub fn array(&self, init: ArrayInit) -> Array<u8, usize> {
+    self.check_arg();
+    let (size, elem) = (self.elems_val(), self.ty.size());
+    let arr = Array::<u8, _>::new(size * elem);
+    let p = arr.ptr();
+    match init {
+      ArrayInit::None => {}
+      ArrayInit::Zero => unsafe { p.write_bytes(0, size * elem); }
+      ArrayInit::Rand(x) => for i in 0..size { unsafe { x.fill(self.ty, p.add(i * elem)); } }
+      ArrayInit::Data(x) => {
+        debug_assert_eq!(size * elem, x.len());
+        unsafe { p.copy_from_nonoverlapping(x.as_ptr(), size * elem); }
+      }
+    }
+    if self.loc == Global { // check_arg保证loc只能是Host或Global
+      #[cfg(feature = "gpu-runtime")] { *arr.p() = arr.to_gpu(); }
+      #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled");
+    }
+    arr
   }
 }

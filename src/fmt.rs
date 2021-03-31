@@ -139,13 +139,18 @@ impl Expr {
           _ => write!(f, "/*free({})*/", x.name), // 不实际执行free
         }
         Sync => f.write_str("__syncthreads()"),
-        Vector(ty, n, x) => {
+        &Ramp(ty, stride, n, ref x) => {
           match **x { Load(..) => {} _ => debug_panic!("vector operand must be load: {}", x) }
-          // (vec &)和*(vec *)&生成的代码不同，前者会生成非对齐的访存，后者会生成对齐的访存，例如movups vs movaps
-          // 对齐的内存上两种指令速度其实没有差别，非对齐的内存上前者慢一些，后者直接seg fault，所以用前者总是不差
-          write!(f, "({}x{}&){}", ty, n, x)
+          if stride == 1 {
+            // (vec &)和*(vec *)&生成的代码不同，前者会生成非对齐的访存，后者会生成对齐的访存，例如movups vs movaps
+            // 对齐的内存上两种指令速度其实没有差别，非对齐的内存上前者慢一些，后者直接seg fault，所以用前者总是不差
+            write!(f, "({}x{}&){}", ty, n, x)
+          } else {
+            write!(f, "{}x{}{{{}}}", ty, n, comma_sep((0..n).map(move |i| fn2display(move |f|
+              write!(f, "*(&{}+{})", x, i as i32 * stride)))))
+          }
         }
-        Opaque(_, x) => f.write_str(x),
+        Verbatim(_, x) => f.write_str(x),
       }
     })
   }

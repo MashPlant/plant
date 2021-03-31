@@ -125,6 +125,11 @@ impl<T, D: Dims> DerefMut for Array<T, D> {
 impl<T, D: Dims> Slice<T, D> {
   pub fn ptr(&self) -> *mut T { self.ptr.as_ptr() }
 
+  pub fn transmute<T1, D1: Dims>(&self, dim: D1) -> Slice<T1, D1> {
+    debug_assert_eq!(self.dim.total() * size_of::<T>(), dim.total() * size_of::<T1>());
+    Slice { ptr: self.ptr.cast(), dim, loc: self.loc }
+  }
+
   pub fn flat(&self) -> &mut [T] {
     debug_assert_eq!(self.loc, CPU);
     unsafe { slice::from_raw_parts_mut(self.ptr(), self.dim.total()) }

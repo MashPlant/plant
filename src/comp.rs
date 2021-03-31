@@ -20,7 +20,7 @@ pub struct Comp {
   pub inline: bool,
 }
 
-impl_try!(&Comp);
+impl_try!(P<Comp>);
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum DimTag {
@@ -38,33 +38,14 @@ pub enum DimTag {
 
 // 将Comp传给接受impl IntoExpr的地方时，是将它作为Param表达式，而非Access表达式
 // 用法区别请看Comp::as_param的注释
-impl IntoExpr for &Comp {
+impl IntoExpr for P<Comp> {
   fn expr(self) -> Expr { self.as_param() }
-}
-
-// 用来实现类似重载的效果，为Func::comp提供“默认参数”
-pub trait CompBuilder {
-  fn comp(self, f: &Func) -> &Comp;
-}
-
-impl<E: IntoExpr> CompBuilder for (Box<[Expr]>, E) {
-  fn comp(self, f: &Func) -> &Comp {
-    let e = self.1.expr();
-    f.comp(&f.auto_comp_name(&e), self.0, e)
-  }
-}
-
-impl<E: IntoExpr> CompBuilder for E {
-  fn comp(self, f: &Func) -> &Comp {
-    let e = self.expr();
-    f.comp(&f.auto_comp_name(&e), <_>::default(), e)
-  }
 }
 
 impl Func {
   // ubs = 每个循环变量的upper bound
   // 包括此处在内，很多接受Box<[Expr]>的函数其实接受&[Expr]就够了，但为了配合expr-macro，让用户方便一点，这点浪费可以接受
-  pub fn comp(&self, name: &str, ubs: Box<[Expr]>, e: Expr) -> &Comp {
+  pub fn comp(&self, name: &str, ubs: Box<[Expr]>, e: Expr) -> P<Comp> {
     let e = e.expr();
     let mut params = HashSet::default();
     for ub in ubs.iter() { ub.collect_params(&mut params); }
@@ -76,7 +57,7 @@ impl Func {
     self.comp_raw(self.ctx.set_read_from_str(cstr(&s))?, e)
   }
 
-  pub fn comp_raw(&self, domain: Set, expr: Expr) -> &Comp {
+  pub fn comp_raw(&self, domain: Set, expr: Expr) -> P<Comp> {
     // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
     let schedule = identity_schedule(domain.coalesce()?);
     debug!("comp_raw: initial identity schedule = {}", schedule);
@@ -85,7 +66,7 @@ impl Func {
     if cfg!(debug_assertions) { comp.check_iter(&comp.expr); }
     let ret = comp.as_ref().p();
     self.p().comps.push(comp);
-    ret.get()
+    ret
   }
 }
 
@@ -176,12 +157,12 @@ pub struct Extent(pub isl::val_type::Val, pub isl::val_type::Val, pub isl::val_t
 impl_try!(Extent);
 
 impl Comp {
-  pub fn tile(&self, i: u32, j: u32, tile_i: u32, tile_j: u32) -> &Comp {
+  pub fn tile(&self, i: u32, j: u32, tile_i: u32, tile_j: u32) -> P<Comp> {
     debug_assert!(i < j);
     self.split(i, tile_i).split(j + 1, tile_j).reorder(i + 1, j + 1)
   }
 
-  pub fn tile_3(&self, i: u32, j: u32, k: u32, tile_i: u32, tile_j: u32, tile_k: u32) -> &Comp {
+  pub fn tile_3(&self, i: u32, j: u32, k: u32, tile_i: u32, tile_j: u32, tile_k: u32) -> P<Comp> {
     debug_assert!(i < j && j < k);
     self.split(i, tile_i).split(j + 1, tile_j).split(k + 2, tile_k)
       // i0 i1 j0 j1 k0 k1 -> i0 j0 k0 i1 j1 k1
@@ -189,7 +170,7 @@ impl Comp {
   }
 
   // split后外层循环extent为原extent/factor，内层为factor
-  pub fn split(&self, i: u32, factor: u32) -> &Comp {
+  pub fn split(&self, i: u32, factor: u32) -> P<Comp> {
     debug_assert!(i < self.loop_dim());
     let (n, i) = (self.sch_dim(), i * 2 + 1);
     let s = format!("{{[{}]->[{}]:i{i0}=floor(i{i}/{f})&&i{i1}=i{i}%{f}}}\0", i0_in(n),
@@ -204,7 +185,7 @@ impl Comp {
 
   // 相当于split(extent / n_parts)
   // 且和split一样，生成的代码中都是用 外 * factor + 内 来表示原循环变量，而非 内 * n_parts + 外
-  pub fn split_n_parts(&self, i: u32, n_parts: u32) -> &Comp {
+  pub fn split_n_parts(&self, i: u32, n_parts: u32) -> P<Comp> {
     let extent = self.extent(i).2.get_num_si() as u32;
     debug!("split_n_parts: extent = {}, factor = {}", extent, extent / n_parts);
     self.split(i, extent / n_parts)
@@ -212,7 +193,7 @@ impl Comp {
 
   // 将循环层次i和i + 1合并成一个循环
   // 循环i + 1的static dim被丢弃；after，tag之类的都不会特殊处理，调用fuse前应保证它们不存在
-  pub fn fuse(&self, i: u32) -> &Comp {
+  pub fn fuse(&self, i: u32) -> P<Comp> {
     debug_assert!(i + 1 < self.loop_dim());
     // min1 <= i1 < max1, min2 <= i2 < max2, 令j = (i1 - min1) * (max2 - min2) + (i2 - min2)
     // 则i1 = floor(j / (max2 - min2)) + min1, i2 = j % (max2 - min2) + min2
@@ -230,13 +211,13 @@ impl Comp {
 
   // 交换循环层次i和j
   // reorder和reorder_n都不会处理它们的tag，调用前应保证tag不存在
-  pub fn reorder(&self, i: u32, j: u32) -> &Comp {
+  pub fn reorder(&self, i: u32, j: u32) -> P<Comp> {
     self.reorder_n(&[(i, j), (j, i)])
   }
 
   // 对于map中每个元素(old, new)，将循环层次old用new代替
   // 用户须保证map是一一映射，即old不重复，new不重复，且old构成的集合与new构成的集合相等
-  pub fn reorder_n(&self, map: &[(u32, u32)]) -> &Comp {
+  pub fn reorder_n(&self, map: &[(u32, u32)]) -> P<Comp> {
     if cfg!(debug_assertions) { // 非debug模式下整个块不执行，只用debug_assert编译器可能没法优化掉下面的东西
       let (mut old, mut new) = (HashSet::default(), HashSet::default());
       for &(o, n) in map {
@@ -255,7 +236,7 @@ impl Comp {
     self.apply_sch_raw(&s)
   }
 
-  pub fn skew(&self, i: u32, j: u32, factor: u32) -> &Comp {
+  pub fn skew(&self, i: u32, j: u32, factor: u32) -> P<Comp> {
     debug_assert!(i < j);
     debug_assert!(i < self.loop_dim() && j < self.loop_dim());
     let (n, i, j) = (self.sch_dim(), i * 2 + 1, j * 2 + 1);
@@ -267,15 +248,15 @@ impl Comp {
     self.apply_sch_raw(&s)
   }
 
-  pub fn shift(&self, i: u32, n: i32) -> &Comp {
+  pub fn shift(&self, i: u32, n: i32) -> P<Comp> {
     debug_assert!(i < self.loop_dim());
     // 设置i_out = i_in + n
     self.schedule.write(map_set_eq(self.schedule.read(), i * 2 + 1, -1, n));
     debug!("shift: {}", self.schedule);
-    self
+    self.p()
   }
 
-  pub fn separate(&self, i: u32, factor: u32) -> Option<&Comp> {
+  pub fn separate(&self, i: u32, factor: u32) -> Option<P<Comp>> {
     debug_assert!(i < self.loop_dim());
     let Bound(zero, min, max) = self.extract_bound(i);
     let (n, pos) = (self.sch_dim(), i * 2 + 1);
@@ -309,13 +290,13 @@ impl Comp {
       inline: self.inline,
     };
     // 上面的所有操作都只修改局部变量(修改Func::comp_cnt可以接受)，因此错误可以恢复，从这里开始的错误不能恢复
-    c.after(self, i);
+    c.after(self.p(), i);
     self.schedule.write(self.schedule.read().intersect_range(i_aff.lt_set(sep).unwrap()
       .add_dims(DimType::Out, n - pos - 1).unwrap()).unwrap());
     debug!("separate: created sep comp {}, sch = {}", c.name(), c.schedule);
     let ret = c.as_ref().p();
     self.p().func.comps.push(c);
-    Some(ret.get())
+    Some(ret)
   }
 
   // 提取循环层次i的迭代范围，Bound的意义见Bound自身的注释
@@ -366,20 +347,20 @@ impl Comp {
     Extent(min, max, extent)
   }
 
-  pub fn apply_sch_raw(&self, s: &str) -> &Comp {
+  pub fn apply_sch_raw(&self, s: &str) -> P<Comp> {
     debug_assert!(s.ends_with('\0'));
     let t = self.ctx.map_read_from_str(cstr(&s))?.align_params(self.schedule.get_space()?)?;
     self.schedule.write(self.schedule.read().apply_range(t)?.coalesce()?.detect_equalities()?);
-    self
+    self.p()
   }
 }
 
-// 这个trait只是为了给Vec<&Comp>定义separate函数
+// 这个trait只是为了给Vec<P<Comp>>定义separate函数
 pub trait Separate {
   fn separate(&self, i: u32, factor: u32);
 }
 
-impl Separate for Vec<&Comp> {
+impl Separate for Vec<P<Comp>> {
   // 对自身已有元素都执行Comp::separate(i, factor)，把生成的新Comp加到自身中(虽然参数是&self，但会修改自身)
   fn separate(&self, i: u32, factor: u32) {
     let mut s = self.p();
@@ -414,28 +395,28 @@ impl Comp {
   // 如果用来添加GPU相关的tag，需要保证tag的几个维度是完美嵌套的
   // 例如for (i) { for (j) { C1 }  C2 }，如果tag(i, GPUBlockX)，tag(j, GPUThreadX)
   // 生成的kernel会执行C1和C2，等价于for (i) { for (j) { C1 C2 } }，语义是错误的
-  pub fn tag(&self, i: u32, tag: DimTag) -> &Comp {
+  pub fn tag(&self, i: u32, tag: DimTag) -> P<Comp> {
     debug_assert!(i < self.loop_dim());
     let i = i as usize;
     let tags = &mut self.p().tags;
     if tags.len() <= i { tags.resize(i + 1, None); }
     tags[i] = Some(tag);
-    self
+    self.p()
   }
 
-  pub fn tags(&self, i: impl IntoIterator<Item=u32>, tag: DimTag) -> &Comp {
+  pub fn tags(&self, i: impl IntoIterator<Item=u32>, tag: DimTag) -> P<Comp> {
     for i in i { self.tag(i, tag); }
-    self
+    self.p()
   }
 
   // identity store，即C[i, j, k, ...]保存在buf[i, j, k, ...]
-  pub fn store(&self, buf: &Buf) -> &Comp {
+  pub fn store(&self, buf: P<Buf>) -> P<Comp> {
     debug_assert_eq!(self.orig_dim(), buf.sizes.len() as _);
     let store = self.domain().identity()?.reset_tuple_id(DimType::In)?
       .set_tuple_name(DimType::Out, cstr(&format!("{}\0", buf.name)))?;
     debug!("store: {}", store);
     self.p().store = Some(store);
-    self
+    self.p()
   }
 
   // 检查e的孩子中Iter(x)的x都小于loop_dim
@@ -443,7 +424,7 @@ impl Comp {
     e.visit(&mut move |e| if let &Iter(_, x) = e { assert!(x < self.loop_dim()); })
   }
 
-  pub fn store_at(&self, buf: &Buf, idx: Box<[Expr]>) -> &Comp {
+  pub fn store_at(&self, buf: P<Buf>, idx: Box<[Expr]>) -> P<Comp> {
     if cfg!(debug_assertions) {
       assert_eq!(idx.len(), buf.sizes.len());
       for e in idx.iter() { self.check_iter(e); }
@@ -453,11 +434,11 @@ impl Comp {
     let s = format!("[{}]->{{[{}]->{}[{}]}}\0", comma_sep(params.iter().map(|c| c.name())), i0_in(self.orig_dim()), buf.name, comma_sep(idx.iter()));
     debug!("store_at: {}", s);
     self.p().store = Some(self.ctx.map_read_from_str(cstr(&s))?);
-    self
+    self.p()
   }
 
   // 会将self.expr中所有对src的访问下标都替换成cfg.access的列表，不管原来的下标是什么；若原来有src[i][j]和src[j][i]，会导致错误的结果
-  pub fn cache(&self, src: &Comp, i: u32, loc: BufLoc, extent: u32, cond: Option<Expr>, cfg: &mut [CacheCfg]) -> CacheInfo {
+  pub fn cache(&self, src: P<Comp>, i: u32, loc: BufLoc, extent: u32, cond: Option<Expr>, cfg: &mut [CacheCfg]) -> CacheInfo {
     // 不使用CacheCfg的Debug来输出，因为希望用Display输出Expr
     debug!("cache: extent = {}, cond = {}, cfg = [{}]", extent, opt(&cond),
       comma_sep(cfg.iter().map(|CacheCfg { size, dst, src, access }|
@@ -472,7 +453,7 @@ impl Comp {
     let name = format!("_cache{}_{}\0", f.new_buf_id(), src.name());
     let buf = f.buf(&name[..name.len() - 1], src.expr.ty(), Temp,
       cfg.iter().map(|c| c.size.expr()).collect()).set_loc(loc);
-    buf.alloc_at(self, i);
+    buf.alloc_at(self.p(), i);
     let i = i + 1;
     let mut dom = project_static_dim(self.schedule());
     let n = dom.n_dim() as u32;
@@ -513,7 +494,7 @@ impl Comp {
     CacheInfo { sync, copy: copy.p(), buf: buf.p(), buf_load }
   }
 
-  pub fn cache_identity(&self, src: &Comp, i: u32, loc: BufLoc) -> CacheInfo {
+  pub fn cache_identity(&self, src: P<Comp>, i: u32, loc: BufLoc) -> CacheInfo {
     debug_assert!(i < self.loop_dim());
     // 记录绑定到GPU thread的循环变量的位置和extent
     let mut threads = Vec::new();
@@ -634,41 +615,40 @@ impl Comp {
   // at的意义是在包围at层循环的static dim上，self在after之后，at取值范围是0..=循环层数
   // A.after(B, i).after(C, j)的链式调用，语义是A在B后，B在C后
   // 要求self没有前驱；如果other在at处已经有后继x，则把self插在other和x之间
-  pub fn after<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
+  pub fn after(&self, mut other: P<Comp>, i: u32) -> P<Comp> {
     debug!("after: setting {} after {}", self.name(), other.name());
     debug_assert!(self.pred.is_none());
-    let (mut this, mut other, i) = (self.p(), other.p(), i as usize);
-    this.pred = Some(other);
+    let i = i as usize;
+    self.p().pred = Some(other);
     if other.succ.len() <= i { other.succ.resize(i + 1, None); }
     if let Some(mut x) = other.succ[i] {
-      x.pred = Some(this);
-      if this.succ.len() <= i { this.succ.resize(i + 1, None); }
-      this.succ[i] = Some(x);
+      x.pred = Some(self.p());
+      if self.succ.len() <= i { self.p().succ.resize(i + 1, None); }
+      self.p().succ[i] = Some(x);
     }
-    other.succ[i] = Some(this);
-    other.get()
-  }
-
-  // 与after区别在于：如果self有前驱p，则要求other没有前驱，并将other插在self和p间
-  pub fn after_between_pred<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
-    let (mut this, mut other) = (self.p(), other.p());
-    if let Some(mut p) = this.pred {
-      debug_assert!(other.pred.is_none());
-      other.pred = Some(p);
-      *p.succ.iter_mut().find(|x| **x == Some(this)).unwrap() = Some(other);
-      this.pred = None;
-    }
-    self.after(other.get(), i)
-  }
-
-  // A.before(B, i).before(C, j)的链式调用，语义是A在B前，B在C前
-  pub fn before<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
-    other.after(self, i);
+    other.succ[i] = Some(self.p());
     other
   }
 
-  pub fn before_between_pred<'a>(&self, other: &'a Comp, i: u32) -> &'a Comp {
-    other.after_between_pred(self, i);
+  // 与after区别在于：如果self有前驱p，则要求other没有前驱，并将other插在self和p间
+  pub fn after_between_pred(&self, mut other: P<Comp>, i: u32) -> P<Comp> {
+    if let Some(mut p) = self.pred {
+      debug_assert!(other.pred.is_none());
+      other.pred = Some(p);
+      *p.succ.iter_mut().find(|x| **x == Some(self.p())).unwrap() = Some(other);
+      self.p().pred = None;
+    }
+    self.after(other, i)
+  }
+
+  // A.before(B, i).before(C, j)的链式调用，语义是A在B前，B在C前
+  pub fn before(&self, other: P<Comp>, i: u32) -> P<Comp> {
+    other.after(self.p(), i);
+    other
+  }
+
+  pub fn before_between_pred(&self, other: P<Comp>, i: u32) -> P<Comp> {
+    other.after_between_pred(self.p(), i);
     other
   }
 
@@ -676,7 +656,7 @@ impl Comp {
   // 例如A.after(B, i); B.after(C, i); 最终会正确生成A在B后，B在C后
   // 但A.after_raw(B, i); B.after_raw(C, i); 假设一开始static dim都是0，则最终A和B的都是1，分不出先后
   // 此外还须保证事先调用`Func::align_schedule`
-  pub fn after_raw(&self, other: &Comp, i: u32) -> Unit {
+  pub fn after_raw(&self, other: P<Comp>, i: u32) -> Unit {
     debug!("after_raw: i = {}, self = {}, other = {}", i, self.schedule, other.schedule);
     // debug_assert_eq!(self.sch_dim(), other.sch_dim());
     debug_assert!(i <= self.loop_dim() && i <= other.loop_dim());

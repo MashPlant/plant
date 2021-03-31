@@ -1,4 +1,3 @@
-use libloading::{Library, Symbol};
 use scoped_threadpool::Pool;
 use xgboost::{parameters::{*, learning::*}, DMatrix, Booster};
 use setjmp::*;
@@ -116,8 +115,6 @@ pub struct TimeEvaluator {
   pub data: Option<Vec<Array<u8, usize>>>,
 }
 
-pub type WrapperFn = fn(*const *mut u8);
-
 static mut EVAL_JMP_BUF: MaybeUninit<sigjmp_buf> = MaybeUninit::uninit();
 
 impl TimeEvaluator {
@@ -140,23 +137,7 @@ impl TimeEvaluator {
   // args和Func::codegen的args意义一样；init为args中每个Buf申请内存并用随机值初始化，保存在self.data中
   pub fn init(&self, args: &[P<Buf>]) {
     let rng = XorShiftRng(19260817);
-    self.p().data = Some(args.iter().map(|&b| {
-      b.check_arg();
-      let mut size = 1;
-      for s in b.sizes.iter() {
-        size *= match s { &Val(ty, x) => ty.val_i64(x) as usize, _ => debug_panic!("arg buf size must be Val") };
-      }
-      let elem = b.ty.size();
-      let arr = Array::<u8, _>::new(size * elem);
-      let p = arr.ptr();
-      for i in 0..size { unsafe { rng.fill(b.ty, p.add(i * elem)); } }
-      if b.loc == Global { // check_arg保证loc只能是Host或Global
-        #[cfg(feature = "gpu-runtime")] { *arr.p() = arr.to_gpu(); }
-        #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled");
-      }
-      info!("eval: buf {}, size = {}, ptr = {:p}", b.name, size, p);
-      arr
-    }).collect());
+    self.p().data = Some(args.iter().map(|&b| b.array(ArrayInit::Rand(&rng))).collect());
   }
 
   // 返回(耗时，!是否超时)，耗时单位为秒，如果超时了，耗时取一次运行的值
@@ -197,9 +178,8 @@ pub struct Tuner {
   pub best_reporter: Option<Box<dyn FnMut(&(ConfigEntity, f32))>>,
   pub pool: Pool,
   // 理论上libs只是Tuner::eval中的局部变量，放在这里只是为了避免重复申请内存
-  // Symbol的生命周期参数表示它来自的Library的生命周期，这里是.1借用.0，没法提供这个参数，就用'static
-  // 实际上Symbol不持有指向Library的引用，且它们只会一起使用，所以这是安全的
-  pub libs: Vec<(Library, Symbol<'static, WrapperFn>)>,
+  // 不能只保存WrapperFn而不保存Library，实际上存在生命周期的约束，后者析构后前者无法使用
+  pub libs: Vec<Lib>,
 }
 
 pub fn file_best_reporter(beg: Instant, path: &str) -> impl FnMut(&(ConfigEntity, f32)) {
@@ -313,16 +293,13 @@ impl Tuner {
       for (idx, cfg) in batch.iter().enumerate() {
         scope.execute(move || unsafe {
           let (bufs, f) = template(cfg);
-          let lib = f.set_tmp(true).codegen(&bufs).unwrap();
-          let f = (*(&lib as *const Library)).get(format!("{}_wrapper\0", f.name).as_bytes()).unwrap();
-          libs_ptr.0.as_ptr().add(idx).write((lib, f));
+          libs_ptr.0.as_ptr().add(idx).write(f.set_tmp(true).codegen(&bufs).unwrap());
         });
       }
     });
-    // 与AstInfo的注释描述的不同，这里用_l或者_都可以，都会在for body的末尾析构，为了统一性还是不用_
-    for (idx, ((_l, f), cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
+    for (idx, (lib, cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
       info!("before eval: {}", cfg); // 用于调试，最终还是没有找到捕获SIGSEGV的可靠方法，也许只能靠多进程，但我不愿意这样
-      let (elapsed, ok) = self.evaluator.eval(*f);
+      let (elapsed, ok) = self.evaluator.eval(lib.f);
       if ok {
         info!("eval: {}, {}s", cfg, elapsed);
       } else {

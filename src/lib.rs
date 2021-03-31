@@ -5,13 +5,15 @@ extern crate log;
 
 macro_rules! impl_setter {
   ($fn: ident $field: ident $ty: ty) => {
-    pub fn $fn(&self, $field: $ty) -> &Self {
+    pub fn $fn(&self, $field: $ty) -> P<Self> {
       self.p().$field = $field;
-      self
+      self.p()
     }
   };
 }
 
+// ptr原本是一个独立的crate(https://github.com/MashPlant/ptr)，但我需要为P<...>实现Try，必须在本crate内定义
+pub mod ptr;
 pub mod expr;
 pub mod comp;
 pub mod buf;
@@ -20,6 +22,7 @@ pub mod fmt;
 pub mod tuner;
 pub mod feature;
 
+pub use crate::ptr::*;
 pub use expr::*;
 pub use comp::*;
 pub use buf::*;
@@ -35,7 +38,6 @@ pub use Backend::*;
 pub use tuner::{Loss::*, TunerPolicy::*};
 pub use feature::Feature::*;
 
-pub use ptr::*;
 pub use isl::*;
 pub use expr_macro::*;
 pub use plant_runtime::*;

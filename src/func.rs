@@ -45,7 +45,7 @@ impl Func {
     let desc = match e {
       Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
       Binary(..) => "binary", Select(..) => "select", Call(..) => "call", Access(..) => "access", Load(..) => "load",
-      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Vector(..) => "vector", Opaque(..) => "opaque",
+      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Ramp(..) => "ramp", Verbatim(..) => "verbatim",
     };
     format!("_{}{}", desc, self.new_comp_id())
   }
@@ -179,6 +179,17 @@ impl ForInfo {
   // todo: 虽然for在不同的Comp中有相同的dynamic dim，但上下界不一定相同，目前kern的启动参数和提取feature用到上下界
   pub fn extent(&self) -> Extent { self.comp.comp.extent(self.level) }
 
+  fn capture_scalar<'a>(&'a self) -> impl Display + 'a {
+    fn2display(move |f| {
+      f.write_str("=")?; // 拷贝捕获其他标量
+      for x in self.used_buf.difference(&self.local_buf) {
+        // =捕获数组是逐元素拷贝，为了捕获指针需要手动写&数组
+        if x.0.loc == Local { write!(f, ",&{}", x.0.name)?; }
+      }
+      Ok(())
+    })
+  }
+
   fn capture_buf<'a>(&'a self) -> impl Display + 'a {
     comma_sep(self.used_buf.difference(&self.local_buf).map(|x| x.0.arg()))
   }
@@ -219,6 +230,14 @@ pub struct CodegenState {
 pub struct AstInfo(pub AstNode, pub CodegenState, pub Vec<Box<CompInfo>>);
 impl_try!(AstInfo);
 
+pub type WrapperFn = fn(*const Slice<u8, usize>);
+
+#[derive(Debug)]
+pub struct Lib {
+  pub lib: Library,
+  pub f: WrapperFn,
+}
+
 impl Func {
   // 迭代self.comps中参与调度，即inline为false的Comp
   pub fn sch_comps(&self) -> impl IntoIterator<Item=&Comp> {
@@ -236,7 +255,7 @@ impl Func {
         // 所有没有前驱的节点按定义顺序排序，后续节点排在前面节点的所有叶子节点后
         // after_raw要求按照从前往后顺序调用，例如B after_raw C, A after_raw B，不能是A after_raw B, B after_raw C
         // sch_graph_dfs保证这一点(pre-order dfs)，并且需要在sch_graph_dfs之前确定c after_raw 谁
-        if let Some(x) = prev { c.after_raw(&*x, 0); }
+        if let Some(x) = prev { c.after_raw(x, 0); }
         prev = Some(self.sch_graph_dfs(c.p(), &mut vis));
       }
     }
@@ -271,7 +290,7 @@ impl Func {
     AstInfo(ast, s, info)
   }
 
-  pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Library> {
+  pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Lib> {
     for b in args { b.check_arg(); }
     let AstInfo(ast, s, _info) = self.build_ast();
     let b = self.backend;
@@ -311,7 +330,8 @@ impl Func {
     unsafe { **lib.get::<*mut usize>(b"parallel_launch\0").map_err(map_err)? = parallel_launch as _; };
     if self.tmp { fs::remove_file(path)?; }
     fs::remove_file(so_path)?;
-    Ok(lib)
+    let f = *unsafe { lib.get(format!("{}_wrapper\0", self.name).as_bytes()) }.map_err(map_err)?;
+    Ok(Lib { lib, f })
   }
 }
 
@@ -322,7 +342,7 @@ impl Func {
     let mut ret = c;
     for (i, &s) in c.succ.iter().enumerate().rev() {
       if let Some(s) = s {
-        s.after_raw(c.get(), i as _);
+        s.after_raw(c, i as _);
         ret = self.sch_graph_dfs(s, vis);
       }
     }
@@ -411,11 +431,11 @@ impl Func {
               Parallel => {
                 let last_kern = mem::replace(&mut s.p().cur_kern, Some(tag));
                 if last_kern.is_none() {
-                  write!(f, "{{auto _kern=[=](u32 _i){{\
+                  write!(f, "{{auto _kern=[{}](u32 _i){{\
                     [=]({}){{{}assume(_i<{th});\
                     {} _s=min({ex},({ex}-1+{th})/{th}*_i),_e=min({ex},({ex}-1+{th})/{th}*(_i+1)),_par;\
                     for(_par=_s;_par<_e;++_par){{",
-                    info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(),
+                    info.capture_scalar(), info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(),
                     th = parallel_num_thread(), ex = info.fuse_extent * ex).ok()?;
                 }
                 gen_it(f, "_par", last_kern)?;
@@ -443,7 +463,7 @@ impl Func {
                 // 应该确实只有这个计算在这个维度有Vectorize标记，只能处理这种简单情形
                 debug_assert_eq!(comp.comp.tags.get(i as usize).copied().flatten(), Some(Vectorize));
                 debug_assert!(comp.cond.is_none() && comp.store.is_some());
-                // 只处理Load中的两种情形：下标中有i，且系数为1；下标中没有i。前者用Vector表达式包起来，后者不变，会自动broadcast
+                // 只处理Load中的两种情形：下标中i出现一次，系数为常熟；下标中没有i。前者用Vector表达式包起来，后者不变，会自动broadcast
                 // 其余情景也不保证报错，可能默默放过去产生错误结果
                 let ref replace_idx = move |e: &mut Expr| if let Load(_, idx) = e {
                   fn vis_idx(e: &Expr, i: u32, stride: i64) -> i64 {
@@ -455,8 +475,7 @@ impl Func {
                     }
                   }
                   let k = vis_idx(idx, i, 1);
-                  debug_assert!(k == 0 || k == 1);
-                  if k == 1 { *e = Vector(e.ty(), ex, box e.replace0()); }
+                  if k != 0 { *e = Ramp(e.ty(), k as _, ex, box e.replace0()); }
                   false
                 } else { true };
                 let store = comp.store.as_ref()?.modify(replace_idx);

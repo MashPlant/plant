@@ -4,7 +4,6 @@ pub use array::*;
 pub use Backend::*;
 pub use Type::*;
 
-use ptr::*;
 use std::fmt::{*, Result as FmtResult};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -50,11 +49,11 @@ pub struct XorShiftRng(pub u64);
 
 impl XorShiftRng {
   pub fn gen(&self) -> u64 {
-    let mut x = self.p().get().0;
+    let mut x = self.0;
     x ^= x << 13;
     x ^= x >> 7;
     x ^= x << 17;
-    self.p().get().0 = x;
+    unsafe { *(&self.0 as *const _ as *mut _) = x; }
     x
   }
 
