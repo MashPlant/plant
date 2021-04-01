@@ -53,7 +53,7 @@ fn gemm(n: u32, m: u32, s: u32) -> (Vec<P<Buf>>, Box<Func>) {
   bt.alloc_at_func();
 
   f.compile_arg("-mprefer-vector-width=512");
-  (vec![a.p(), b.p(), buf_c.p()], f)
+  (vec![a, b, buf_c], f)
 }
 
 fn main() {
@@ -64,6 +64,6 @@ fn main() {
   let e = TimeEvaluator::new(500, 500, std::time::Duration::from_secs(1));
   e.init(&bufs);
   let lib = f.codegen(&bufs).unwrap();
-  let (t, _) = e.eval(unsafe { *lib.get(b"gemm_wrapper\0").unwrap() });
+  let (t, _) = e.eval(lib.f);
   println!("{}s", t);
 }

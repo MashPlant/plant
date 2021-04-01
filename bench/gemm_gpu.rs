@@ -61,7 +61,7 @@ fn gemm(n: u32, m: u32, s: u32) -> (Vec<P<Buf>>, Box<Func>) {
   b_shared.alloc_at(sync1, 2);
 
   f.set_backend(GPU);
-  (vec![a.p(), b.p(), buf_c.p()], f)
+  (vec![a, b, buf_c], f)
 }
 
 fn main() {
@@ -71,6 +71,6 @@ fn main() {
   let e = TimeEvaluator::new(500, 500, std::time::Duration::from_secs(1));
   e.init(&bufs);
   let lib = f.codegen(&bufs).unwrap();
-  let (t, _) = e.eval(unsafe { *lib.get(b"gemm_wrapper\0").unwrap() });
+  let (t, _) = e.eval(lib.f);
   println!("{}s", t);
 }

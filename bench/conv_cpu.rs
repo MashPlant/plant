@@ -52,7 +52,7 @@ fn conv(batch: u32, in_channel: u32, out_channel: u32, in_size: u32, kernel: u32
   b.store_at(buf_b, x![i0, i1, i2, i3]);
 
   f.compile_arg("-mprefer-vector-width=512");
-  (vec![a.p(), w.p(), buf_b.p()], f)
+  (vec![a, w, buf_b], f)
 }
 
 fn main() {
@@ -63,6 +63,6 @@ fn main() {
   let e = TimeEvaluator::new(200, 200, std::time::Duration::from_secs(1));
   e.init(&bufs);
   let lib = f.codegen(&bufs).unwrap();
-  let (t, _) = e.eval(unsafe { *lib.get(b"conv_wrapper\0").unwrap() });
+  let (t, _) = e.eval(lib.f);
   println!("{}s", t);
 }
