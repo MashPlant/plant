@@ -135,9 +135,11 @@ impl ConfigSpace {
       if let Some(x) = tmp.get(i as usize) {
         for &f in factors {
           *x.p() = f;
-          dfs(values, tmp, policy, factors, i + 1, prod * f);
+          if let Some(prod) = prod.checked_mul(f).filter(|&x| x <= policy.n) {
+            dfs(values, tmp, policy, factors, i + 1, prod);
+          }
         }
-      } else if prod <= policy.n && (policy.allow_tail || policy.n % prod == 0) {
+      } else if policy.allow_tail || policy.n % prod == 0 {
         values.extend_from_slice(tmp);
       }
     }
@@ -510,7 +512,7 @@ impl XGBModel {
     debug_assert_eq!(self.xs_rows as usize, self.ys.len());
     // 新增样本数达到了plan_size，进行一次SA，选择之后要给出的plans
     if self.xs_rows >= (self.train_cnt + 1) * self.plan_size {
-      info!("update: begin sa for, samples = {}, feature len = {}", self.xs_rows, self.xs.len());
+      info!("update: begin sa, samples = {}, feature len = {}", self.xs_rows, self.xs.len());
       self.p().train_cnt += 1;
       self.sa(&self.model(), pool);
     }
