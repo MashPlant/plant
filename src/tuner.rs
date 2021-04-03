@@ -1,12 +1,48 @@
 use scoped_threadpool::Pool;
 use xgboost::{parameters::{*, learning::*}, DMatrix, Booster};
-use setjmp::*;
-use std::{mem::{self, MaybeUninit}, time::{Instant, Duration}, ops::{Deref, DerefMut, Index}, cmp::Ordering, fs::File, io::Write};
+use std::{mem, time::{Instant, Duration}, ops::{Deref, DerefMut, Index}, cmp::Ordering, fs::File, io::Write};
 use crate::*;
+
+#[derive(Debug)]
+pub struct ConfigItem {
+  pub name: R<str>,
+  // values来源于Box<[u32]>，长度为len * each，逻辑上表示[[u32; each]; len]
+  pub values: *mut u32,
+  pub len: u32,
+  pub each: u32,
+}
+
+impl ConfigItem {
+  pub fn new(name: &str, values: Box<[u32]>, each: u32) -> Self {
+    let len = values.len() as u32;
+    debug_assert!(len != 0 && each != 0 && len % each == 0);
+    ConfigItem { name: name.r(), values: Box::into_raw(values) as _, len: len / each, each }
+  }
+
+  pub fn get(&self, i: u32) -> &[u32] {
+    debug_assert!(i < self.len);
+    unsafe { std::slice::from_raw_parts(self.values.add(i as usize * self.each as usize), self.each as usize) }
+  }
+
+  pub fn values<'a>(&'a self) -> impl Display + 'a {
+    comma_sep((0..self.len).map(move |i| fn2display(move |f| self.get(i).fmt(f))))
+  }
+}
+
+impl Index<u32> for ConfigItem {
+  type Output = [u32];
+  fn index(&self, i: u32) -> &Self::Output { self.get(i) }
+}
+
+impl Drop for ConfigItem {
+  fn drop(&mut self) {
+    unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(self.values, self.len as usize * self.each as usize)); }
+  }
+}
 
 pub struct ConfigSpace {
   // 搜索空间，每个元素表示选项的名字和选项的可能取值
-  pub space: Vec<(R<str>, Box<[u32]>)>,
+  pub space: Vec<ConfigItem>,
   // 返回的Vec<P<Buf>>表示函数参数
   pub template: Box<dyn Fn(&ConfigEntity) -> (Vec<P<Buf>>, Box<Func>) + std::marker::Sync>,
 }
@@ -19,45 +55,94 @@ impl ConfigSpace {
 
   // 搜索空间大小，即每个选项的可能取值数的积
   pub fn size(&self) -> u64 {
-    self.iter().map(|(_, s)| s.len() as u64).product()
+    self.iter().map(|i| i.len as u64).product()
   }
 
   // 返回本搜索空间上的一个随机的具体取值
   pub fn rand(&self, rng: &XorShiftRng) -> ConfigEntity {
-    ConfigEntity { space: self.r(), choices: self.iter().map(|(_, cs)| rng.gen() as u32 % cs.len() as u32).collect() }
+    ConfigEntity { space: self.r(), choices: self.iter().map(|i| rng.gen() as u32 % i.len).collect() }
   }
 
   // 与rand类似，区别是往已经申请好的内存中填充随机值
   pub fn rand_fill(&self, rng: &XorShiftRng, choices: &mut Vec<u32>) {
     choices.clear();
-    for (_, cs) in self.iter() { choices.push(rng.gen() as u32 % cs.len() as u32); }
+    for i in self.iter() { choices.push(rng.gen() as u32 % i.len); }
+  }
+}
+
+#[derive(Debug)]
+pub struct SplitPolicy {
+  pub n: u32,
+  // pow2为true时考虑1, 2, ..., 2 ^ floor(log2(n))，否则考虑n的所有因子
+  pub pow2: bool,
+  pub allow_tail: bool,
+  pub n_output: u32,
+  pub max_factor: u32,
+}
+
+impl SplitPolicy {
+  pub fn new(n: u32) -> Self {
+    SplitPolicy { n, pow2: false, allow_tail: false, n_output: 2, max_factor: u32::MAX }
   }
 
-  pub fn define(&self, name: &str, candidates: impl Into<Box<[u32]>>) -> &Self {
-    let candidates = candidates.into();
-    debug_assert!(!candidates.is_empty());
-    self.p().push((name.into(), candidates));
+  impl_setter!(set_pow2 pow2 bool);
+  impl_setter!(set_allow_tail allow_tail bool);
+  impl_setter!(set_n_output n_output u32);
+  impl_setter!(set_max_factor max_factor u32);
+}
+
+macro_rules! impl_define {
+  ($name: ident $ty: ty) => {
+    pub fn $name(&self, name: &str, values: impl Into<Box<[$ty]>>) -> &Self {
+      self.define_raw(name, unsafe { mem::transmute(values.into()) }, (mem::size_of::<$ty>() / mem::size_of::<u32>()) as _)
+    }
+  };
+}
+
+impl ConfigSpace {
+  impl_define!(define u32);
+  impl_define!(define2 (u32, u32));
+  impl_define!(define3 (u32, u32, u32));
+  impl_define!(define4 (u32, u32, u32, u32));
+  impl_define!(define5 (u32, u32, u32, u32, u32));
+  impl_define!(define6 (u32, u32, u32, u32, u32, u32));
+
+  pub fn define_raw(&self, name: &str, values: Box<[u32]>, each: u32) -> &Self {
+    let i = ConfigItem::new(name, values, each);
+    info!("define_raw: name = {}, size = {}, values = [{}]", i.name, i.len, i.values());
+    self.p().push(i);
     self
   }
 
-  // 定义可能取值为1, 2, ..., 2 ^ floor(log2(n))的选项
-  pub fn define_split_pow2(&self, name: &str, n: u32) -> &Self {
-    let factors = (0..(31 - n.leading_zeros())).map(|x| 1 << x).collect::<Vec<_>>();
-    info!("define_split_pow2: factors = {:?}", factors);
-    self.define(name, factors)
-  }
-
-  // 定义可能取值n的所有因子的选项，因子不一定是按大小排序的
-  pub fn define_split_factor(&self, name: &str, n: u32) -> &Self {
-    let mut factors = Vec::new();
-    for i in (1..((n as f64).sqrt() as u32 + 1)).step_by((1 + n % 2) as usize) {
-      if n % i == 0 {
-        factors.push(i);
-        if i != n / i { factors.push(n / i); }
+  pub fn define_split(&self, name: &str, policy: P<SplitPolicy>) -> &Self {
+    let n = policy.n;
+    let factors = if policy.pow2 {
+      (0..(31 - n.min(policy.max_factor).leading_zeros())).map(|x| 1 << x).collect::<Vec<_>>()
+    } else {
+      let mut factors = Vec::new();
+      for i in (1..((n as f64).sqrt() as u32 + 1)).step_by((1 + n % 2) as usize) {
+        if n % i == 0 {
+          if i <= policy.max_factor { factors.push(i); }
+          let j = n / i;
+          if i != j && j <= policy.max_factor { factors.push(j); }
+        }
+      }
+      factors.sort_unstable();
+      factors
+    };
+    let (mut values, tmp) = (Vec::new(), vec![0; policy.n_output as usize - 1]);
+    fn dfs(values: &mut Vec<u32>, tmp: &[u32], policy: P<SplitPolicy>, factors: &[u32], i: u32, prod: u32) {
+      if let Some(x) = tmp.get(i as usize) {
+        for &f in factors {
+          *x.p() = f;
+          dfs(values, tmp, policy, factors, i + 1, prod * f);
+        }
+      } else if prod <= policy.n && (policy.allow_tail || policy.n % prod == 0) {
+        values.extend_from_slice(tmp);
       }
     }
-    info!("define_split_factor: factors = {:?}", factors);
-    self.define(name, factors)
+    dfs(&mut values, &tmp, policy, &factors, 0, 1);
+    self.define_raw(name, values.into(), policy.n_output - 1)
   }
 }
 
@@ -68,7 +153,7 @@ impl Debug for ConfigSpace {
 }
 
 impl Deref for ConfigSpace {
-  type Target = Vec<(R<str>, Box<[u32]>)>;
+  type Target = Vec<ConfigItem>;
   fn deref(&self) -> &Self::Target { &self.space }
 }
 
@@ -84,20 +169,29 @@ pub struct ConfigEntity {
   pub choices: Box<[u32]>,
 }
 
+impl ConfigEntity {
+  // 返回name选项的取值
+  pub fn get(&self, name: &str) -> &[u32] {
+    let (idx, i) = self.space.iter().enumerate().find(|(_, i)| &*i.name == name).unwrap();
+    i.get(self.choices[idx])
+  }
+}
+
 impl Index<&str> for ConfigEntity {
   type Output = u32;
-  // 返回name选项的取值
+  // 当取值唯一时，返回name选项的取值
   fn index(&self, name: &str) -> &Self::Output {
-    let (idx, (_, e)) = self.space.iter().enumerate().find(|(_, &(n, _))| &*n == name).unwrap();
-    &e[self.choices[idx] as usize]
+    let x = self.get(name);
+    debug_assert_eq!(x.len(), 1);
+    &x[0]
   }
 }
 
 impl Display for ConfigEntity {
   fn fmt(&self, f: &mut Formatter) -> FmtResult {
     let mut m = f.debug_map();
-    for (idx, (name, candidates)) in self.space.iter().enumerate() {
-      m.entry(name, &candidates[self.choices[idx] as usize]);
+    for (idx, i) in self.space.iter().enumerate() {
+      m.entry(&i.name, &i.get(self.choices[idx]));
     }
     m.finish()
   }
@@ -115,17 +209,8 @@ pub struct TimeEvaluator {
   pub data: Option<Vec<Array<u8, usize>>>,
 }
 
-static mut EVAL_JMP_BUF: MaybeUninit<sigjmp_buf> = MaybeUninit::uninit();
-
 impl TimeEvaluator {
   pub fn new(n_discard: u32, n_repeat: u32, timeout: Duration) -> Self {
-    // 捕获SIGSEGV信号，eval时可以检测运行错误而不终止程序
-    // 这并不是很可靠的机制，似乎多线程下就不能正常捕获
-    unsafe extern "C" fn handler(_: libc::c_int) {
-      // 发生SIGSEGV时跳转到eval中的一个位置并让sigsetjmp返回1
-      siglongjmp(EVAL_JMP_BUF.as_mut_ptr(), 1);
-    }
-    unsafe { libc::signal(libc::SIGSEGV, handler as _); }
     TimeEvaluator { n_discard, n_repeat, timeout, data: None }
   }
 
@@ -146,14 +231,8 @@ impl TimeEvaluator {
     let data = self.data.as_ref()
       .expect("call TimeEvaluator::init or manually init TimeEvaluator::data first").as_ptr() as _;
     let t0 = Instant::now();
-    // 预运行一次，用它判断是否超时和运行错误
-    let re = unsafe { sigsetjmp(EVAL_JMP_BUF.as_mut_ptr(), 1) };
-    if re == 0 { // 正常控制流下sigsetjmp返回0
-      f(data);
-    } else { // 执行上一行f(data)时发生SIGSEGV，跳转到handler，再跳转到sigsetjmp，且返回值为1
-      warn!("eval: seg fault");
-      return (f32::INFINITY, false);
-    }
+    // 预运行一次，用它判断是否超时
+    f(data);
     let elapsed = Instant::now().duration_since(t0);
     if elapsed < self.timeout {
       // 预运行剩余次数
@@ -234,9 +313,9 @@ impl Tuner {
         struct Args<'a> { tuner: &'a Tuner, remain: u32, choices: Box<[u32]>, batch: Vec<ConfigEntity> }
         fn dfs(args: &mut Args, i: usize) {
           if args.remain == 0 { return; }
-          if let Some((_, candidates)) = args.tuner.space.get(i) {
-            for x in 0..candidates.len() {
-              args.choices[i] = x as _;
+          if let Some(it) = args.tuner.space.get(i) {
+            for x in 0..it.len {
+              args.choices[i] = x;
               dfs(args, i + 1);
             }
           } else {
@@ -489,7 +568,7 @@ impl XGBModel {
         let mut p = p.clone();
         // 随机选择一个选项，修改成随机的一个可能值
         let idx = self.rng.gen() as usize % self.space.len();
-        let val = self.rng.gen() as u32 % self.space[idx].1.len() as u32;
+        let val = self.rng.gen() as u32 % self.space[idx].len;
         p.choices[idx] = val;
         new_points.push(p);
       }

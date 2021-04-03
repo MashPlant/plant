@@ -8,19 +8,17 @@ edition = "2018"
 gpu-runtime = ["plant-runtime/gpu-runtime"]
 
 [dependencies]
-ptr = { git = "https://github.com/MashPlant/ptr" }
 expr-macro = { path = "expr-macro" }
 plant-runtime = { path = "runtime" }
-isl = { path = "./isl-rs" }
+isl = { path = "isl-rs" }
 log = "0.4"
 env_logger = "0.8"
 ahash = { version = "*", default-features = false }
 tempfile = "3"
 libloading = "0.6"
-xgboost = "0.1"
+xgboost = { git = "https://github.com/MashPlant/rust-xgboost" }
 scoped_threadpool = "0.1"
 libc = "0.2"
-setjmp = { git = "https://github.com/MashPlant/setjmp.rs" }
 
 [dev-dependencies]
 test-case = "1"

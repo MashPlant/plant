@@ -60,8 +60,8 @@ impl Feature {
       Feature::Knob => {
         xs.reserve(cfgs[0].space.len() * cfgs.len());
         for cfg in cfgs {
-          for (idx, (_, candidates)) in cfg.space.iter().enumerate() {
-            xs.push(candidates[cfg.choices[idx] as usize] as f32);
+          for (idx, i) in cfg.space.iter().enumerate() {
+            for &x in i.get(cfg.choices[idx]) { xs.push(x as _); }
           }
         }
       }
