@@ -4,7 +4,7 @@ pub use array::*;
 pub use Backend::*;
 pub use Type::*;
 
-use std::fmt::{*, Result as FmtResult};
+use std::{fmt::{*, Result as FmtResult}, sync::Once};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Backend { CPU, GPU }
@@ -84,6 +84,12 @@ pub fn parallel_num_thread() -> u32 {
 pub fn parallel_init(th: u32) {
   extern "C" { fn parallel_init(th: u32); }
   unsafe { parallel_init(th); }
+}
+
+// 允许多次调用，但至少调用一次
+pub fn parallel_init_default() {
+  static INIT: Once = Once::new();
+  INIT.call_once(|| parallel_init(0));
 }
 
 extern "C" { pub fn parallel_launch(f: extern "C" fn(*mut u8, u32), args: *mut u8); }

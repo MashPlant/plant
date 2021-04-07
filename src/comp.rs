@@ -575,14 +575,14 @@ impl Comp {
     debug_assert!(access_idx.len() == n_idx && copy_idx.len() == n_idx && access_mut_idx.len() == n_idx);
     // 这里只是做identity拷贝，是否用/怎样用thread变量对后续访问没有影响
     let mut copy_iter = iter(i + 1);
-    for &(i, extent) in &threads { copy_iter = copy_iter * extent + iter(i); }
+    for &(i, extent) in &threads { copy_iter = copy_iter.mul(extent).add(iter(i)); }
     let mut extent = 1;
     let mut copy_iters = Vec::with_capacity(n_idx);
     for i in (0..n_idx).rev() {
       let (min, max) = (copy_dom.copy()?.dim_min_val(i as _)?, copy_dom.copy()?.dim_max_val(i as _)?);
       debug_assert!(min.is_zero()?);
       let size = max.add(self.ctx.val_one()?)?.get_num_si() as u32;
-      copy_iters.push(((&copy_iter / extent) % size, size));
+      copy_iters.push((copy_iter.clone().div(extent).rem(size), size));
       extent *= size;
     }
     copy_iters.reverse();
@@ -603,7 +603,7 @@ impl Comp {
         *e = copy_iters[*x as usize].0.clone();
         false
       } else { true });
-      let src = copy_idx.clone() + access_idx;
+      let src = copy_idx.clone().add(access_idx);
       cfg.push(CacheCfg { size: *size, dst: copy_iter.clone(), src, access: access_mut_idx });
     }
     cond.replace_iter(&copy_idx);

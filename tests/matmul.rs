@@ -20,6 +20,7 @@ pub fn matmul_ikj(a: &Mat, b: &Mat) -> Mat {
 #[test_case(345, 567, 789)]
 #[test_case(1024, 1024, 1024)]
 fn matmul(n: u32, m: u32, s: u32) {
+  parallel_init_default();
   let (tile_i, tile_j, tile_k) = (8, 32, 2);
 
   let f = Func::new("matmul");
@@ -38,12 +39,11 @@ fn matmul(n: u32, m: u32, s: u32) {
   f.set_tmp(true); // 避免测试留下文件
 
   let lib = f.codegen(&[a.into(), b.into(), buf_c.into()]).unwrap();
-  let f = unsafe { lib.get::<fn(*const i32, *const i32, *mut i32)>(b"matmul\0").unwrap() };
   let rng = XorShiftRng(19260817);
   let a = Mat::rand((n as usize, s as usize), &rng);
   let b = Mat::rand((s as usize, m as usize), &rng);
   let c = Mat::new((n as usize, m as usize));
-  f(a.ptr(), b.ptr(), c.ptr());
+  (lib.f)([a.wrapper(), b.wrapper(), c.wrapper()].as_ptr());
   let c1 = matmul_ikj(&a, &b);
   c.assert_eq(&c1);
 }

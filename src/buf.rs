@@ -58,7 +58,7 @@ impl Buf {
     let mut idx = idx.into_vec().into_iter();
     let mut x = idx.next()?;
     // 构造(i0 * size1) + i1 ...
-    for (i, s) in idx.zip(self.sizes.iter().skip(1)) { x = x * s + i; }
+    for (i, s) in idx.zip(self.sizes.iter().skip(1)) { x = x.mul(s).add(i); }
     Load(self.into(), box x)
   }
 

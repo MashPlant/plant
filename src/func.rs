@@ -40,16 +40,6 @@ impl Func {
 
   pub fn new_comp_id(&self) -> u32 { (self.comp_cnt, self.p().comp_cnt += 1).0 }
 
-  pub fn auto_comp_name(&self, e: &Expr) -> String {
-    // 这个名字没什么意义，只是为了人阅读方便
-    let desc = match e {
-      Val(..) => "val", Iter(..) => "iter", Param(..) => "param", Cast(..) => "cast", Unary(..) => "unary",
-      Binary(..) => "binary", Select(..) => "select", Call(..) => "call", Access(..) => "access", Load(..) => "load",
-      Memcpy(..) => "memcpy", Alloc(..) => "alloc", Free(..) => "free", Sync => "sync", Ramp(..) => "ramp", Verbatim(..) => "verbatim",
-    };
-    format!("_{}{}", desc, self.new_comp_id())
-  }
-
   pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
 
   impl_setter!(set_tmp tmp bool);
@@ -388,7 +378,7 @@ impl Func {
           }
           _ => {
             for x in e.args_mut() { optimize_mul(x, 1); }
-            if stride != 1 { *e = e.replace0() * stride; }
+            if stride != 1 { *e = e.replace0().mul(stride); }
           }
         }
       }

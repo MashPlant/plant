@@ -169,9 +169,7 @@ impl Expr {
   }
 }
 
-// 用于实现一系列不能用Rust的operator traits实现的operator，把它放在IntoExpr trait里
-// Rust中涉及比较的trait返回值类型都是定死的，不能改成Expr
-macro_rules! impl_other {
+macro_rules! impl_ops {
   ($($op: ident $fn: ident),*) => {
     $(fn $fn(self, rhs: impl IntoExpr) -> Expr { Binary(BinOp::$op, box [self.expr(), rhs.expr()]) })*
   };
@@ -180,9 +178,8 @@ macro_rules! impl_other {
 pub trait IntoExpr: Sized + Clone {
   fn expr(self) -> Expr;
 
-  // 下面实现了操作符重载的操作符也在这里实现一遍，这样可以直接调用e.add()，不用use std::ops::Add
   // max_，min_是为了和std::cmp::Ord::max做出区分
-  impl_other!(Add add, Sub sub, Mul mul, Div div, Rem rem,
+  impl_ops!(Add add, Sub sub, Mul mul, Div div, Rem rem,
     LAnd land, LOr lor, Eq eq, Ne ne, Le le, Lt lt, Ge ge, Gt gt, Max max_, Min min_);
 
   fn neg(self) -> Expr { Binary(BinOp::Sub, box [0.expr(), self.expr()]) }
@@ -195,8 +192,6 @@ pub trait IntoExpr: Sized + Clone {
 impl IntoExpr for Expr { fn expr(self) -> Expr { self } }
 
 impl IntoExpr for &Expr { fn expr(self) -> Expr { self.clone() } }
-
-impl IntoExpr for &&Expr { fn expr(self) -> Expr { (*self).clone() } }
 
 macro_rules! impl_primitive {
   ($($val: ident $ty: ident),*) => {
@@ -212,24 +207,3 @@ impl_primitive!(U8 u8, U16 u16, U32 u32, U64 u64, I8 i8, I16 i16, I32 i32, I64 i
 impl IntoExpr for f32 { fn expr(self) -> Expr { Val(F32, self.to_bits() as _) } }
 
 impl IntoExpr for f64 { fn expr(self) -> Expr { Val(F64, self.to_bits()) } }
-
-macro_rules! impl_op {
-  ($($op: ident $fn: ident $op_assign: ident $fn_assign: ident),*) => {
-    $(impl<R: IntoExpr> std::ops::$op<R> for Expr {
-      type Output = Expr;
-      fn $fn(self, rhs: R) -> Expr { Binary(BinOp::$op, box [self, rhs.expr()]) }
-    }
-
-    impl<R: IntoExpr> std::ops::$op<R> for &Expr {
-      type Output = Expr;
-      fn $fn(self, rhs: R) -> Expr { Binary(BinOp::$op, box [self.clone(), rhs.expr()]) }
-    }
-
-    impl<R: IntoExpr> std::ops::$op_assign<R> for Expr {
-      fn $fn_assign(&mut self, rhs: R) { *self = Binary(BinOp::$op, box [self.clone(), rhs.expr()]) }
-    })*
-  };
-}
-
-impl_op!(Add add AddAssign add_assign, Sub sub SubAssign sub_assign,
-  Mul mul MulAssign mul_assign, Div div DivAssign div_assign, Rem rem RemAssign rem_assign);
