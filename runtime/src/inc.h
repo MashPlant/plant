@@ -18,3 +18,10 @@ using i8 = char; using u8 = unsigned char; using i16 = short; using u16 = unsign
 #define min(x, y) ({ auto _x = x; auto _y = y; _x > _y ? _y : _x; })
 #define floord(x, y) ((x) / (y))
 extern "C" { void (*parallel_launch)(void (*)(void *, u32), void *); }
+#if defined(__x86_64__)
+#include <immintrin.h>
+static inline void flush_cache(const void *p, size_t n) {
+  const size_t cache_line = 64;
+  for (size_t x = (size_t)p & ~(cache_line - 1); x < (size_t)p + n; x += cache_line) _mm_clflush((void *)x);
+#endif
+}

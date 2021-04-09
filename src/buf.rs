@@ -151,7 +151,8 @@ impl Buf {
 
   // 输出元素数
   pub fn elems<'a>(&'a self) -> impl Display + 'a {
-    fn2display(move |f| write!(f, "{}", sep(self.sizes.iter(), "*")))
+    // 3是乘法的优先级
+    sep(self.sizes.iter().map(|s| s.show(3)), "*")
   }
 
   // 输出字节数

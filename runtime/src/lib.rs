@@ -9,6 +9,8 @@ use std::{fmt::{*, Result as FmtResult}, sync::Once};
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Backend { CPU, GPU }
 
+impl Default for Backend { fn default() -> Self { CPU } }
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Type { I8, U8, I16, U16, I32, U32, I64, U64, F32, F64, Void }

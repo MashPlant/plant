@@ -252,6 +252,8 @@ pub struct Tuner {
   pub space: Box<ConfigSpace>,
   // 一次性编译运行batch_size个函数；编译是并行的(利用pool)，运行是串行的(因为需要计时)
   pub batch_size: u32,
+  pub early_stopping: u32,
+  pub unchanged_trials: u32,
   pub evaluator: TimeEvaluator,
   pub policy: TunerPolicy,
   // 记录当前最优的配置和这个配置下的耗时，单位为秒
@@ -285,6 +287,8 @@ impl Tuner {
     Tuner {
       space,
       batch_size: DEFAULT_BATCH,
+      early_stopping: u32::MAX,
+      unchanged_trials: u32::MAX,
       evaluator: TimeEvaluator::new(1, 3, Duration::from_secs(1)),
       policy,
       best,
@@ -295,6 +299,8 @@ impl Tuner {
   }
 
   pub fn space(&self) -> R<ConfigSpace> { self.space.as_ref().r() }
+
+  impl_setter!(set_early_stopping early_stopping u32);
 
   pub fn set_batch_size(&self, batch_size: u32) -> &Self {
     self.p().batch_size = batch_size;
@@ -309,6 +315,13 @@ impl Tuner {
 
   // 尝试n_trial个配置取值
   pub fn tune(&self, n_trial: u32) {
+    self.p().unchanged_trials = self.early_stopping;
+    macro_rules! eval {
+      ($self_: expr, $batch: expr, $cost: expr) => {
+        $self_.eval(&$batch, $cost);
+        if $self_.unchanged_trials == 0 { return; }
+      };
+    }
     let mut batch = Vec::with_capacity(self.batch_size as usize);
     match &self.policy {
       Search => {
@@ -324,14 +337,14 @@ impl Tuner {
             args.remain -= 1;
             args.batch.push(ConfigEntity { space: args.tuner.space(), choices: args.choices.clone() });
             if args.batch.len() as u32 == args.tuner.batch_size {
-              args.tuner.eval(&args.batch, None);
+              eval!(args.tuner, args.batch, None);
               args.batch.clear();
             }
           }
         }
         let mut args = Args { tuner: self, remain: n_trial, choices: vec![0; self.space.len()].into(), batch };
         dfs(&mut args, 0);
-        if !args.batch.is_empty() { self.eval(&args.batch, None); }
+        if !args.batch.is_empty() { eval!(self, args.batch, None); }
       }
       Random(rng) => {
         let mut i = 0;
@@ -339,7 +352,7 @@ impl Tuner {
           let n = self.batch_size.min(n_trial - i);
           i += n;
           for _ in 0..n { batch.push(self.space.rand(rng)); }
-          self.eval(&batch, None);
+          eval!(self, batch, None);
           batch.clear();
         }
       }
@@ -351,7 +364,7 @@ impl Tuner {
           i += n;
           xgb.next_batch(&mut batch, n);
           let cost = &mut cost[..n as usize];
-          self.eval(&batch, Some(cost));
+          eval!(self, batch, Some(cost));
           xgb.update(&batch, cost, &mut self.p().pool);
           batch.clear();
         }
@@ -389,6 +402,8 @@ impl Tuner {
       if elapsed < self.best.1 {
         self.p().best.1 = elapsed;
         self.p().best.0 = cfg.clone();
+      } else {
+        self.p().unchanged_trials = self.unchanged_trials.checked_sub(1).unwrap_or(0);
       }
       if let Some(cost) = &mut cost { cost[idx] = elapsed; }
     }
@@ -546,10 +561,10 @@ impl XGBModel {
       for (p, &y) in points.iter().zip(ys) {
         // 如果p不在vis中，且p不在plans的点中，且plans中最小的预测值比p的预测值小，则用p替换最小的预测值对应的点
         if !vis.contains(&p.choices) {
-          let (mut min_idx, mut min) = (!0, y); // !0表示无效
+          let (mut min_idx, mut min) = (usize::MAX, y);
           for (idx, (p1, y1)) in plans.iter().enumerate() {
             if p1.choices == p.choices {
-              min_idx = !0; // p在plans的点中，立即失败
+              min_idx = usize::MAX; // p在plans的点中，立即失败
               break;
             }
             if *y1 < min {

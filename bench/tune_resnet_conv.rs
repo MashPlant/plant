@@ -54,7 +54,7 @@ fn conv(ic: u32, oc: u32, size: u32, kern: u32, stride: u32, pad: u32, cfg: &Con
   b_final.store(buf_b);
   if pad_buf != a { pad_buf.alloc_at_func(); }
 
-  f.compile_arg("-mprefer-vector-width=512");
+  f.set_flush_cache(true).compile_arg("-mprefer-vector-width=512");
   (vec![a, w, bias, buf_b], f)
 }
 
@@ -110,6 +110,6 @@ fn main() {
     let tuner = Tuner::new(space, XGB(xgb));
     tuner.evaluator.set_timeout(std::time::Duration::from_millis(20))
       .set_n_discard(100).set_n_repeat(100);
-    tuner.tune(5000);
+    tuner.set_early_stopping(2000).tune(5000);
   }
 }

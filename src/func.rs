@@ -3,7 +3,7 @@ use tempfile::NamedTempFile;
 use std::{mem, io::{self, Write, BufWriter}, fs::{self, File}, path::Path, process::Command};
 use crate::*;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Func {
   // 限制符号常量/参数取值范围
   pub func_ctx: Option<BasicSet>,
@@ -17,6 +17,8 @@ pub struct Func {
   // 默认为false，tmp为true时，codegen使用tempfile为文件名；否则以函数名为文件名
   // 理论上tmp和backend都可以作为codegen的参数，但放在这里codegen调用更方便一点
   pub tmp: bool,
+  // 是否在生成的wrapper函数中为每个参数调用flush_cache
+  pub flush_cache: bool,
   // 默认为CPU
   pub backend: Backend,
   // 用户自定义的额外编译参数
@@ -27,7 +29,9 @@ pub struct Func {
 
 impl Func {
   pub fn new(name: &str) -> Box<Func> {
-    box Func { func_ctx: None, name: name.into(), comps: Vec::new(), bufs: Vec::new(), comp_cnt: 0, buf_cnt: 0, tmp: false, backend: CPU, compile_args: Vec::new(), ctx: Ctx::new() }
+    let mut ret = box Func::default();
+    ret.name = name.into();
+    ret
   }
 
   pub fn find_comp(&self, name: &str) -> Option<&Comp> {
@@ -43,6 +47,7 @@ impl Func {
   pub fn new_buf_id(&self) -> u32 { (self.buf_cnt, self.p().buf_cnt += 1).0 }
 
   impl_setter!(set_tmp tmp bool);
+  impl_setter!(set_flush_cache flush_cache bool);
   impl_setter!(set_backend backend Backend);
 
   pub fn compile_arg(&self, args: &str) -> &Self {
@@ -295,9 +300,18 @@ impl Func {
     w.write_all(include_bytes!("../runtime/src/inc.h"))?;
     // 生成名为{self.name}的实际函数和名为{self.name}_wrapper的wrapper函数
     // wrapper函数接受void **p，从p[0], p[3], p[6], ...位置处读出实际函数的参数，以此调用实际函数
-    write!(w, "extern \"C\" void {f}({}){{{} {};{}}}extern \"C\" void {f}_wrapper(void**p){{{f}({});}}\n",
+    write!(w, "extern \"C\" void {f}({}){{{} {};{}}}\
+      extern \"C\" void {f}_wrapper(void**p){{{}{f}({});}}\n",
       comma_sep(args.iter().map(|x| x.arg())),
       iter_ty(), i0_in(s.loop_dim), self.gen(*ast, &s),
+      fn2display(move |f| {
+        if self.flush_cache {
+          for (i, &x) in args.iter().enumerate() {
+            write!(f, "flush_cache(p[{}],{});", 3 * i, x.bytes())?;
+          }
+        }
+        Ok(())
+      }),
       comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 3 * i)))),
       f = self.name)?;
     w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中

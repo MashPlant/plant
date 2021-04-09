@@ -23,7 +23,11 @@ _Noreturn static void *thread_fn(void *p) {
 }
 
 void parallel_init(unsigned th) {
-  unsigned n = num_thread = (th ? th : (unsigned) get_nprocs() / 2);
+  unsigned n = num_thread = (th ? th : (unsigned) get_nprocs()
+#if defined(__x86_64__)
+    / 2
+#endif
+  );
   cpu_set_t cpu;
   CPU_ZERO(&cpu);
   for (unsigned i = 0; i < n; ++i) CPU_SET(i, &cpu);

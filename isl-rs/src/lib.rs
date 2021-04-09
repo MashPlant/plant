@@ -136,6 +136,8 @@ impl Ctx {
   pub fn new() -> Ctx { unsafe { isl_ctx_alloc()? } }
 }
 
+impl Default for Ctx { fn default() -> Self { Ctx::new() } }
+
 #[must_use]
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
