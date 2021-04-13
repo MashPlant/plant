@@ -1,0 +1,10 @@
+[package]
+name = "plant-remote"
+version = "0.1.0"
+authors = ["MashPlant <mashplant@163.com>"]
+edition = "2018"
+
+[dependencies]
+plant-runtime = { path = "../runtime" }
+byteorder = "1"
+tempfile = "3"

@@ -1,6 +1,5 @@
-use libloading::Library;
 use tempfile::NamedTempFile;
-use std::{mem, io::{self, Write, BufWriter}, fs::{self, File}, path::Path, process::Command};
+use std::{mem, io::{self, Write, BufWriter}, fs::{self, File}, path::{Path, PathBuf}, process::Command};
 use crate::*;
 
 #[derive(Debug, Default)]
@@ -225,14 +224,6 @@ pub struct CodegenState {
 pub struct AstInfo(pub AstNode, pub CodegenState, pub Vec<Box<CompInfo>>);
 impl_try!(AstInfo);
 
-pub type WrapperFn = fn(*const Slice<u8, usize>);
-
-#[derive(Debug)]
-pub struct Lib {
-  pub lib: Library,
-  pub f: WrapperFn,
-}
-
 impl Func {
   // 迭代self.comps中参与调度，即inline为false的Comp
   pub fn sch_comps(&self) -> impl IntoIterator<Item=&Comp> {
@@ -285,7 +276,7 @@ impl Func {
     AstInfo(ast, s, info)
   }
 
-  pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Lib> {
+  pub fn codegen_source(&self, args: &[P<Buf>]) -> io::Result<PathBuf> {
     for b in args { b.check_arg(); }
     let AstInfo(ast, s, _info) = self.build_ast();
     let b = self.backend;
@@ -314,11 +305,17 @@ impl Func {
       }),
       comma_sep(args.iter().enumerate().map(|(i, &x)| fn2display(move |f| write!(f, "({}*)p[{}]", x.ty, 3 * i)))),
       f = self.name)?;
-    w.flush()?; // 如果没有这句，下面编译时内容可能尚未写入文件中
+    w.flush()?; // 如果没有这句，编译时内容可能尚未写入文件中
+    Ok(path)
+  }
+
+  pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Lib> {
+    let path = self.codegen_source(args)?;
     let so_path = path.with_extension("so");
+    let b = self.backend;
     let mut cmd = Command::new(if b == CPU { CC } else { NVCC });
     if b == CPU {
-      cmd.arg("-x").arg("c++").arg(&path).arg("-Ofast").arg("-march=native").arg("-pthread").arg("-fPIC").arg("-shared");
+      cmd.arg("-x").arg("c++").arg(&path).arg("-Ofast").arg("-march=native").arg("-fPIC").arg("-shared");
     } else {
       cmd.arg("-x").arg("cu").arg(&path).arg("-O3").arg("-use_fast_math").arg("-extended-lambda")
         .arg("-Xcudafe").arg("\"--diag_suppress=declared_but_not_referenced --diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\"")
@@ -329,13 +326,27 @@ impl Func {
     debug!("codegen: cmd = {:?}", cmd);
     let status = cmd.status()?;
     debug_assert!(status.success());
-    let map_err = |e| io::Error::new(io::ErrorKind::Other, e);
-    let lib = Library::new(&so_path).map_err(map_err)?;
-    unsafe { **lib.get::<*mut usize>(b"parallel_launch\0").map_err(map_err)? = parallel_launch as _; };
+    let lib = unsafe { Lib::new(&so_path, &self.name) }.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     if self.tmp { fs::remove_file(path)?; }
     fs::remove_file(so_path)?;
-    let f = *unsafe { lib.get(format!("{}_wrapper\0", self.name).as_bytes()) }.map_err(map_err)?;
-    Ok(Lib { lib, f })
+    Ok(lib)
+  }
+
+  pub fn codegen_remote(&self, args: &[P<Buf>], target_triple: &str) -> io::Result<Vec<u8>> {
+    let path = self.codegen_source(args)?;
+    let obj_path = path.with_extension("o");
+    debug_assert_eq!(self.backend, CPU); // 目前不支持remote GPU代码生成
+    let mut cmd = Command::new(CC);
+    cmd.arg("-x").arg("c++").arg(&path).arg("-Ofast").arg("-target").arg(target_triple)
+      .arg("-fPIC").arg("-c").arg("-o").arg(&obj_path);
+    for x in &self.compile_args { cmd.arg(&**x); }
+    debug!("codegen_remote: cmd = {:?}", cmd);
+    let status = cmd.status()?;
+    debug_assert!(status.success());
+    let obj = fs::read(&obj_path)?;
+    if self.tmp { fs::remove_file(path)?; }
+    fs::remove_file(obj_path)?;
+    Ok(obj)
   }
 }
 

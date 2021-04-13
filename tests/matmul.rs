@@ -38,7 +38,7 @@ fn matmul(n: u32, m: u32, s: u32) {
   c.store_at(buf_c, x![i0, i1]);
   f.set_tmp(true); // 避免测试留下文件
 
-  let lib = f.codegen(&[a.into(), b.into(), buf_c.into()]).unwrap();
+  let lib = f.codegen(&[a, b, buf_c]).unwrap();
   let rng = XorShiftRng(19260817);
   let a = Mat::rand((n as usize, s as usize), &rng);
   let b = Mat::rand((s as usize, m as usize), &rng);

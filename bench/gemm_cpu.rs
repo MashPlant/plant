@@ -60,10 +60,10 @@ fn main() {
   init_log(FUNC_FILTER);
   parallel_init(0);
 
-  let (bufs, f) = gemm(2048, 2048, 2048);
-  let e = TimeEvaluator::new(500, 500, std::time::Duration::from_secs(1));
-  e.init(&bufs);
-  let lib = f.codegen(&bufs).unwrap();
+  let (args, f) = gemm(2048, 2048, 2048);
+  let e = TimeEvaluator::new(500, 500, 1000);
+  e.init(&args);
+  let lib = f.codegen(&args).unwrap();
   let (t, _) = e.eval(lib.f);
   println!("{}s", t);
 }

@@ -10,6 +10,7 @@ gpu-runtime = ["cuda-runtime-sys"]
 [dependencies]
 num = { version = "0.3", default-features = false }
 cuda-runtime-sys = { version = "0.3.0-alpha", optional = true }
+libloading = "0.7"
 
 [build-dependencies]
 cc = "1.0"

@@ -1,6 +1,7 @@
 use scoped_threadpool::Pool;
 use xgboost::{parameters::{*, learning::*}, DMatrix, Booster};
-use std::{mem, time::{Instant, Duration}, ops::{Deref, DerefMut, Index}, cmp::Ordering, fs::File, io::Write};
+use byteorder::{LE, ReadBytesExt, WriteBytesExt};
+use std::{mem, time::Instant, ops::*, cmp::Ordering::*, fs::File, io::{self, Write}, net::{TcpStream, ToSocketAddrs}};
 use crate::*;
 
 #[derive(Debug)]
@@ -204,46 +205,77 @@ pub struct TimeEvaluator {
   pub n_discard: u32,
   // 计时重复n_repeat次
   pub n_repeat: u32,
-  // 如果一次运行时长超过timeout，认为这个配置超时
-  pub timeout: Duration,
+  // 单位ms，如果一次运行时长超过timeout，认为这个配置超时
+  pub timeout: u32,
   // 给运行函数提供输入，可以调用init设置为随机值，也可以手动设置为有意义的值，每个.1表示申请的字节数，drop时会释放这些内存
   // Func::codegen中生成的wrapper函数接受这样的指针p，从p[0], p[3], p[6], ...位置处读出实际函数的参数
   pub data: Option<Vec<Array<u8, usize>>>,
+  // 网络协议与remote/src/main.rs匹配，字符串表示远程机器的target triple
+  pub remote: Option<(TcpStream, R<str>)>,
 }
 
 impl TimeEvaluator {
-  pub fn new(n_discard: u32, n_repeat: u32, timeout: Duration) -> Self {
-    TimeEvaluator { n_discard, n_repeat, timeout, data: None }
+  pub fn new(n_discard: u32, n_repeat: u32, timeout: u32) -> Self {
+    TimeEvaluator { n_discard, n_repeat, timeout, data: None, remote: None }
   }
 
   impl_setter!(set_n_discard n_discard u32);
   impl_setter!(set_n_repeat n_repeat u32);
-  impl_setter!(set_timeout timeout Duration);
+  impl_setter!(set_timeout timeout u32);
   impl_setter!(set_data data Option<Vec<Array<u8, usize>>>);
+
+  pub fn set_remote(&self, addr: impl ToSocketAddrs, target_triple: &str) -> P<Self> {
+    self.p().remote = Some((TcpStream::connect(addr).expect("failed to connect"), target_triple.r()));
+    self.p()
+  }
 
   // args和Func::codegen的args意义一样；init为args中每个Buf申请内存并用随机值初始化，保存在self.data中
   pub fn init(&self, args: &[P<Buf>]) {
-    let rng = XorShiftRng(19260817);
-    self.p().data = Some(args.iter().map(|&b| b.array(ArrayInit::Rand(&rng))).collect());
+    if let Some((s, _)) = &mut self.p().remote {
+      self.p().data = Some(Vec::new());
+      (move || {
+        s.write_u32::<LE>(((args.len() as u32) << 2) | RemoteOpc::Init as u32)?;
+        for x in args {
+          s.write_u32::<LE>(x.elems_val() as _)?;
+          s.write_u32::<LE>(x.ty as u8 as _)?;
+        }
+        s.write_u32::<LE>(self.n_discard)?;
+        s.write_u32::<LE>(self.n_repeat)?;
+        s.write_u32::<LE>(self.timeout)?;
+        let name = &args[0].func.name;
+        s.write_u32::<LE>(name.len() as _)?;
+        s.write_all(name.as_bytes())?;
+        s.flush()
+      })().expect("remote error");
+    } else {
+      let rng = XorShiftRng(19260817);
+      self.p().data = Some(args.iter().map(|&b| b.array(ArrayInit::Rand(&rng))).collect());
+    }
   }
 
   // 返回(耗时，!是否超时)，耗时单位为秒，如果超时了，耗时取一次运行的值
   // 如果发生运行错误，返回耗时inf
   pub fn eval(&self, f: WrapperFn) -> (f32, bool) {
-    let data = self.data.as_ref()
-      .expect("call TimeEvaluator::init or manually init TimeEvaluator::data first").as_ptr() as _;
-    let t0 = Instant::now();
-    // 预运行一次，用它判断是否超时
-    f(data);
-    let elapsed = Instant::now().duration_since(t0);
-    if elapsed < self.timeout {
-      // 预运行剩余次数
-      for _ in 1..self.n_discard { f(data); }
-      let t0 = Instant::now();
-      for _ in 0..self.n_repeat { f(data); }
-      (Instant::now().duration_since(t0).as_secs_f32() / self.n_repeat as f32, true)
-    } else {
-      (elapsed.as_secs_f32(), false)
+    let data = self.data.as_ref().expect("call TimeEvaluator::init or manually init TimeEvaluator::data first").as_ptr() as _;
+    eval(f, self.n_discard, self.n_repeat, self.timeout, data)
+  }
+
+  pub fn eval_remote(&self, obj: &[u8]) -> (f32, bool) {
+    let mut s = self.remote.as_ref().unwrap().0.p();
+    (move || {
+      s.write_u32::<LE>(((obj.len() as u32) << 2) | RemoteOpc::Eval as u32)?;
+      s.write_all(obj)?;
+      s.flush()?;
+      let ret = s.read_u64::<LE>()?;
+      Ok::<_, io::Error>((f32::from_bits((ret >> 32) as u32), ret as u32 != 0))
+    })().expect("remote error")
+  }
+}
+
+impl Drop for TimeEvaluator {
+  fn drop(&mut self) {
+    if let Some((s, _)) = &mut self.remote {
+      s.write_u32::<LE>(RemoteOpc::Close as _).expect("remote error");
     }
   }
 }
@@ -262,7 +294,7 @@ pub struct Tuner {
   pub pool: Pool,
   // 理论上libs只是Tuner::eval中的局部变量，放在这里只是为了避免重复申请内存
   // 不能只保存WrapperFn而不保存Library，实际上存在生命周期的约束，后者析构后前者无法使用
-  pub libs: Vec<Lib>,
+  pub libs: Vec<std::result::Result<Lib, Vec<u8>>>,
 }
 
 pub fn file_best_reporter(beg: Instant, path: &str) -> impl FnMut(&(ConfigEntity, f32)) {
@@ -289,7 +321,7 @@ impl Tuner {
       batch_size: DEFAULT_BATCH,
       early_stopping: u32::MAX,
       unchanged_trials: u32::MAX,
-      evaluator: TimeEvaluator::new(1, 3, Duration::from_secs(1)),
+      evaluator: TimeEvaluator::new(1, 3, 1000),
       policy,
       best,
       best_reporter: None,
@@ -383,28 +415,38 @@ impl Tuner {
     self.p().libs.reserve(batch.len());
     unsafe { self.p().libs.set_len(batch.len()); }
     self.p().pool.scoped(|scope| {
-      let (libs_ptr, template) = (P::new(self.libs.as_ptr()), &self.space.template);
+      let libs = P::new(self.libs.as_ptr());
+      let template = &self.space.template;
+      let remote = self.evaluator.remote.as_ref().map(|x| x.1);
       for (idx, cfg) in batch.iter().enumerate() {
         scope.execute(move || unsafe {
-          let (bufs, f) = template(cfg);
-          libs_ptr.0.as_ptr().add(idx).write(f.set_tmp(true).codegen(&bufs).unwrap());
+          let (args, f) = template(cfg);
+          f.set_tmp(true);
+          let lib = if let Some(x) = remote {
+            Err(f.codegen_remote(&args, &x).unwrap())
+          } else { Ok(f.codegen(&args).unwrap()) };
+          libs.0.as_ptr().add(idx).write(lib);
         });
       }
     });
     for (idx, (lib, cfg)) in self.p().libs.drain(..).zip(batch.iter()).enumerate() {
       info!("before eval: {}", cfg); // 用于调试，最终还是没有找到捕获SIGSEGV的可靠方法，也许只能靠多进程，但我不愿意这样
-      let (elapsed, ok) = self.evaluator.eval(lib.f);
+      let (elapsed, ok) = match lib {
+        Ok(lib) => self.evaluator.eval(lib.f),
+        Err(obj) => self.evaluator.eval_remote(&obj),
+      };
       if ok {
         info!("eval: {}, {}s", cfg, elapsed);
       } else {
         warn!("eval: {} time out, {}s", cfg, elapsed);
       }
-      if elapsed < self.best.1 {
+      self.p().unchanged_trials = if elapsed < self.best.1 {
         self.p().best.1 = elapsed;
         self.p().best.0 = cfg.clone();
+        self.early_stopping
       } else {
-        self.p().unchanged_trials = self.unchanged_trials.checked_sub(1).unwrap_or(0);
-      }
+        self.unchanged_trials.checked_sub(1).unwrap_or(0)
+      };
       if let Some(cost) = &mut cost { cost[idx] = elapsed; }
     }
     info!("eval: best cfg {} time = {}s", self.best.0, self.best.1);
@@ -605,8 +647,7 @@ impl XGBModel {
       temp -= cool;
     }
     // 按预测值从大到小排序。同样因为f32没有实现Ord，必须用这种间接的写法
-    plans.sort_unstable_by(|&(_, y1), &(_, y2)|
-      if y1 > y2 { Ordering::Less } else if y1 < y2 { Ordering::Greater } else { Ordering::Equal });
+    plans.sort_unstable_by(|&(_, y1), &(_, y2)| if y1 > y2 { Less } else if y1 < y2 { Greater } else { Equal });
     // 负值可能是最初填入的-inf或者预测为负的有效值(尽管训练模型时输入都在0~1间，模型还是会得到超出这个范围的结果)
     // 现在它们(如果存在)排在后面，-inf是无效的值，负的有效值的期望效果也很差，把它们删掉
     if let Some(last_valid) = plans.iter().position(|&(_, y)| y < 0.0) {

@@ -59,10 +59,10 @@ fn main() {
   init_log(FUNC_FILTER);
   parallel_init(0);
 
-  let (bufs, f) = conv(256, 256, 512, 14, 3, 1);
-  let e = TimeEvaluator::new(200, 200, std::time::Duration::from_secs(1));
-  e.init(&bufs);
-  let lib = f.codegen(&bufs).unwrap();
+  let (args, f) = conv(256, 256, 512, 14, 3, 1);
+  let e = TimeEvaluator::new(200, 200, 1000);
+  e.init(&args);
+  let lib = f.codegen(&args).unwrap();
   let (t, _) = e.eval(lib.f);
   println!("{}s", t);
 }

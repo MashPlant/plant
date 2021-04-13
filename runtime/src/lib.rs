@@ -4,7 +4,8 @@ pub use array::*;
 pub use Backend::*;
 pub use Type::*;
 
-use std::{fmt::{*, Result as FmtResult}, sync::Once};
+use libloading::Library;
+use std::{fmt::{*, Result as FmtResult}, time::Instant, ffi::OsStr, sync::Once};
 
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Backend { CPU, GPU }
@@ -44,6 +45,45 @@ impl Type {
 impl Display for Type {
   fn fmt(&self, f: &mut Formatter) -> FmtResult { f.write_str(self.as_str()) }
 }
+
+pub type WrapperFn = fn(*const Slice<u8, usize>);
+
+#[derive(Debug)]
+pub struct Lib {
+  pub lib: Library,
+  pub f: WrapperFn,
+}
+
+impl Lib {
+  pub unsafe fn new(path: impl AsRef<OsStr>, name: &str) -> std::result::Result<Self, libloading::Error> {
+    let lib = Library::new(path)?;
+    **lib.get::<*mut usize>(b"parallel_launch\0")? = parallel_launch as _;
+    let f = *lib.get(format!("{}_wrapper\0", name).as_bytes())?;
+    Ok(Lib { lib, f })
+  }
+}
+
+// 参数和返回值含义见TimeEvaluator::eval注释
+pub fn eval(f: WrapperFn, n_discard: u32, n_repeat: u32, timeout: u32, data: *const Slice<u8, usize>) -> (f32, bool) {
+  let t0 = Instant::now();
+  // 预运行一次，用它判断是否超时
+  f(data);
+  let elapsed = Instant::now().duration_since(t0);
+  // 为避免u128运算，这里不使用Duration::as_micros；不考虑u32溢出，那已经太久了
+  if elapsed.as_secs() as u32 * 1000 + elapsed.subsec_nanos() / 1000000 < timeout {
+    // 预运行剩余次数
+    for _ in 1..n_discard { f(data); }
+    let t0 = Instant::now();
+    for _ in 0..n_repeat { f(data); }
+    (Instant::now().duration_since(t0).as_secs_f32() / n_repeat as f32, true)
+  } else {
+    (elapsed.as_secs_f32(), false)
+  }
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
+pub enum RemoteOpc { Eval = 0, Init = 1, Close = 3 }
 
 // 虽然有很多开源的随机数实现，但用自己的还是方便一点
 #[derive(Debug, Clone, Copy)]

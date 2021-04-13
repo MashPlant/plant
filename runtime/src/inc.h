@@ -23,5 +23,7 @@ extern "C" { void (*parallel_launch)(void (*)(void *, u32), void *); }
 static inline void flush_cache(const void *p, size_t n) {
   const size_t cache_line = 64;
   for (size_t x = (size_t)p & ~(cache_line - 1); x < (size_t)p + n; x += cache_line) _mm_clflush((void *)x);
-#endif
 }
+#else
+static inline void flush_cache(const void *, size_t) {}
+#endif
