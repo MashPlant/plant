@@ -1,5 +1,5 @@
 // CPU: ppcg ppcg_conv.c --target=c --openmp && clang ppcg_conv.ppcg.c -fopenmp -Ofast -march=native && ./a.out 10 10
-// GPU: ppcg ppcg_conv.c && nvcc ppcg_conv_host.cu ppcg_conv_kernel.cu -O3 -use_fast_math && ./a.out 1 1
+// GPU: ppcg ppcg_conv.c && nvcc ppcg_conv_host.cu ppcg_conv_kernel.cu -Xcompiler -fopenmp -O3 -use_fast_math && ./a.out 1 1
 #include "common.h"
 
 void conv_ppcg(float a[STATIC_RESTRICT 256][256][14][14], float w[STATIC_RESTRICT 512][256][3][3],
@@ -43,10 +43,10 @@ void fn(void *f_data, int rep) {
 }
 
 int main(int argc, char **argv) {
-  float *a = alloc(sizeof(float) * 256 * 256 * 14 * 14);
-  float *w = alloc(sizeof(float) * 512 * 256 * 3 * 3);
-  float *b = alloc(sizeof(float) * 256 * 512 * 14 * 14);
-  float *b1 = alloc(sizeof(float) * 256 * 512 * 14 * 14);
+  float *a = alloc(256 * 256 * 14 * 14);
+  float *w = alloc(512 * 256 * 3 * 3);
+  float *b = alloc(256 * 512 * 14 * 14);
+  float *b1 = alloc(256 * 512 * 14 * 14);
 
   for (int i = 0; i < 256 * 256 * 14 * 14; ++i) a[i] = gen();
   for (int i = 0; i < 512 * 256 * 3 * 3; ++i) w[i] = gen();

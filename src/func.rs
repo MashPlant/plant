@@ -309,6 +309,18 @@ impl Func {
     Ok(path)
   }
 
+  fn exec_cmd(&self, mut cmd: Command, bin_path: &Path) {
+    cmd.arg("-o").arg(&bin_path);
+    for x in &self.compile_args { cmd.arg(&**x); }
+    debug!("exec_cmd: cmd = {:?}", cmd);
+    let status = cmd.status().expect("failed to exec cmd");
+    debug_assert!(status.success());
+  }
+
+  fn remove_file(&self, path: &Path, bin_path: &Path) {
+    if self.tmp { fs::remove_file(path).and_then(|_| fs::remove_file(bin_path)).expect("failed to remove file") }
+  }
+
   pub fn codegen(&self, args: &[P<Buf>]) -> io::Result<Lib> {
     let path = self.codegen_source(args)?;
     let so_path = path.with_extension("so");
@@ -321,14 +333,9 @@ impl Func {
         .arg("-Xcudafe").arg("\"--diag_suppress=declared_but_not_referenced --diag_suppress=set_but_not_used --diag_suppress=noreturn_function_does_return\"")
         .arg("-Xcompiler").arg("-fPIC").arg("-Xcompiler").arg("-shared");
     }
-    cmd.arg("-o").arg(&so_path);
-    for x in &self.compile_args { cmd.arg(&**x); }
-    debug!("codegen: cmd = {:?}", cmd);
-    let status = cmd.status()?;
-    debug_assert!(status.success());
+    self.exec_cmd(cmd, &so_path);
     let lib = unsafe { Lib::new(&so_path, &self.name) }.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-    if self.tmp { fs::remove_file(path)?; }
-    fs::remove_file(so_path)?;
+    self.remove_file(&path, &so_path);
     Ok(lib)
   }
 
@@ -337,15 +344,10 @@ impl Func {
     let obj_path = path.with_extension("o");
     debug_assert_eq!(self.backend, CPU); // 目前不支持remote GPU代码生成
     let mut cmd = Command::new(CC);
-    cmd.arg("-x").arg("c++").arg(&path).arg("-Ofast").arg("-target").arg(target_triple)
-      .arg("-fPIC").arg("-c").arg("-o").arg(&obj_path);
-    for x in &self.compile_args { cmd.arg(&**x); }
-    debug!("codegen_remote: cmd = {:?}", cmd);
-    let status = cmd.status()?;
-    debug_assert!(status.success());
+    cmd.arg("-x").arg("c++").arg(&path).arg("-Ofast").arg("-target").arg(target_triple).arg("-fPIC").arg("-c");
+    self.exec_cmd(cmd, &obj_path);
     let obj = fs::read(&obj_path)?;
-    if self.tmp { fs::remove_file(path)?; }
-    fs::remove_file(obj_path)?;
+    self.remove_file(&path, &obj_path);
     Ok(obj)
   }
 }

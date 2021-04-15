@@ -1,4 +1,4 @@
-// nvcc cublas_gemm.cu -lcublas -O3 && ./a.out 500 500
+// nvcc cublas_gemm.cu -lcublas -Xcompiler -fopenmp -O3 && ./a.out 500 500
 #include "common.h"
 #include <cublas_v2.h>
 
@@ -6,10 +6,10 @@ int main(int argc, char **argv) {
   cublasHandle_t handle;
   cublasCreate(&handle);
 
-  float *a = alloc(sizeof(float) * M * K);
-  float *b = alloc(sizeof(float) * K * N);
-  float *c = alloc(sizeof(float) * M * N);
-  float *c1 = alloc(sizeof(float) * M * N);
+  float *a = alloc(M * K);
+  float *b = alloc(K * N);
+  float *c = alloc(M * N);
+  float *c1 = alloc(M * N);
 
   for (int i = 0; i < M * K; ++i) a[i] = gen();
   for (int i = 0; i < K * N; ++i) b[i] = gen();

@@ -20,7 +20,9 @@ float gen() {
   return (seed / (float) (-1u)) - 0.5;
 }
 
-float *alloc(size_t size) { return (float *) aligned_alloc(128, size); }
+float *alloc(size_t size) {
+  return (float *) aligned_alloc(128, sizeof(float) * size);
+}
 
 void print_diff(const float *x, const float *y, int n) {
   float diff = 0;
@@ -53,7 +55,7 @@ void run_c(int argc, char **argv, void (*f)(void *, int), void *f_data) {
 #include <chrono>
 template<typename F>
 void run(int argc, char **argv, F f) {
-  run_c(argc, argv, [](void *f_data, int rep){ ((F *)f_data)(rep); }, &f);
+  run_c(argc, argv, [](void *f_data, int rep){ (*(F *)f_data)(rep); }, &f);
 }
 #endif
 

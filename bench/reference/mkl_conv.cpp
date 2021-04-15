@@ -8,10 +8,10 @@ int main(int argc, char **argv) {
   engine cpu_engine(engine::kind::cpu, 0);
   stream cpu_stream(cpu_engine);
 
-  float *a = alloc(sizeof(float) * batch * in_channel * in_size * in_size);
-  float *w = alloc(sizeof(float) * out_channel * in_channel * kernel * kernel);
-  float *bias = alloc(sizeof(float) * out_channel);
-  float *b1 = alloc(sizeof(float) * batch * out_channel * out_size * out_size);
+  float *a = alloc(batch * in_channel * in_size * in_size);
+  float *w = alloc(out_channel * in_channel * kernel * kernel);
+  float *bias = alloc(out_channel);
+  float *b1 = alloc(batch * out_channel * out_size * out_size);
 
   for (int i = 0; i < batch * in_channel * in_size * in_size; ++i) a[i] = gen();
   for (int i = 0; i < out_channel * in_channel * kernel * kernel; ++i) w[i] = gen();
