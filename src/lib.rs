@@ -39,7 +39,7 @@ pub use tuner::{Loss::*, TunerPolicy::*};
 pub use feature::Feature::*;
 
 pub use isl::*;
-pub use expr_macro::*;
+pub use plant_macros::*;
 pub use plant_runtime::*;
 
 use std::fmt::{*, Result as FmtResult};

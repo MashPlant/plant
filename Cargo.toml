@@ -8,7 +8,7 @@ edition = "2018"
 gpu-runtime = ["plant-runtime/gpu-runtime"]
 
 [dependencies]
-expr-macro = { path = "expr-macro" }
+plant-macros = { path = "macros" }
 plant-runtime = { path = "runtime" }
 isl = { path = "isl-rs" }
 log = "0.4"
