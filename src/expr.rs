@@ -28,7 +28,6 @@ pub enum Expr {
   Memcpy(P<Buf>, P<Buf>),
   Alloc(P<Buf>),
   Free(P<Buf>),
-  Sync,
   Ramp(Type, i32, u32, Box<Expr>),
   // 一段直接用于输出的字符串，不考虑它的内部结构
   Verbatim(Type, R<str>),
@@ -46,6 +45,8 @@ pub struct Call {
 pub fn call(ret: Type, name: &str, args: Box<[Expr]>) -> Expr {
   Call(box Call { ret, name: name.into(), args })
 }
+
+pub fn syncthreads() -> Expr { Verbatim(Void, "__syncthreads()".r()) }
 
 // 逻辑非用x != 0表示，取负用0 - x表示，不在Unary中提供
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
@@ -71,7 +72,7 @@ impl Expr {
       Binary(op, box [l, _]) => if (Add <= *op && *op <= Rem) || (Max <= *op && *op <= Min) { l.ty() } else { I32 }
       Select(box [_, t, _]) => t.ty(),
       Load(buf, _) => buf.ty,
-      Memcpy(..) | Alloc(..) | Free(..) | Sync => Void,
+      Memcpy(..) | Alloc(..) | Free(..) => Void,
     }
   }
 
@@ -85,7 +86,7 @@ impl Expr {
       Binary(_, x) => x.as_ref(),
       Select(x) => x.as_ref(),
       Call(box Call { args, .. }) | Access(_, args) => args,
-      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) | Sync | Verbatim(..) => &[],
+      Val(..) | Iter(..) | Param(..) | Memcpy(..) | Alloc(..) | Free(..) | Verbatim(..) => &[],
     }
   }
 

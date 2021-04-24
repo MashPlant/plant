@@ -474,8 +474,8 @@ impl Comp {
     let copy = f.comp_raw(dom, copy)
       .store_at(buf, cfg.iter_mut().map(|c| c.dst.replace0()).collect()).set_cond(cond);
     let sync = if loc == Shared {
-      let sync1 = f.comp_raw(sync_dom.copy()?.set_tuple_name(cstr(&format!("_sync1{}", name)))?, Sync);
-      let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, Sync);
+      let sync1 = f.comp_raw(sync_dom.copy()?.set_tuple_name(cstr(&format!("_sync1{}", name)))?, syncthreads());
+      let sync2 = f.comp_raw(sync_dom.set_tuple_name(cstr(&format!("_sync2{}", name)))?, syncthreads());
       self.after_between_pred(sync2, i).after_between_pred(copy, i).after_between_pred(sync1, i);
       Some((sync1.p(), sync2.p()))
     } else {

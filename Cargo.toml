@@ -11,13 +11,12 @@ gpu-runtime = ["plant-runtime/gpu-runtime"]
 plant-macros = { path = "macros" }
 plant-runtime = { path = "runtime" }
 isl = { path = "isl-rs" }
+xgboost = { git = "https://github.com/MashPlant/rust-xgboost" }
 log = "0.4"
 env_logger = "0.8"
 ahash = { version = "*", default-features = false }
 tempfile = "3"
-xgboost = { git = "https://github.com/MashPlant/rust-xgboost" }
 scoped_threadpool = "0.1"
-libc = "0.2"
 byteorder = "1"
 
 [dev-dependencies]

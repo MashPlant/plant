@@ -115,14 +115,17 @@ impl XorShiftRng {
   }
 }
 
-// 返回parallel线程数，在调用parallel_init前是0
-pub fn parallel_num_thread() -> u32 {
-  extern "C" { static num_thread: u32; }
-  unsafe { num_thread }
+
+extern "C" {
+  // parallel线程数，在调用parallel_init前是0
+  // 它用于parallel.c和代码生成，如果手动修改它，前一种用途就不合法了
+  pub static mut num_thread: u32;
+
+  pub fn parallel_launch(f: extern "C" fn(*mut u8, u32), args: *mut u8);
 }
 
 // 传0则自动检测系统核心数，传非0值则配置线程数为参数值
-// 用户需保证调用parallel_launch前调用了parallel_init
+// 用户需保证调用parallel_launch前恰好调用了一次parallel_init
 pub fn parallel_init(th: u32) {
   extern "C" { fn parallel_init(th: u32); }
   unsafe { parallel_init(th); }
@@ -133,5 +136,3 @@ pub fn parallel_init_default() {
   static INIT: Once = Once::new();
   INIT.call_once(|| parallel_init(0));
 }
-
-extern "C" { pub fn parallel_launch(f: extern "C" fn(*mut u8, u32), args: *mut u8); }

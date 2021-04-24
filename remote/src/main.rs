@@ -5,7 +5,8 @@ use plant_runtime::*;
 
 fn main() -> Result<()> {
   parallel_init(0);
-  let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 8080))?;
+  let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 8888))?;
+  println!("STARTED: listening on {}", listener.local_addr()?);
   for stream in listener.incoming() {
     let stream = stream?;
     stream.set_nodelay(true)?;
@@ -37,7 +38,7 @@ fn main() -> Result<()> {
           let lib = unsafe { Lib::new(&so_path, str::from_utf8_unchecked(&name)) }.expect("failed to load lib");
           let ret = eval(lib.f, n_discard, n_repeat, timeout, data.as_ptr() as _);
           rd.get_ref().write_u64::<LE>(((ret.0.to_bits() as u64) << 32) | ret.1 as u64)?;
-          println!("EVAL: elapsed = {}, timeout = {}", ret.0, !ret.1);
+          println!("EVAL: elapsed = {}s, timeout = {}", ret.0, !ret.1);
         }
         _ if opc == RemoteOpc::Init as u32 => {
           data.clear();

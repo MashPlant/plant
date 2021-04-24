@@ -1,4 +1,4 @@
-#include <cstdlib>
+#include <stdlib.h>
 #ifdef __CUDACC__
 template <typename F, typename... Args> __global__ void exec_kern(F f, Args... args) { f(args...); }
 #define cuda_malloc(size) ({ void *_x; cudaMalloc(&_x, size); _x; })

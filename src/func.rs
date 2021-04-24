@@ -444,7 +444,7 @@ impl Func {
                 // 本tag的最外层循环不需要取模，只有内层的需要
                 rem = fn2display(|f| if last_kern == Some(tag) { write!(f, "%{}", ex) } else { Ok(()) })).ok();
             match tag {
-              // 这里读取了num_thread，所以生成带Parallel的程序前就需要调用parallel_init
+              // 这里读num_thread，所以生成带Parallel的程序前就需要调用parallel_init或者手动设置它
               Parallel => {
                 let last_kern = mem::replace(&mut s.p().cur_kern, Some(tag));
                 if last_kern.is_none() {
@@ -453,7 +453,7 @@ impl Func {
                     {} _s=min({ex},({ex}-1+{th})/{th}*_i),_e=min({ex},({ex}-1+{th})/{th}*(_i+1)),_par;\
                     for(_par=_s;_par<_e;++_par){{",
                     info.capture_scalar(), info.capture_buf(), info.capture_iter(s.loop_dim), iter_ty(),
-                    th = parallel_num_thread(), ex = info.fuse_extent * ex).ok()?;
+                    th = unsafe { num_thread }, ex = info.fuse_extent * ex).ok()?;
                 }
                 gen_it(f, "_par", last_kern)?;
                 s.p().cur_kern = last_kern;
@@ -602,7 +602,7 @@ fn extract_tags(n: AstNodeRef, loops: &mut Vec<AstNodeRef>, info: &mut HashMap<A
           } else { debug_assert!(tag.is_none(), "duplicate tag"); }
           debug_assert_eq!(old.level, i as _);
         }).or_insert(ForInfo { comp, level: i as _, tag, fuse_extent: fuse_extent1, used_buf: <_>::default(), local_buf: <_>::default() });
-        let ex = comp.comp.extent(i as _).2.get_num_si();
+        let ex = comp.comp.extent(i as _).2.get_num_si(); // 可能输出错误信息，得到的ex是错误的，但也可以继续
         if tag == last_tag { fuse_extent *= ex; } else { fuse_extent = ex; }
         last_tag = tag;
       }

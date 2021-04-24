@@ -138,7 +138,6 @@ impl Expr {
           Host | Global => write!(f, "{}({})", if x.loc == Host { "free" } else { "cudaFree" }, x.name),
           _ => write!(f, "/*free({})*/", x.name), // 不实际执行free
         }
-        Sync => f.write_str("__syncthreads()"),
         &Ramp(ty, stride, n, ref x) => {
           match **x { Load(..) => {} _ => debug_panic!("vector operand must be load: {}", x) }
           if stride == 1 {

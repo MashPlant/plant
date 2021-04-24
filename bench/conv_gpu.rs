@@ -52,8 +52,8 @@ fn conv(batch: u32, in_channel: u32, out_channel: u32, in_size: u32, kernel: u32
     .store_at(w_shared, x![0, 0, 0, 0, i7 * 672 + (i4*7+i5) * 3 + i8])
     .tags(7..=8, UnrollExplicit);
 
-  let sync1 = f.comp("sync1", x![32, 8, 2, 7, 32, 7, 64], Sync);
-  let sync2 = f.comp("sync2", x![32, 8, 2, 7, 32, 7, 64], Sync);
+  let sync1 = f.comp("sync1", x![32, 8, 2, 7, 32, 7, 64], syncthreads());
+  let sync2 = f.comp("sync2", x![32, 8, 2, 7, 32, 7, 64], syncthreads());
   let sync_stream = f.comp("sync_stream", x![], x!(cudaStreamSynchronize::<()>(0)));
   sync1.before(pad_cache, 7).before(w_cache, 7).before(sync2, 7)
     .before(b, 7).before(b_final, 6).before(sync_stream, 0);

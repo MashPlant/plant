@@ -1,4 +1,6 @@
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include <pthread.h>
 #include <sched.h>
@@ -15,7 +17,7 @@ static atomic_uint num_pending;
 _Noreturn static void *thread_fn(void *p) {
   unsigned i = (size_t) p;
   while (1) {
-    while (!flags[i]) pthread_yield();
+    while (!flags[i]) sched_yield();
     flags[i] = 0;
     fn(args, i);
     --num_pending;
@@ -47,5 +49,5 @@ void parallel_launch(void (*fn1)(void *, unsigned), void *args1) {
   num_pending = n - 1;
   for (unsigned i = 1; i < n; ++i) flags[i] = 1;
   fn(args, 0);
-  while (num_pending) pthread_yield();
+  while (num_pending) sched_yield();
 }

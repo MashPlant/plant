@@ -51,8 +51,8 @@ fn gemm(n: u32, m: u32, s: u32) -> (Vec<P<Buf>>, Box<Func>) {
     .tag(3, UnrollExplicit).tag(4, Vectorize);
   c.tag(7, UnrollExplicit).tag(9, UnrollExplicit);
   c_final.tag(4, UnrollExplicit);
-  let sync1 = f.comp("sync1", x![1024, 128, 128], Sync);
-  let sync2 = f.comp("sync2", x![1024, 128, 128], Sync);
+  let sync1 = f.comp("sync1", x![1024, 128, 128], syncthreads());
+  let sync2 = f.comp("sync2", x![1024, 128, 128], syncthreads());
   let sync_stream = f.comp("sync_stream", x![], x!(cudaStreamSynchronize::<()>(0)));
   sync1.before(a_cache, 3).before(b_cache, 3).before(sync2, 3)
     .before(c, 3).before(c_final, 2).before(sync_stream, 0);
