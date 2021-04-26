@@ -1,4 +1,5 @@
 #include "common.h"
+#include "parallel.c"
 #include <algorithm>
 #include <cassert>
 #include <dlfcn.h>
@@ -15,21 +16,16 @@
 using u32 = unsigned;
 using f32 = float;
 
-void parallel_init(u32);
-void parallel_launch(void (*)(void *, u32), void *);
-
 void *load_lib(char *path, size_t len) {
   void *lib = dlopen(path, RTLD_NOW);
   assert(lib && "lib not found");
   *(size_t *) dlsym(lib, "parallel_launch") = (size_t) parallel_launch;
   path[len - 3] = '\0'; // .so -> \0so
-  return dlsym(lib, path);
+  return dlsym(lib, path + 2); // skip ./
 }
 
-int data_dir = open("resnet_data", O_RDONLY);
-
 f32 *load_weight(const char *path) {
-  int fd = openat(data_dir, path, O_RDONLY);
+  int fd = open(path, O_RDONLY);
   assert(fd != -1 && "file not found");
   struct stat st;
   fstat(fd, &st);
@@ -38,7 +34,7 @@ f32 *load_weight(const char *path) {
 
 auto conv(u32 ic, u32 oc, u32 size, u32 kern, u32 stride, u32 pad, u32 add, u32 relu) {
   char buf[128];
-  size_t len = sprintf(buf, "ic%d_oc%d_size%d_kern%d_stride%d_pad%d_add%d_relu%d.so", ic, oc, size, kern, stride, pad, add, relu);
+  size_t len = sprintf(buf, "./ic%d_oc%d_size%d_kern%d_stride%d_pad%d_add%d_relu%d.so", ic, oc, size, kern, stride, pad, add, relu);
   void *f = load_lib(buf, len);
   static u32 id = 0;
   len = sprintf(buf, "conv%d_w", id++);
@@ -57,7 +53,7 @@ auto conv(u32 ic, u32 oc, u32 size, u32 kern, u32 stride, u32 pad, u32 add, u32 
 }
 
 auto maxpool(u32 chan, u32 size, u32 kern, u32 stride, u32 pad) {
-  char buf[] = "maxpool.so";
+  char buf[] = "./maxpool.so";
   void *f = load_lib(buf, sizeof(buf) - 1);
   u32 osize = (size - kern + 2 * pad) / stride + 1;
   f32 *b = alloc(chan * osize * osize);
@@ -65,14 +61,14 @@ auto maxpool(u32 chan, u32 size, u32 kern, u32 stride, u32 pad) {
 }
 
 auto avgpool(u32 chan, u32 size) {
-  char buf[] = "avgpool.so";
+  char buf[] = "./avgpool.so";
   void *f = load_lib(buf, sizeof(buf) - 1);
   f32 *b = alloc(chan * size * size);
   return std::pair([=](f32 *i) { ((void (*)(f32 *, f32 *)) f)(i, b); }, b);
 }
 
 auto gemv(u32 m, u32 n) {
-  char buf[] = "gemv.so";
+  char buf[] = "./gemv.so";
   void *f = load_lib(buf, sizeof(buf) - 1);
   f32 *w = load_weight("gemv_w");
   f32 *c = load_weight("gemv_b");
@@ -130,7 +126,7 @@ void softmax(f32 *p, u32 n) {
 int main(int argc, char **argv) {
   parallel_init(0);
 
-  if (argc != 3) { puts("usage: cargo run --bin resnet <layer> <repeat>"), exit(1); }
+  if (argc != 3) { printf("usage: %s <layer> <repeat>\n", argv[0]), exit(1); }
   u32 repeat = atoi(argv[2]);
   std::array<u32, 4> blocks;
   bool bottleneck;

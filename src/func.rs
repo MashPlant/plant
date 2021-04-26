@@ -556,7 +556,7 @@ impl Func {
             if comp.expr.ty() == Void {
               write!(f, "{};", comp.expr).ok()?;
             } else {
-              write!(f, "{} {}={};", comp.expr.ty(), comp.comp.name(), comp.expr).ok()?;
+              write!(f, "{} {}={};", comp.expr.ty(), comp.comp.orig_name, comp.expr).ok()?;
             }
           }
           if comp.cond.is_some() { f.write_str("}").ok()?; }

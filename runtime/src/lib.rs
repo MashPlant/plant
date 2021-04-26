@@ -83,7 +83,7 @@ pub fn eval(f: WrapperFn, n_discard: u32, n_repeat: u32, timeout: u32, data: *co
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
-pub enum RemoteOpc { Eval = 0, Init = 1, Close = 3 }
+pub enum RemoteOpc { Eval = 0, Init = 1, File = 2, Close = 3 }
 
 // 虽然有很多开源的随机数实现，但用自己的还是方便一点
 #[derive(Debug, Clone, Copy)]

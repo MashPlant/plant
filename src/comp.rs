@@ -4,6 +4,8 @@ use crate::*;
 pub struct Comp {
   pub ctx: CtxRef,
   pub func: P<Func>,
+  // 用于输出，在separate复制计算时，schedule中的名字会变，orig_name不变
+  pub orig_name: Box<str>,
   pub expr: Expr,
   pub cond: Option<Expr>,
   // schedule将表示原始循环迭代范围的set映射到调度后的循环迭代范围的set，同时还包含循环间的顺序关系
@@ -61,7 +63,8 @@ impl Func {
     // set_read_from_str生成的set可能有冗余，例如为i <= min(x, y)生成两个BasicSet，其实一个就可以表示，coalesce就是试图合并BasicSet
     let schedule = identity_schedule(domain.coalesce()?);
     debug!("comp_raw: initial identity schedule = {}", schedule);
-    let comp = box Comp { ctx: *self.ctx, func: self.into(), expr, cond: None, schedule, store: None, pred: None, succ: Vec::new(), tags: Vec::new(), inline: false };
+    let orig_name = schedule.get_tuple_name(DimType::In).unwrap().as_str().into();
+    let comp = box Comp { ctx: *self.ctx, func: self.into(), orig_name, expr, cond: None, schedule, store: None, pred: None, succ: Vec::new(), tags: Vec::new(), inline: false };
     debug_assert!(self.find_comp(comp.name()).is_none()); // 不允许相同名字的Comp
     if cfg!(debug_assertions) { comp.check_iter(&comp.expr); }
     let ret = comp.as_ref().p();
@@ -280,10 +283,11 @@ impl Comp {
     let c = box Comp {
       ctx: self.ctx,
       func: self.func,
+      orig_name: self.name().into(),
       expr: self.expr.clone(),
       cond: self.cond.clone(),
       schedule: ge.set_tuple_name(DimType::In, cstr(&name))?,
-      store: if let Some(x) = &self.store { Some(x.copy()?.set_tuple_name(DimType::In, cstr(&name))?) } else { None },
+      store: if let Some(x) = &self.store { Some(x.copy()?) } else { None },
       pred: None,
       succ: Vec::new(),
       tags: self.tags.clone(),

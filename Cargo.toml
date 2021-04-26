@@ -45,5 +45,9 @@ path = "bench/resnet.rs"
 name = "resnet"
 
 [[bin]]
+path = "bench/resnet_aarch64.rs"
+name = "resnet_aarch64"
+
+[[bin]]
 path = "bench/tune_resnet_conv.rs"
 name = "tune_resnet_conv"

@@ -1,10 +1,14 @@
-#ifndef _GNU_SOURCE
+#ifndef __cplusplus
 #define _GNU_SOURCE
+#include <stdatomic.h>
+#else
+#include <atomic>
+using namespace std;
+#define _Noreturn [[noreturn]]
 #endif
 
 #include <pthread.h>
 #include <sched.h>
-#include <stdatomic.h>
 #include <sys/sysinfo.h>
 
 unsigned num_thread;

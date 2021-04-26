@@ -81,7 +81,7 @@ impl Expr {
           F64 => Display::fmt(&f64::from_bits(x), f),
         },
         &Iter(_, x) => write!(f, "i{}", x),
-        &Param(x) => f.write_str(x.name()),
+        &Param(x) => f.write_str(&x.orig_name),
         Cast(ty, x) => {
           p1 = 2;
           par!(write!(f, "({}){}", ty, x.show(p1)));
