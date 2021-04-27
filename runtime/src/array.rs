@@ -1,19 +1,28 @@
 #[cfg(feature = "gpu-runtime")]
 use cuda_runtime_sys::*;
 
-use num::Signed;
+use num::{Num, Signed};
 use std::{ptr::*, alloc::*, mem::*, ops::*, slice};
 use crate::*;
 
-pub trait Primitive { const TYPE: Type; }
+pub trait Primitive: Num + PartialOrd + Copy {
+  const TYPE: Type;
+  type Sign: Primitive + Signed;
+  fn sign(self) -> Self::Sign;
+}
 
 macro_rules! impl_primitive {
-  ($($val: ident $ty: ident),*) => {
-    $(impl Primitive for $ty { const TYPE: Type = $val; })*
+  ($($val: ident $ty: ident $sign: ident),*) => {
+    $(impl Primitive for $ty {
+      const TYPE: Type = $val;
+      type Sign = $sign;
+      fn sign(self) -> Self::Sign { self as _ }
+    })*
   };
 }
 
-impl_primitive!(I8 i8, U8 u8, I16 i16, U16 u16, I32 i32, U32 u32, I64 i64, U64 u64, F32 f32, F64 f64);
+impl_primitive!(I8 i8 i8, U8 u8 i8, I16 i16 i16, U16 u16 i16, I32 i32 i32, U32 u32 i32, I64 i64 i64, U64 u64 i64,
+  F32 f32 f32, F64 f64 f64);
 
 // 即runtime buffer
 #[repr(C)]
@@ -39,6 +48,13 @@ impl<T: Primitive, D: Dims> Array<T, D> {
     Array { ptr: NonNull::new(p as _).expect("failed to alloc"), dim, loc: CPU }
   }
 
+  #[cfg(feature = "gpu-runtime")]
+  pub fn new_gpu(dim: D) -> Self {
+    let mut p = null_mut();
+    unsafe { cudaMalloc(&mut p as _, dim.total() * size_of::<T>()); }
+    Array { ptr: NonNull::new(p as _).expect("failed to alloc"), dim, loc: GPU }
+  }
+
   // 所有元素初始化为逐字节全0
   pub fn zeroed(dim: D) -> Self {
     let p = unsafe { alloc_zeroed(Layout::from_size_align_unchecked(dim.total() * size_of::<T>(), 128)) };
@@ -54,40 +70,13 @@ impl<T: Primitive, D: Dims> Array<T, D> {
   }
 }
 
-#[cfg(feature = "gpu-runtime")]
-impl<T: Primitive, D: Dims> Array<T, D> {
-  pub fn new_gpu(dim: D) -> Self {
-    let mut p = null_mut();
-    unsafe { cudaMalloc(&mut p as _, dim.total() * size_of::<T>()); }
-    Array { ptr: NonNull::new(p as _).expect("failed to alloc"), dim, loc: GPU }
-  }
-
-  pub fn to_gpu(&self) -> Self {
-    debug_assert_eq!(self.loc, CPU);
-    let ret = Self::new_gpu(self.dim);
-    self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyHostToDevice);
-    ret
-  }
-
-  pub fn to_cpu(&self) -> Self {
-    debug_assert_eq!(self.loc, GPU);
-    let ret = Self::new(self.dim);
-    self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyDeviceToHost);
-    ret
-  }
-
-  fn cuda_memcpy(&self, dst: &Self, kind: cudaMemcpyKind) {
-    unsafe { cudaMemcpy(dst.ptr() as _, self.ptr() as _, self.dim.total() * size_of::<T>(), kind); }
-  }
-}
-
 impl<T, D: Dims> Drop for Array<T, D> {
   fn drop(&mut self) {
     match self.loc {
       CPU => unsafe { dealloc(self.ptr() as _, Layout::from_size_align_unchecked(self.dim.total() * size_of::<T>(), 128)) },
       GPU => {
         #[cfg(feature = "gpu-runtime")] unsafe { cudaFree(self.ptr() as _); }
-        #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled");
+        #[cfg(not(feature = "gpu-runtime"))] panic!("gpu-runtime not enabled")
       }
     }
   }
@@ -150,12 +139,36 @@ impl<T, D: Dims> Slice<T, D> {
 
   pub fn assert_eq(&self, rhs: &Self) where D: Debug + PartialEq, T: Debug + PartialEq {
     assert_eq!(self.dim, rhs.dim);
+    debug_assert!(self.loc == CPU && rhs.loc == CPU);
     for (x, y) in self.flat().iter().zip(rhs.flat().iter()) { assert_eq!(x, y); }
   }
 
-  pub fn assert_close(&self, rhs: &Self, threshold: T) where D: Debug + PartialEq, T: Signed + PartialOrd + Copy {
+  pub fn assert_close(&self, rhs: &Self, threshold: T) where D: Debug + PartialEq, T: Primitive + Display, T::Sign: Display {
     assert_eq!(self.dim, rhs.dim);
-    for (&x, &y) in self.flat().iter().zip(rhs.flat().iter()) { assert!((x - y).abs() < threshold); }
+    debug_assert!(self.loc == CPU && rhs.loc == CPU);
+    let threshold = threshold.sign();
+    for (&x, &y) in self.flat().iter().zip(rhs.flat().iter()) { assert!((x.sign() - y.sign()).abs() < threshold); }
+  }
+}
+
+#[cfg(feature = "gpu-runtime")]
+impl<T: Primitive, D: Dims> Slice<T, D> {
+  pub fn to_gpu(&self) -> Array<T, D> {
+    debug_assert_eq!(self.loc, CPU);
+    let ret = Array::new_gpu(self.dim);
+    self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyHostToDevice);
+    ret
+  }
+
+  pub fn to_cpu(&self) -> Array<T, D> {
+    debug_assert_eq!(self.loc, GPU);
+    let ret = Array::new(self.dim);
+    self.cuda_memcpy(&ret, cudaMemcpyKind::cudaMemcpyDeviceToHost);
+    ret
+  }
+
+  fn cuda_memcpy(&self, dst: &Self, kind: cudaMemcpyKind) {
+    unsafe { cudaMemcpy(dst.ptr() as _, self.ptr() as _, self.dim.total() * size_of::<T>(), kind); }
   }
 }
 

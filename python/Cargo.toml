@@ -4,9 +4,13 @@ version = "0.1.0"
 authors = ["MashPlant <740678788@qq.com>"]
 edition = "2018"
 
+[features]
+gpu-runtime = ["plant-runtime/gpu-runtime"]
+
 [dependencies]
 plant-runtime = { path = "../runtime" }
 pyo3 = "0.13"
+smallvec = { version = "1.6", features = ["union"] }
 
 [lib]
 crate-type = ["cdylib"]
