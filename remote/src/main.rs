@@ -43,7 +43,6 @@ fn main() -> Result<()> {
     let mut name = Vec::new();
     loop {
       let op = rd.read_u32::<LE>()?;
-      println!("recv op = {}", op);
       let (arg, opc) = (op >> 2, op & 3);
       match () {
         _ if opc == RemoteOpc::Eval as u32 => {

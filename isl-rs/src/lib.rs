@@ -1,36 +1,7 @@
 #![feature(try_trait)]
 #![allow(non_upper_case_globals, non_snake_case)]
 
-#[inline(never)]
-#[cold]
-#[track_caller]
-pub fn try_failed() -> ! { debug_panic!("try failed") }
-
-#[macro_use]
-mod macros {
-  // 在debug模式下panic，在release模式下执行到它是未定义行为
-  #[macro_export] macro_rules! debug_panic {
-    ($($arg:tt)*) => (if cfg!(debug_assertions) {
-      panic!($($arg)*);
-    } else {
-      unsafe { std::hint::unreachable_unchecked()}
-    })
-  }
-  // 为一个非Option/Result类型实现Try，效果是在?失败时直接panic，即?相当于unwrap()
-  #[macro_export] macro_rules! impl_try {
-    ($ty: ty) => {
-      impl std::ops::Try for $ty {
-        type Ok = Self;
-        type Error = std::option::NoneError;
-        fn into_result(self) -> std::result::Result<Self::Ok, Self::Error> { Ok(self) }
-        #[inline(always)]
-        #[track_caller]
-        fn from_error(_: Self::Error) -> Self { try_failed() }
-        fn from_ok(v: Self::Ok) -> Self { v }
-      }
-    };
-  }
-}
+use tools::impl_try;
 
 pub mod aff;
 pub mod aff_type;
@@ -154,7 +125,7 @@ impl Try for Stat {
   fn into_result(self) -> Result<(), NoneError> { match self { Stat::Error => Err(NoneError), Stat::Ok => Ok(()) } }
   #[inline(always)]
   #[track_caller]
-  fn from_error(_: NoneError) -> Self { try_failed() }
+  fn from_error(_: NoneError) -> Self { tools::try_failed() }
   fn from_ok(_: ()) -> Self { Stat::Ok }
 }
 
@@ -169,7 +140,7 @@ impl Try for Bool {
   fn into_result(self) -> Result<bool, NoneError> { match self { Bool::Error => Err(NoneError), Bool::False => Ok(false), Bool::True => Ok(true) } }
   #[inline(always)]
   #[track_caller]
-  fn from_error(_: NoneError) -> Self { try_failed() }
+  fn from_error(_: NoneError) -> Self { tools::try_failed() }
   fn from_ok(v: bool) -> Self { if v { Bool::True } else { Bool::False } }
 }
 

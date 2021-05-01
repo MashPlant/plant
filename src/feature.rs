@@ -224,21 +224,21 @@ impl TouchExtractor {
     self.node(&f, *n);
   }
 
-  pub fn expr(&mut self, e: &Expr) {
+  pub fn expr(&mut self, e: &Expr, iter_stack: &mut [IterFeature]) {
     e.visit(&mut move |e| match e {
       Binary(op, _) => {
         use BinOp::*;
         let idx = match op { Add | Sub => 0, Mul => 1, Div | Rem => 2, _ => return };
-        self.iter_stack.last_mut().unwrap().arith_cnts[idx] += 1;
+        iter_stack.last_mut().unwrap().arith_cnts[idx] += 1;
       }
-      Load(buf, idx) => self.mem(*buf, idx),
+      Load(buf, idx) => self.mem(*buf, idx, iter_stack),
       _ => {}
     })
   }
 
-  pub fn mem(&mut self, buf: P<Buf>, idx: &Expr) {
+  pub fn mem(&mut self, buf: P<Buf>, idx: &Expr, iter_stack: &mut [IterFeature]) {
     let buf_id = *self.buf_cnt.entry(buf).and_modify(|x| *x += 1).or_insert(0);
-    let mut stride_map = vec![0; self.iter_stack.len()];
+    let mut stride_map = vec![0; iter_stack.len()];
     // 这里不用e.visit，它不方便维护stride这样的参数
     fn vis_idx(stride_map: &mut [i64], e: &Expr, stride: i64) {
       match e {
@@ -251,7 +251,7 @@ impl TouchExtractor {
     }
     vis_idx(&mut stride_map, idx, 1);
     // 包裹这次内存访问的所有循环变量都与这次访问有关，如果idx中没有这个循环变量，stride就是0
-    for (it, &stride) in self.iter_stack.iter_mut().zip(stride_map.iter()) {
+    for (it, &stride) in iter_stack.iter_mut().zip(stride_map.iter()) {
       it.touch_pattern.insert((NameHashBuf(buf.p()), buf_id),
         TouchPattern { stride, count: 1, reuse: 1, thread_count: 0, thread_reuse: 0 });
     }
@@ -273,47 +273,11 @@ impl TouchExtractor {
           arith_cnts: [0; 3],
           touch_pattern: <_>::default(),
         });
-        self.expr(&Expr::from_isl(f, n.for_get_init()?));
-        self.expr(&Expr::from_isl(f, n.for_get_cond()?));
-        self.expr(&Expr::from_isl(f, n.for_get_inc()?));
         self.node(f, *n.for_get_body()?);
         self.topdown_product = old_product;
-        let cur = self.iter_stack.last()?.p();
-        // 依据本层循环访问的内存和循环extent更新所有包裹它的循环和它自身的内存访问pattern
-        for (buf, pat) in &cur.touch_pattern {
-          // 这个循环包括cur在内(这违反借用规则，所以上面用了.p())
-          for fea in &mut self.iter_stack {
-            let pat1 = fea.touch_pattern.get_mut(buf)?;
-            // 某个循环变量在下标中的stride为0，意味着内存访问与它的值无关，所以是reuse
-            *if pat.stride == 0 { &mut pat1.reuse } else { &mut pat1.count } *= cur.extent;
-          }
-        }
-        let mut cur = self.iter_stack.pop()?;
-        cur.bottomup_product = cur.touch_pattern.values().map(|pat| pat.count * pat.reuse).max().unwrap_or(-1);
-        let level = parallel_level(cur.tag);
-        // 在并行等级的分界线处，用本层的count/reuse更新上层的thread_count/thread_reuse
-        if self.iter_stack.last().filter(|fea| parallel_level(fea.tag) == level + 1).is_some() {
-          for (buf, pat) in &cur.touch_pattern {
-            for fea in &mut self.iter_stack {
-              if parallel_level(fea.tag) == level + 1 {
-                let pat1 = fea.touch_pattern.get_mut(buf)?;
-                // 负号表示并非最终结果，处理到这一层时的thread_count/thread_reuse才是最终有效的，在此之前可能赋值多次
-                pat1.thread_count = -pat.count;
-                pat1.thread_reuse = -pat.reuse;
-              }
-            }
-          }
-        }
-        for pat in cur.touch_pattern.values_mut() {
-          if pat.thread_count < 0 {
-            pat.thread_count = pat.count / (-pat.thread_count);
-            pat.thread_reuse = pat.reuse / (-pat.thread_reuse);
-          }
-        }
-        self.iter_result.push(cur);
+        self.iter_stack.pop();
       }
       AstNodeType::If => {
-        self.expr(&Expr::from_isl(f, n.if_get_cond()?));
         self.node(f, *n.if_get_then()?);
         if let Some(e) = n.if_get_else() { self.node(f, *e); }
       }
@@ -322,10 +286,46 @@ impl TouchExtractor {
         for i in 0..ch.n_ast_node() { self.node(f, *ch.get_ast_node(i)?)?; }
       }
       AstNodeType::User => {
+        let mut iter_stack = self.iter_stack.clone();
         let comp = P::<CompInfo>::new(n.get_annotation()?.get_user() as _);
-        self.expr(&comp.expr);
+        self.expr(&comp.expr, &mut iter_stack);
         // store是用Load表示的Expr，最终会调用self.mem
-        if let Some(s) = &comp.store { self.expr(s); }
+        if let Some(s) = &comp.store { self.expr(s, &mut iter_stack); }
+        while let Some(cur) = iter_stack.last() {
+          let cur = cur.p();
+          // 依据本层循环访问的内存和循环extent更新所有包裹它的循环和它自身的内存访问pattern
+          for (buf, pat) in &cur.touch_pattern {
+            // 这个循环包括cur在内(这违反借用规则，所以上面用了.p())
+            for fea in &mut iter_stack {
+              let pat1 = fea.touch_pattern.get_mut(buf)?;
+              // 某个循环变量在下标中的stride为0，意味着内存访问与它的值无关，所以是reuse
+              *if pat.stride == 0 { &mut pat1.reuse } else { &mut pat1.count } *= cur.extent;
+            }
+          }
+          let mut cur = iter_stack.pop()?;
+          cur.bottomup_product = cur.touch_pattern.values().map(|pat| pat.count * pat.reuse).max().unwrap_or(-1);
+          let level = parallel_level(cur.tag);
+          // 在并行等级的分界线处，用本层的count/reuse更新上层的thread_count/thread_reuse
+          if iter_stack.last().filter(|fea| parallel_level(fea.tag) == level + 1).is_some() {
+            for (buf, pat) in &cur.touch_pattern {
+              for fea in &mut iter_stack {
+                if parallel_level(fea.tag) == level + 1 {
+                  let pat1 = fea.touch_pattern.get_mut(buf)?;
+                  // 负号表示并非最终结果，处理到这一层时的thread_count/thread_reuse才是最终有效的，在此之前可能赋值多次
+                  pat1.thread_count = -pat.count;
+                  pat1.thread_reuse = -pat.reuse;
+                }
+              }
+            }
+          }
+          for pat in cur.touch_pattern.values_mut() {
+            if pat.thread_count < 0 {
+              pat.thread_count = pat.count / (-pat.thread_count);
+              pat.thread_reuse = pat.reuse / (-pat.thread_reuse);
+            }
+          }
+          self.iter_result.push(cur);
+        }
       }
       ty => debug_panic!("invalid ast node type: {:?}", ty),
     }

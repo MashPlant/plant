@@ -1,29 +1,6 @@
 use crate::{*, UnOp::*, BinOp::*};
 
-pub fn fn2display(f: impl Fn(&mut Formatter) -> FmtResult) -> impl Display {
-  struct S<F>(F);
-  impl<F: Fn(&mut Formatter) -> FmtResult> Display for S<F> {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult { (self.0)(f) }
-  }
-  S(f)
-}
-
-pub fn sep<T: Display>(it: impl Iterator<Item=T> + Clone, sep: &'static str) -> impl Display {
-  fn2display(move |f| {
-    let mut first = true;
-    for t in it.clone() {
-      write!(f, "{}{}", if first { "" } else { sep }, t)?;
-      first = false;
-    }
-    Ok(())
-  })
-}
-
-pub fn comma_sep<T: Display>(it: impl Iterator<Item=T> + Clone) -> impl Display { sep(it, ",") }
-
-pub fn opt<'a, T: Display>(x: &'a Option<T>) -> impl Display + 'a {
-  fn2display(move |f| if let Some(x) = x { x.fmt(f) } else { f.write_str("None") })
-}
+pub fn comma_sep<'a, T: Display + 'a>(it: impl Iterator<Item=T> + Clone + 'a) -> impl Display + 'a { sep(it, ",") }
 
 impl UnOp {
   pub fn as_str(self) -> &'static str {

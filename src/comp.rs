@@ -22,8 +22,6 @@ pub struct Comp {
   pub inline: bool,
 }
 
-impl_try!(P<Comp>);
-
 #[derive(Debug, Clone, Copy, Ord, PartialOrd, Eq, PartialEq)]
 pub enum DimTag {
   Parallel,

@@ -21,8 +21,6 @@ pub struct Buf {
   pub sizes: Box<[Expr]>,
 }
 
-impl_try!(P<Buf>);
-
 // 用Buf::name做hash，仍然用Buf地址判等；作用是在HashSet/Map<Buf>中保证稳定的顺序
 // 这一点之所以成立，还因为我使用了AHasher的默认初值作为HashSet/Map的初始状态，这是固定的值，没有任何随机性
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

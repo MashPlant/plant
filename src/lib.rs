@@ -12,8 +12,6 @@ macro_rules! impl_setter {
   };
 }
 
-// ptr原本是一个独立的crate(https://github.com/MashPlant/ptr)，但我需要为P<...>实现Try，必须在本crate内定义
-pub mod ptr;
 pub mod expr;
 pub mod comp;
 pub mod buf;
@@ -22,7 +20,6 @@ pub mod fmt;
 pub mod tuner;
 pub mod feature;
 
-pub use crate::ptr::*;
 pub use expr::*;
 pub use comp::*;
 pub use buf::*;
@@ -39,27 +36,12 @@ pub use tuner::{Loss::*, TunerPolicy::*};
 pub use feature::Feature::*;
 
 pub use isl::*;
+pub use tools::P;
 pub use plant_macros::*;
 pub use plant_runtime::*;
 
 use std::fmt::{*, Result as FmtResult};
-
-// AHash::default()的文档说它会生成相同的初始状态，但只是一次运行每次调用相同，多次运行状态不一定相同automate
-// 我希望多次运行中，HashSet/Map有完全一致的表现(迭代顺序不变)，所以手动实现一个
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
-pub struct AHashBuilder;
-
-impl std::hash::BuildHasher for AHashBuilder {
-  type Hasher = ahash::AHasher;
-
-  fn build_hasher(&self) -> Self::Hasher {
-    // 这是ahash::random_state::PI的值，但它是private的，只能复制出来用
-    ahash::RandomState::with_seeds(0x243f_6a88_85a3_08d3, 0x1319_8a2e_0370_7344, 0xa409_3822_299f_31d0, 0x082e_fa98_ec4e_6c89).build_hasher()
-  }
-}
-
-pub type HashMap<K, V> = std::collections::HashMap<K, V, AHashBuilder>;
-pub type HashSet<K> = std::collections::HashSet<K, AHashBuilder>;
+use tools::{*, fmt::*};
 
 // 这两个字符串可以传给init_log作为log的过滤器，也可以传入其它字符串
 // 只使用Func，Comp等时推荐使用FUNC_FILTER，输出所有debug log
@@ -75,11 +57,6 @@ pub fn init_log(filter: &str) {
       writeln!(buf, "{}:{}:{}: {}", record.level(), record.file().unwrap(), record.line().unwrap(), record.args())
     }).init();
 }
-
-// Unit与()完全一样，但是没法为()实现Try，所以定义一个新类型来实现Try
-#[derive(Copy, Clone)]
-pub struct Unit;
-impl_try!(Unit);
 
 pub const CC: &str = "clang++";
 pub const NVCC: &str = "nvcc";
