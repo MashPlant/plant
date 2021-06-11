@@ -1,7 +1,9 @@
 #![feature(try_trait)]
+#![feature(try_trait_v2)]
+#![feature(control_flow_enum)]
 #![allow(non_upper_case_globals, non_snake_case)]
 
-use tools::impl_try;
+use tools::{impl_try, impl_residual};
 
 pub mod aff;
 pub mod aff_type;
@@ -119,14 +121,15 @@ pub enum Error { None = 0, Abort, Alloc, Unknown, Internal, Invalid, Quota, Unsu
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Stat { Error = -1, Ok }
 
+impl_residual!(_ FromResidual for Stat);
+
 impl Try for Stat {
-  type Ok = ();
-  type Error = NoneError;
-  fn into_result(self) -> Result<(), NoneError> { match self { Stat::Error => Err(NoneError), Stat::Ok => Ok(()) } }
-  #[inline(always)]
-  #[track_caller]
-  fn from_error(_: NoneError) -> Self { tools::try_failed() }
-  fn from_ok(_: ()) -> Self { Stat::Ok }
+  type Output = ();
+  type Residual = Option<core::convert::Infallible>;
+  fn from_output(_: Self::Output) -> Self { Self::Ok }
+  fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+    if self == Stat::Ok { ControlFlow::Continue(()) } else { ControlFlow::Break(None) }
+  }
 }
 
 #[must_use]
@@ -134,14 +137,15 @@ impl Try for Stat {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Bool { Error = -1, False, True }
 
+impl_residual!(_ FromResidual for Bool);
+
 impl Try for Bool {
-  type Ok = bool;
-  type Error = NoneError;
-  fn into_result(self) -> Result<bool, NoneError> { match self { Bool::Error => Err(NoneError), Bool::False => Ok(false), Bool::True => Ok(true) } }
-  #[inline(always)]
-  #[track_caller]
-  fn from_error(_: NoneError) -> Self { tools::try_failed() }
-  fn from_ok(v: bool) -> Self { if v { Bool::True } else { Bool::False } }
+  type Output = bool;
+  type Residual = Option<core::convert::Infallible>;
+  fn from_output(v: Self::Output) -> Self { if v { Bool::True } else { Bool::False } }
+  fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+    match self { Bool::Error => ControlFlow::Break(None), Bool::False => ControlFlow::Continue(false), Bool::True => ControlFlow::Continue(true) }
+  }
 }
 
 #[repr(i32)]
@@ -178,7 +182,7 @@ pub enum ScheduleNodeType { Error = -1, Band, Context, Domain, Expansion, Extens
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum TokenType { Error = -1, Unknown = 256, Value = 257, Ident, Ge, Le, Gt, Lt, Ne, EqEq, LexGe, LexLe, LexGt, LexLt, To, And, Or, Exists, Not, Def, Infty, Nan, Min, Max, Rat, True, False, Ceild, Floord, Mod, String, Map, Aff, Ceil, Floor, Implies, Last }
 
-use std::{os::raw::{c_int, c_uint, c_long, c_ulong, c_double, c_char, c_void}, ptr::{self, NonNull}, mem, fmt, ops::{Try, Deref}, option::NoneError};
+use std::{os::raw::{c_int, c_uint, c_long, c_ulong, c_double, c_char, c_void}, ptr::{self, NonNull}, mem, fmt, ops::*};
 use libc::FILE;
 
 // a CStr/CString implementation with same layout as `*const c_char`, and use malloc/free to manage CString memory
